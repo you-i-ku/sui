@@ -14,6 +14,23 @@ from sui.records import (
     AttemptStarted, Decided, JobOpened, Observed, Prediction, Producer, Role,
 )
 from worlds import SampledWorld, ScriptedWorld, _close, _model, _true_A
+from worlds import _storage, _stored_rig, _stored_step
+
+
+@pytest.mark.parametrize("backend", ["memory", "sqlite"])
+def test_s2b_loop_store_substitution(tmp_path, backend):
+    with _storage(tmp_path, backend) as store:
+        rig = _stored_rig(store)
+        previous = rig.belief
+        for index in range(3):
+            step = _stored_step(rig)
+            assert step.decided.body.inputs == (previous.id,)
+            assert step.attempt.body.job == step.job.id
+            assert step.observed.body.caused_by == step.attempt.id
+            assert rig.agent.revision == index + 1
+            assert len(rig.world.calls) == index + 1
+            rig.ledger.verify()
+            previous = step.belief
 
 
 def _setup(*, learnable=frozenset(), **model_changes):

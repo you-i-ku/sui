@@ -18,6 +18,29 @@ from sui.records import (
     Observed, Payload, Prediction, Producer, Record, Role, StateRef,
 )
 from worlds import _close, _exact_posterior, _model, _naive_efe, _naive_novelty, _naive_softmax, _true_A
+from worlds import _storage, _stored_rig, _stored_step
+
+
+@pytest.mark.parametrize("backend", ["memory", "sqlite"])
+def test_s2b_agent_store_substitution_and_events_only(tmp_path, backend):
+    with _storage(tmp_path / "source", backend) as store, _storage(tmp_path / "events", backend) as dst:
+        rig = _stored_rig(store)
+        for _ in range(3):
+            _stored_step(rig)
+        cid = rig.ledger.entries_of(rig.agent._belief.id)[0].cid
+        restored = Agent.restore(model=store.models.get(rig.agent.model_ref), lineage="line1",
+                                 ledger=rig.ledger, belief=cid)
+        assert _full_state(restored) == _full_state(rig.agent)
+        dst.models.put(rig.model)
+        facts = Ledger(salts=SequentialSalts(), entries=dst.entries, contents=dst.contents)
+        facts.merge(rig.ledger, events_only=True)
+        assert all(entry.is_event for entry in facts.entries())
+        assert facts.heads() == rig.ledger.heads()
+        rebuilt = Agent(model=rig.model, lineage="rebuilt")
+        rebuilt.belief_record(clock=FakeClock(run=Ref(K.RUN, "rebuilt")),
+                             ids=SequentialIds("initial"), ledger=facts)
+        rebuilt.adopt(facts, clock=FakeClock(run=Ref(K.RUN, "rebuilt")), ids=SequentialIds("adopt"))
+        assert rebuilt._belief.body.content == rig.agent._belief.body.content
 
 
 def _setup(model=None, *, record=True):
@@ -1121,6 +1144,8 @@ def test_a25_failed_adoption_is_atomic_and_retryable(unread_only, failure):
     before, entries = _full_state(rig.agent), rig.ledger.entries()
     contents = rig.ledger.contents
     class FailingContents:
+        writable = True
+
         def get(self, seal):
             return contents.get(seal)
         def put(self, *args):

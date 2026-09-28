@@ -1,11 +1,51 @@
 """主体から独立した試験の世界と試験用の設定。"""
 
 import math as _math
+from contextlib import contextmanager as _contextmanager
+from types import SimpleNamespace as _SimpleNamespace
 
 import numpy as _np
 from scipy.special import digamma as _digamma
 
 from sui.model import GenerativeModel as _GenerativeModel
+
+
+@_contextmanager
+def _storage(path, backend="sqlite"):
+    from sui.ledger import MemoryContents
+    from sui.store import MemoryEntries, MemoryModels, SqliteStore
+    if backend == "memory":
+        yield _SimpleNamespace(entries=MemoryEntries(), contents=MemoryContents(), models=MemoryModels())
+    else:
+        with SqliteStore.open(path, create=True) as store:
+            yield store
+
+
+def _stored_rig(store, *, model=None, ledger=None):
+    from sui.agent import Agent
+    from sui.clock import FakeClock
+    from sui.ids import Ref, RefKind, SequentialIds
+    from sui.ledger import Ledger, SequentialSalts
+    from sui.records import Producer
+    model = _model(learnable=frozenset({"look1", "look2"})) if model is None else model
+    store.models.put(model)
+    rig = _SimpleNamespace(
+        store=store, model=model, agent=Agent(model=model, lineage="line1"),
+        ledger=ledger if ledger is not None else Ledger(
+            salts=SequentialSalts(), contents=store.contents, entries=store.entries),
+        clock=FakeClock(run=Ref(RefKind.RUN, "r1")), ids=SequentialIds(),
+        membrane=Producer(component="test.executor", code_version="1"),
+        world=ScriptedWorld({"look1": ["o1", "o0"] * 1000,
+                             "look2": ["o0", "o1"] * 1000, "wait": ["none"] * 2000}),
+    )
+    rig.belief = rig.agent.belief_record(clock=rig.clock, ids=rig.ids, ledger=rig.ledger)
+    return rig
+
+
+def _stored_step(rig):
+    from sui.loop import run_step
+    return run_step(rig.agent, rig.world, rig.model.actions, u=.5, clock=rig.clock,
+                    ids=rig.ids, ledger=rig.ledger, membrane=rig.membrane)
 
 
 class ScriptedWorld:

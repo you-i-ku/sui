@@ -20,6 +20,23 @@ from sui.records import (Observed, Decided, JobOpened, AttemptStarted, Predictio
 from sui.s1_contracts import OUTCOME
 from test_agent import _setup, _start, _observed, _observe, _decide, _binary_model
 from worlds import _close, _exact_posterior, _model, ScriptedWorld
+from worlds import _storage
+
+
+@pytest.mark.parametrize("backend", ["memory", "sqlite"])
+def test_s2b_ledger_store_substitution(tmp_path, backend):
+    with _storage(tmp_path, backend) as store:
+        ledger = Ledger(salts=SequentialSalts(), entries=store.entries, contents=store.contents)
+        parent = ledger.accept(_record())
+        child = ledger.accept(_record("child", 8))
+        assert child.parents == frozenset({parent.cid})
+        assert ledger.heads() == frozenset({child.cid})
+        assert ledger.accept(_record()) == parent
+        assert ledger.relation(parent.cid, child.cid) is Relation.BEFORE
+        ledger.verify()
+        restored = Ledger(salts=SequentialSalts(), entries=store.entries, contents=store.contents)
+        assert restored.entries() == ledger.entries()
+        assert restored.snapshot(restored.heads()) == ledger.snapshot(ledger.heads())
 
 
 F1 = "sha256:f781b457f1344b913984a8884673e21fcb23329ebf3888ea557084b49421a7de"

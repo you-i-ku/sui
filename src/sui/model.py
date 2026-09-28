@@ -121,8 +121,8 @@ class GenerativeModel:
         object.__setattr__(self, "log_C", _readonly(preferences))
 
 
-def model_ref(model: GenerativeModel) -> str:
-    """モデルの全入力を正準 JSON にして参照を返す。"""
+def model_json(model: GenerativeModel) -> bytes:
+    """モデルの全入力を、参照の材料となる正準 JSON にする。"""
     material = {
         "scheme": "sui.model.1", "states": list(model.states),
         "outcomes": list(model.outcomes), "actions": list(model.actions),
@@ -130,6 +130,36 @@ def model_ref(model: GenerativeModel) -> str:
         "learnable": sorted(model.learnable), "D": model.D.tolist(),
         "log_C": model.log_C.tolist(), "gamma": float(model.gamma),
     }
-    encoded = _json.dumps(material, ensure_ascii=False, sort_keys=True,
+    return _json.dumps(material, ensure_ascii=False, sort_keys=True,
                           separators=(",", ":"), allow_nan=False).encode("utf-8")
-    return "sha256:" + _hashlib.sha256(encoded).hexdigest()
+
+
+def model_from_json(data: bytes) -> GenerativeModel:
+    """正準 JSON を値を変えずに戻す。非正準の入力も拒む。"""
+    try:
+        if not isinstance(data, bytes):
+            raise ValueError("model: expected bytes")
+        value = _json.loads(data)
+        keys = {"scheme", "states", "outcomes", "actions", "a", "learnable",
+                "D", "log_C", "gamma"}
+        if not isinstance(value, dict) or set(value) != keys:
+            raise ValueError("model: unexpected keys")
+        if value["scheme"] != "sui.model.1":
+            raise ValueError("model: unsupported scheme")
+        model = GenerativeModel(
+            states=tuple(value["states"]), outcomes=tuple(value["outcomes"]),
+            actions=tuple(value["actions"]),
+            a={key: _np.array(array, dtype=_np.float64) for key, array in value["a"].items()},
+            learnable=frozenset(value["learnable"]),
+            D=_np.array(value["D"], dtype=_np.float64),
+            log_C=_np.array(value["log_C"], dtype=_np.float64), gamma=float(value["gamma"]),
+        )
+        if model_json(model) != data:
+            raise ValueError("model: expected canonical encoding")
+        return model
+    except (TypeError, KeyError, AttributeError, OverflowError, ValueError) as exc:
+        raise ValueError(f"invalid model: {exc}") from exc
+
+
+def model_ref(model: GenerativeModel) -> str:
+    return "sha256:" + _hashlib.sha256(model_json(model)).hexdigest()

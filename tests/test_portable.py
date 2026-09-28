@@ -119,3 +119,18 @@ def test_c2_dependencies_match_requirements_and_external_imports():
     external -= sys.stdlib_module_names | {"sui"}
     assert external == {"numpy", "scipy"}
     assert external <= dependencies.keys()
+
+
+def test_c3_core_and_tests_do_not_depend_on_backup():
+    for directory in (ROOT / "src" / "sui", ROOT / "tests"):
+        for path in directory.rglob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                names = []
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    names = [node.module or ""]
+                assert not any(name.startswith(("sui_backup", "backup")) for name in names), path
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert config["tool"]["pytest"]["ini_options"]["testpaths"] == ["tests"]
+    assert "backup" not in (ROOT / "pyproject.toml").read_text(encoding="utf-8")

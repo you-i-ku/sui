@@ -21,6 +21,7 @@ from .records import (
     StateRef as _StateRef, Undecided as _Undecided, admit as _admit,
 )
 from .snapshot import Snapshot as _Snapshot
+from .store import EntryStore as _EntryStore, MemoryEntries as _MemoryEntries, ReadOnlyStore
 
 
 def _canon(value: object) -> bytes:
@@ -68,11 +69,16 @@ def seal(content: _Payload, salt: bytes) -> str:
 
 
 class Contents(_Protocol):
+    writable: bool
     def put(self, seal: str, salt: bytes, content: _Payload) -> None: ...
     def get(self, seal: str) -> tuple[bytes, _Payload]: ...
+    def seals(self) -> frozenset[str]: ...
+    def discard(self, seal: str) -> bool: ...
 
 
 class MemoryContents:
+    writable = True
+
     def __init__(self) -> None:
         self._items: dict[str, tuple[bytes, _Payload]] = {}
 
@@ -84,6 +90,13 @@ class MemoryContents:
 
     def get(self, seal: str) -> tuple[bytes, _Payload]:
         return self._items[seal]
+
+    def seals(self) -> frozenset[str]:
+        return frozenset(self._items)
+
+    def discard(self, seal: str) -> bool:
+        self._items.pop(seal, None)
+        return True
 
 
 class MissingParent(ValueError):
@@ -217,11 +230,55 @@ def decode_record(header: bytes, content: _Payload) -> _Record:
         raise CorruptEntry(f"invalid header: {exc}") from exc
 
 
+def entry_from_header(cid: str, header: bytes) -> Entry:
+    """本文には触れず、保存された骨組みから点を読む。"""
+    try:
+        if not isinstance(header, bytes) or _digest(header) != cid:
+            raise ValueError("header digest differs")
+        data = _json.loads(header)
+        if not isinstance(data, dict) or type(data.get("schema")) is not int:
+            raise ValueError("schema: expected int")
+        if data["schema"] != 2:
+            raise _SchemaMismatch(f"schema: unsupported version {data['schema']}")
+        if set(data) != {"schema", "id", "at", "writer", "producer", "body", "seal", "parents"}:
+            raise ValueError("header: unexpected keys")
+        _check_cid(data["seal"])
+        if not isinstance(data["parents"], list):
+            raise ValueError("parents: expected list")
+        for parent in data["parents"]:
+            _check_cid(parent)
+        if data["parents"] != sorted(set(data["parents"])) or _canon(data) != header:
+            raise ValueError("header: expected canonical encoding")
+        at = dict(data["at"])
+        at["run"] = _ref(at["run"])
+        producer = dict(data["producer"])
+        if producer["state"] is not None:
+            producer["state"] = _StateRef(**producer["state"])
+        _Producer(**producer)
+        body_type = {kind.__name__: kind for kind in _BODY_KIND}[data["body"]["type"]]
+        if set(data["body"]) != {"type"} | {f.name for f in _fields(body_type) if f.name != "content"}:
+            raise ValueError("body: unexpected fields")
+        return Entry(cid=cid, header=header, id=_ref(data["id"]), body_type=body_type,
+                     at=_Instant(**at), writer=_Role(data["writer"]),
+                     parents=frozenset(data["parents"]), seal=data["seal"])
+    except _SchemaMismatch:
+        raise
+    except (ValueError, TypeError, KeyError, AttributeError, _Undecided) as exc:
+        raise CorruptEntry(f"{cid}: invalid header: {exc}") from exc
+
+
 class Ledger:
-    def __init__(self, *, salts: SaltSource, contents: Contents | None = None) -> None:
+    def __init__(self, *, salts: SaltSource, contents: Contents | None = None,
+                 entries: _EntryStore | None = None) -> None:
         self._salts = salts
         self.contents = MemoryContents() if contents is None else contents
-        self._entries: dict[str, Entry] = {}
+        self._entry_store = _MemoryEntries() if entries is None else entries
+        self._entries = {cid: entry_from_header(cid, header)
+                         for cid, header in self._entry_store.load()}
+        for cid, entry in self._entries.items():
+            for parent in entry.parents:
+                if parent not in self._entries:
+                    raise CorruptEntry(f"{cid}: missing parent {parent}")
         self._records: dict[str, tuple[Entry, _Record]] = {}
 
     def append(self, record: _Record, parents: _Iterable[str]) -> Entry:
@@ -249,6 +306,8 @@ class Ledger:
             at = self.entry(parent).at
             if at.run == record.at.run and not _precedes(at, record.at):
                 raise _ClockError(f"{parent}: parent must precede {record.id} in the same run")
+        if not self._entry_store.writable or not self.contents.writable:
+            raise ReadOnlyStore("ledger stores are read-only")
         salt = self._salts.new()
         sealed = seal(record.body.content, salt)
         header = encode_header(record, sealed, parents)
@@ -256,6 +315,7 @@ class Ledger:
                       body_type=type(record.body), at=record.at, writer=record.writer,
                       parents=parents, seal=sealed)
         self.contents.put(sealed, salt, record.body.content)
+        self._entry_store.add(entry.cid, header)
         self._entries[entry.cid] = entry
         self._records[entry.cid] = entry, record
         return entry
@@ -271,6 +331,9 @@ class Ledger:
         events = [entry for entry in self._entries.values() if entry.is_event]
         return frozenset(entry.cid for entry in events) - frozenset(
             parent for entry in events for parent in entry.parents)
+
+    def orphans(self) -> frozenset[str]:
+        return self.contents.seals() - {entry.seal for entry in self._entries.values()}
 
     def entry(self, cid: str) -> Entry:
         try:
@@ -369,16 +432,30 @@ class Ledger:
             known.setdefault(entry.id, []).append(self.record(entry.cid))
         pending = []
         for entry in other.entries():
-            if (events_only and not entry.is_event) or entry.cid in self._entries:
+            if entry.cid in self._entries:
                 continue
+            if _digest(entry.header) != entry.cid:
+                raise CorruptEntry(f"{entry.cid}: header digest differs")
+            rebuilt = entry_from_header(entry.cid, entry.header)
+            if events_only and not rebuilt.is_event:
+                continue
+            if (entry.id, entry.body_type, entry.at, entry.writer, entry.parents, entry.seal) != (
+                    rebuilt.id, rebuilt.body_type, rebuilt.at, rebuilt.writer,
+                    rebuilt.parents, rebuilt.seal):
+                raise CorruptEntry(f"{entry.cid}: entry fields differ from header")
+            salt, content = other.contents.get(entry.seal)
+            if seal(content, salt) != entry.seal:
+                raise CorruptEntry(f"{entry.cid}: content seal differs")
             record = other.record(entry.cid)
             for existing in known.get(entry.id, ()):
                 _admit(existing, record)
             known.setdefault(entry.id, []).append(record)
-            salt, content = other.contents.get(entry.seal)
             pending.append((entry, salt, content, record))
+        if pending and (not self._entry_store.writable or not self.contents.writable):
+            raise ReadOnlyStore("ledger stores are read-only")
         for entry, salt, content, record in pending:
             self.contents.put(entry.seal, salt, content)
+            self._entry_store.add(entry.cid, entry.header)
             self._entries[entry.cid] = entry
             self._records[entry.cid] = entry, record
 
@@ -410,7 +487,7 @@ RECORD_SCHEMA = _Contract(
     meaning='台帳の点。cid = 骨組みの正準 JSON (UTF-8、キー昇順、空白なし) の SHA-256。親 = 書き手がその時に見ていた出来事の先端 (膜は台帳の先端、モデルは主体が取り込み済みの先端、派生物は取り込んだ先端)。本文は塩つきの封 sui.seal.1 で分け、点は封だけを持つ。出来事 (事実・意思) だけが親になれ、派生物 (予測・解釈) は葉。順番の基本は因果の順。同時の点の見え方は cid の昇順',
     unit='cid・封は sha256: + 小文字の16進64桁、時刻は Instant のナノ秒',
     state_owner='台帳 (Ledger)。点は変わらない',
-    persistence='S2a はメモリ。永続化は S2b',
+    persistence='点は点の置き場 (EntryStore: メモリか SQLite の ledger.sqlite、sui.store "1")、本文と塩は本文の置き場 (Contents: メモリか SQLite の contents.sqlite) に。書く順は本文 → 点、親 → 子で、1つずつ確定する。故障の後に残るのは親で閉じた点の集合と、どの点からも指されない本文 (孤児、事実ではない) だけ',
     failure='親が無い・派生物を親にした・同じ run の時刻が逆・同じ ID で違う中身は、台帳を変えずに拒む',
     cancel='なし (手放すは S8)',
     redelivery='同じ ID・同じ中身は新しい点を作らず既存の cid が最小の点を返す。合わせた台帳では同じ事実が複数の点になりうるので、数える時は ID の集合で',

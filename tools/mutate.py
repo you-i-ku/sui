@@ -6,6 +6,8 @@
 mutations.json: [{"id": "M1", "file": "src/sui/ids.py", "old": "...", "new": "...", "expect": ["i1"]}, ...]
 - old は file の中にちょうど 1 回だけ現れること (違えば SETUP_ERROR)
 - expect はテスト関数名の接頭辞 (test_<id>_) の <id>。そのどれかが落ちれば KILLED
+- paths (任意、既定 ["tests"]) は pytest に渡す試験の場所。バックアップの係の変異は ["backup"] (S2b)
+- backup/ (本体の外の係) があれば一緒に写し、変異を入れる前に tests と backup の両方が通ることを確かめる (S2b)
 """
 import json
 import os
@@ -32,7 +34,7 @@ def run(mut: dict, work: Path) -> tuple[str, str]:
     target.write_text(mutated, encoding="utf-8")
     try:
         r = subprocess.run(
-            [str(PY), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rf"],
+            [str(PY), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rf", *mut.get("paths", ["tests"])],
             cwd=work, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300, env=ENV,
         )
     except subprocess.TimeoutExpired:
@@ -58,10 +60,16 @@ def main() -> int:
         shutil.copytree(SUI / "tests", work / "tests", ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy(SUI / "pyproject.toml", work / "pyproject.toml")
         shutil.copy(SUI / "requirements.txt", work / "requirements.txt")
-        base = subprocess.run([str(PY), "-m", "pytest", "-q", "-p", "no:cacheprovider"],
-                              cwd=work, capture_output=True, text=True, encoding="utf-8", errors="replace", env=ENV)
-        print("BASELINE:", base.stdout.strip().splitlines()[-1] if base.stdout.strip() else base.stderr.strip())
-        ok = base.returncode == 0
+        suites = ["tests"]
+        if (SUI / "backup").is_dir():
+            shutil.copytree(SUI / "backup", work / "backup", ignore=shutil.ignore_patterns("__pycache__"))
+            suites.append("backup")
+        ok = True
+        for suite in suites:
+            base = subprocess.run([str(PY), "-m", "pytest", "-q", "-p", "no:cacheprovider", suite],
+                                  cwd=work, capture_output=True, text=True, encoding="utf-8", errors="replace", env=ENV)
+            print(f"BASELINE {suite}:", base.stdout.strip().splitlines()[-1] if base.stdout.strip() else base.stderr.strip())
+            ok = ok and base.returncode == 0
         for m in muts:
             status, detail = run(m, work)
             print(f"{m['id']:4} {status:16} expect={m['expect']} {detail}")
