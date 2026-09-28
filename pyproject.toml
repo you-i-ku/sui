@@ -1,0 +1,10 @@
+[project]
+name = "sui"
+version = "0.0.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"

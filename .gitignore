@@ -1,0 +1,6 @@
+# 開発用の文書は載せない (2026-09-28 ゆう判断、iku と同じ方針。README だけ載せる)
+*.md
+!README.md
+.venv/
+__pycache__/
+.pytest_cache/
