@@ -1,17 +1,18 @@
-"""信念と数え上げを持ち、決定と観測を記録する主体。"""
+"""観測の回数から信念と帳面を作り、決定と観測を記録する主体。"""
 
 from collections.abc import Iterable as _Iterable
 
 import numpy as _np
 
 from .clock import Clock as _Clock
-from .contracts import ContractRef as _ContractRef, require as _require
+from .contracts import require as _require
 from .ids import IdSource as _IdSource, Ref as _Ref, RefKind as _RefKind
 from .inference import (
-    efe as _efe, expected_A as _expected_A, learn as _learn, novelty as _novelty,
-    policy_posterior as _policy_posterior, posterior as _posterior, select as _select,
+    belief as _belief, efe as _efe, expected_A as _expected_A, ledger as _ledger,
+    log_likelihood as _log_likelihood, novelty as _novelty,
+    policy_posterior as _policy_posterior, select as _select,
 )
-from .loop import ATTEMPT as _ATTEMPT, OUTCOME as _OUTCOME
+from .s1_contracts import ACTION, BELIEF, DECISION, ATTEMPT as _ATTEMPT, OUTCOME as _OUTCOME
 from .model import GenerativeModel as _GenerativeModel, _readonly
 from .records import (
     AttemptStarted as _AttemptStarted, Coverage as _Coverage, Decided as _Decided,
@@ -21,14 +22,14 @@ from .records import (
 )
 
 
-CODE_VERSION = "s1b"
-BELIEF = _ContractRef("sui.s1.belief", "1")
-DECISION = _ContractRef("sui.s1.decision", "2")
-ACTION = _ContractRef("sui.s1.action", "1")
+CODE_VERSION = "s1c"
 
 
 class Agent:
-    """一つのスレッドで信念と数え上げの版を管理する。"""
+    """一つのスレッドで信念と帳面の版を管理する。
+
+    学んで持つのは観測の回数だけ、信念と帳面はそこから計算する (S1c)。
+    """
 
     def __init__(self, *, model: _GenerativeModel, lineage: str,
                  component: str = "sui.agent") -> None:
@@ -39,8 +40,11 @@ class Agent:
         self._model = model
         self._lineage = lineage
         self._component = component
-        self._q = model.D.copy()
-        self._a = {action: counts.copy() for action, counts in model.a.items()}
+        self._n: dict[str, _np.ndarray] = {
+            action: _np.zeros(len(model.outcomes), dtype=_np.int64)
+            for action in model.actions
+        }
+        self._q, self._a = self._derive(self._n)
         self._revision = 0
         self._belief: _Record | None = None
         self._jobs: dict[_Ref, str] = {}
@@ -73,7 +77,19 @@ class Agent:
         return _Producer(component=self._component, code_version=CODE_VERSION,
                          state=_StateRef(lineage=self._lineage, revision=revision))
 
-    def _belief_record(self, q: _np.ndarray, a: dict[str, _np.ndarray], revision: int,
+    def _derive(self, n: dict[str, _np.ndarray]) -> tuple[_np.ndarray, dict[str, _np.ndarray]]:
+        q = _belief(self._model.D, [
+            _log_likelihood(self._model.a[action], n[action],
+                            learnable=action in self._model.learnable)
+            for action in self._model.actions
+        ])
+        a = {action: (_ledger(self._model.a[action], n[action])
+                      if action in self._model.learnable else self._model.a[action])
+             for action in self._model.actions}
+        return q, a
+
+    def _belief_record(self, q: _np.ndarray, a: dict[str, _np.ndarray],
+                       n: dict[str, _np.ndarray], revision: int,
                        *, clock: _Clock, ids: _IdSource, basis: tuple[_Ref, ...]) -> _Record:
         return _Record(
             id=ids.new(_RefKind.PREDICTION), at=clock.now(), writer=_Role.MODEL,
@@ -83,13 +99,14 @@ class Agent:
                                  "states": list(self._model.states),
                                  "outcomes": list(self._model.outcomes), "q": q.tolist(),
                                  "a": {action: counts.tolist() for action, counts in a.items()},
+                                 "n": {action: counts.tolist() for action, counts in n.items()},
                              })),
         )
 
     def belief_record(self, *, clock: _Clock, ids: _IdSource,
                       basis: tuple[_Ref, ...] = ()) -> _Record:
         """今の信念を記録し、成功したら最新の記録にする。"""
-        record = self._belief_record(self._q, self._a, self._revision,
+        record = self._belief_record(self._q, self._a, self._n, self._revision,
                                      clock=clock, ids=ids, basis=basis)
         self._belief = record
         return record
@@ -177,14 +194,14 @@ class Agent:
             raise ValueError("outcome: unknown outcome")
         outcome = self._model.outcomes.index(content["outcome"])
         action = self._jobs[self._attempts[attempt_id].body.job]
-        q = _posterior(self._q, _expected_A(self._a[action]), outcome)
-        a = self._a.copy()
-        if action in self._model.learnable:
-            a[action] = _learn(self._a[action], q, outcome)
+        n = self._n.copy()
+        n[action] = n[action].copy()
+        n[action][outcome] += 1
+        q, a = self._derive(n)
         revision = self._revision + 1
-        belief = self._belief_record(q, a, revision, clock=clock, ids=ids,
+        belief = self._belief_record(q, a, n, revision, clock=clock, ids=ids,
                                      basis=(observed.id,))
-        self._q, self._a, self._revision = q, a, revision
+        self._q, self._a, self._n, self._revision = q, a, n, revision
         self._observations[observed.id] = observed
         self._applied_attempts.add(attempt_id)
         self._belief = belief

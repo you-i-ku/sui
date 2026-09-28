@@ -69,7 +69,10 @@ def _names(value: tuple[str, ...], name: str) -> None:
 
 @_dataclass(frozen=True, slots=True, kw_only=True, eq=False)
 class GenerativeModel:
-    """名前つきの軸と、初期の数え上げ・信念・好み。"""
+    """名前つきの軸と、初期の数え上げ・信念・好み。
+
+    状態は時間で変わらない (遷移を持たない)。信念と帳面の厳密さはこの前提による (S1c)。
+    """
 
     states: tuple[str, ...]
     outcomes: tuple[str, ...]
@@ -100,6 +103,11 @@ class GenerativeModel:
             value = _counts(self.a[action])
             if value.shape != (len(self.outcomes), len(self.states)):
                 raise ValueError("a: expected shape (outcomes, states)")
+            if action in self.learnable:
+                with _np.errstate(over="ignore"):
+                    totals = value.sum(axis=0)
+                if not _np.all(_np.isfinite(totals)):
+                    raise ValueError("a: learnable column sums must be finite")
             counts[action] = _readonly(value)
         prior = _probability(self.D, "D")
         preferences = _log_preferences(self.log_C)

@@ -1,6 +1,9 @@
-"""信念・評価・選択・数え上げの純粋な計算。"""
+"""回数からの信念・帳面と、評価・選択の純粋な計算。"""
+
+from collections.abc import Iterable as _Iterable
 
 import numpy as _np
+from scipy.special import betaln as _betaln
 from scipy.special import digamma as _digamma
 
 from .model import (
@@ -22,11 +25,22 @@ def _likelihood(value: _np.ndarray, states: int) -> _np.ndarray:
     return result
 
 
-def _outcome(outcome: int, size: int) -> None:
-    if not isinstance(outcome, int) or isinstance(outcome, bool):
-        raise TypeError("outcome: expected int, not bool")
-    if not 0 <= outcome < size:
-        raise ValueError("outcome: outside the outcome axis")
+def _observation_counts(n: _np.ndarray, outcomes: int) -> tuple[_np.ndarray, int]:
+    result = _array(n, "n", 1)
+    if (result.shape != (outcomes,) or _np.any(result < 0)
+            or _np.any(result != _np.floor(result))):
+        raise ValueError("n: expected nonnegative integer counts matching outcomes")
+    total = sum(int(value) for value in result)
+    if total > 2**53 - 1:
+        raise ValueError("n: total exceeds 2**53 - 1")
+    return result, total
+
+
+def _log_beta(x: float, n: float) -> float:
+    # 非正規化数を betaln に直接渡さず、漸化式で一度だけ移す。
+    if x < 1:
+        return _betaln(x + 1, n) + _np.log(x + n) - _np.log(x)
+    return _betaln(x, n)
 
 
 def expected_A(a: _np.ndarray) -> _np.ndarray:
@@ -37,17 +51,87 @@ def expected_A(a: _np.ndarray) -> _np.ndarray:
     return scaled / scaled.sum(axis=0)
 
 
-def posterior(q: _np.ndarray, A: _np.ndarray, outcome: int) -> _np.ndarray:
-    """構造上の 0 を保ち、対数でベイズ更新する。"""
-    q = _probability(q, "q")
-    A = _likelihood(A, len(q))
-    _outcome(outcome, A.shape[0])
-    support = (q > 0) & (A[outcome] > 0)
+def log_likelihood(a: _np.ndarray, n: _np.ndarray, *, learnable: bool) -> _np.ndarray:
+    """行動一つの回数の、状態によらない定数を除いた対数尤度。
+
+    学ぶ行動は事前 a の Dirichlet-多項、学ばない行動は列の平均を固定した A。
+    起こりえない状態は -inf。状態が時間で変わらないモデルで厳密 (S1c)。
+    """
+    a = _counts(a)
+    n, total = _observation_counts(n, a.shape[0])
+    if not isinstance(learnable, bool):
+        raise TypeError("learnable: expected bool")
+    if learnable:
+        with _np.errstate(over="ignore"):
+            column_totals = a.sum(axis=0)
+            updated_totals = column_totals + total
+        if not (_np.all(_np.isfinite(column_totals))
+                and _np.all(_np.isfinite(updated_totals))):
+            raise ValueError("a: learnable column sums and sums plus N must be finite")
+    result = _np.zeros(a.shape[1], dtype=_np.float64)
+    if total == 0:
+        return result
+    observed = n > 0
+    with _np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        for state in range(a.shape[1]):
+            column = a[:, state]
+            if _np.any(column[observed] == 0):
+                result[state] = -_np.inf
+                continue
+            if learnable:
+                result[state] = _log_beta(column_totals[state], total) - sum(
+                    _log_beta(x, count) for x, count in zip(column[observed], n[observed])
+                )
+            else:
+                log_total = _logsumexp(_np.log(column[column > 0]))
+                result[state] = _np.sum(n[observed] * (_np.log(column[observed]) - log_total))
+            if not _np.isfinite(result[state]):
+                raise FloatingPointError("log_likelihood: nonfinite value on possible support")
+    return result
+
+
+def belief(D: _np.ndarray, log_likelihoods: _Iterable[_np.ndarray]) -> _np.ndarray:
+    """事前 D と行動ごとの対数尤度から、対数の上で状態の事後を計算する。
+
+    共通の支持が空なら ModelViolation、支持上の数値の失敗は FloatingPointError。
+    """
+    D = _probability(D, "D")
+    likelihoods = []
+    support = D > 0
+    for value in log_likelihoods:
+        if not isinstance(value, _np.ndarray) or value.dtype.kind not in "iuf":
+            raise TypeError("log_likelihood: expected a real numeric ndarray")
+        value = _np.array(value, dtype=_np.float64, copy=True)
+        if (value.shape != D.shape
+                or not _np.all(_np.isfinite(value) | _np.isneginf(value))):
+            raise ValueError("log_likelihood: expected matching shape and finite values or -inf")
+        support &= _np.isfinite(value)
+        likelihoods.append(value)
     if not _np.any(support):
-        raise ModelViolation("outcome: zero probability under the current belief")
-    log_joint = _np.log(q[support]) + _np.log(A[outcome, support])
-    result = _np.zeros_like(q)
-    result[support] = _np.exp(log_joint - _logsumexp(log_joint))
+        raise ModelViolation("observations: zero probability under every supported state")
+    total = _np.zeros(int(support.sum()), dtype=_np.float64)
+    with _np.errstate(over="ignore"):
+        for value in likelihoods:
+            supported = value[support]
+            total += supported - supported.max()
+    if not _np.all(_np.isfinite(total)):
+        raise FloatingPointError("belief: nonfinite sum on possible support")
+    log_joint = (total - total.max()) + _np.log(D[support])
+    with _np.errstate(under="ignore"):
+        weights = _np.exp(log_joint - log_joint.max())
+    result = _np.zeros_like(D)
+    result[support] = weights / weights.sum()
+    return result
+
+
+def ledger(a: _np.ndarray, n: _np.ndarray) -> _np.ndarray:
+    """仮説ごとの帳面: 正の升目に回数を足し、構造上の 0 は保つ。"""
+    a = _counts(a)
+    n, _ = _observation_counts(n, a.shape[0])
+    with _np.errstate(over="ignore"):
+        result = _np.where(a > 0, a + n[:, None], 0.0)
+    if not _np.all(_np.isfinite(result)):
+        raise ValueError("ledger: counts must remain finite")
     return result
 
 
@@ -134,15 +218,3 @@ def select(probabilities: _np.ndarray, u: float) -> int:
             return index
     return int(_np.flatnonzero(probabilities > 0)[-1])
 
-
-def learn(a: _np.ndarray, q_post: _np.ndarray, outcome: int) -> _np.ndarray:
-    """構造上の 0 を守り、事後の信念を観測の行に足す。"""
-    a = _counts(a)
-    q_post = _probability(q_post, "q_post")
-    _outcome(outcome, a.shape[0])
-    if len(q_post) != a.shape[1]:
-        raise ValueError("q_post: length does not match states")
-    if _np.any((a[outcome] == 0) & (q_post > 0)):
-        raise ValueError("q_post: positive probability at a structural zero")
-    a[outcome] += q_post
-    return a

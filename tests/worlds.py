@@ -99,3 +99,37 @@ def _naive_novelty(q, a):
 def _naive_softmax(G, gamma):
     weights = [_math.exp(-gamma * float(g)) for g in G]
     return [weight / sum(weights) for weight in weights]
+
+
+def _exact_posterior(D, a, learnable, observations):
+    """静的な状態の厳密な事後と行動ごとの回数 (独立の lgamma の DM 式)。
+
+    小さな事前・回数の fixture 用。学ばない行動は列の平均を固定の A とする。
+    """
+    tally = {action: _np.zeros(prior.shape[0], dtype=_np.int64) for action, prior in a.items()}
+    for action, outcome in observations:
+        tally[action][outcome] += 1
+    log_joint = []
+    for state, probability in enumerate(D):
+        if probability == 0:
+            log_joint.append(-_math.inf)
+            continue
+        terms = [_math.log(probability)]
+        for action, prior in a.items():
+            column, counts = prior[:, state], tally[action]
+            if any(x == 0 and count > 0 for x, count in zip(column, counts)):
+                terms.append(-_math.inf)
+                break
+            total = _math.fsum(column)
+            if action in learnable:
+                terms.extend([_math.lgamma(total), -_math.lgamma(total + sum(map(int, counts)))])
+                terms.extend(_math.lgamma(float(x) + int(count)) - _math.lgamma(x)
+                             for x, count in zip(column, counts) if x > 0)
+            else:
+                terms.extend(int(count) * _math.log(float(x) / total)
+                             for x, count in zip(column, counts) if count > 0)
+        log_joint.append(_math.fsum(terms))
+    maximum = max(log_joint)
+    assert _math.isfinite(maximum), "fixture must contain a possible hypothesis"
+    weights = [_math.exp(value - maximum) for value in log_joint]
+    return _np.array([weight / _math.fsum(weights) for weight in weights]), tally

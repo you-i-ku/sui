@@ -97,20 +97,19 @@ def test_l2_learning_and_novelty_reach_fixed_decision_values():
     world = ScriptedWorld({"look1": ["o1", "o1", "o1"], "look2": ["o1", "o1"]})
     expected_G = [
         [1.012819438525, 1.065009290053, 1.098612288668],
-        [.982293076046, 1.008551405495, 1.098612288668],
-        [.989688441321, 1.001488288459, 1.098612288668],
+        [.986812554474, 1.008551405495, 1.098612288668],
+        [1.004699161538, .999384195129, 1.098612288668],
     ]
     expected_pi = [
         [.961948764, .034083408, .003967828],
-        [.842559828, .156947536, .000492636],
-        [.679874445, .319487428, .000638127],
+        [.800297140, .199077982, .000624877],
+        [.415347525, .583633624, .001018851],
     ]
-    expected_q = [.9, .642857142857, .349458609850, .151386925373]
+    expected_q = [.9, .642857142857, .375, .25]
     expected_o1_counts = [
-        [1.642857142857, 5.357142857143],
-        [1.992315752706951, 6.007684247293049],
-        [2.143702678079681, 6.856297321920319],
+        [2, 6], [3, 7], [3, 7],
     ]
+    actions = ["look1", "look1", "look2"]
     for index in range(3):
         _close(agent.q[0], expected_q[index])
         previous, through = kwargs["ledger"][-1], len(kwargs["ledger"])
@@ -119,13 +118,13 @@ def test_l2_learning_and_novelty_reach_fixed_decision_values():
         _close(data["G"], expected_G[index])
         _close(data["q_pi"], expected_pi[index], atol=1e-9)
         _close(data["G"], np.array(data["risk"]) + data["ambiguity"] - data["novelty"])
-        assert data["chosen"] == "look1"
+        assert data["chosen"] == actions[index]
         _close(agent.q[0], expected_q[index + 1])
         _assert_step_links(step, previous, index, through, kwargs)
         _close(agent.counts("look1"), [[9, 5], expected_o1_counts[index], [0, 0]])
         for action in ("look2", "wait"):
             _close(agent.counts(action), 10 * _true_A()[action])
-    assert world.calls == ["look1"] * 3
+    assert world.calls == actions
     assert agent.revision == 3
 
 
@@ -201,21 +200,23 @@ def test_l5_learning_reduces_novelty_and_switches_executed_action():
     agent, kwargs = _setup(learnable=frozenset({"look2"}), a=a,
                            D=np.array([.5, .5]), gamma=64.0)
     world = ScriptedWorld({"look1": ["o1"] * 12, "look2": ["o1"] * 12})
-    expected_novelty = [.193147180560, .160862744791, .136514168295,
-                        .118163215572, .104001811285, .092798067666]
+    expected_novelty = [.193147180560, .136514168295, .104001811285,
+                        .083735756872, .083735756872, .070005653311]
     expected_G = {
         0: [.996863063589, .905465108108, 1.098612288668],
-        5: [.996863063589, 1.005814221002, 1.098612288668],
+        3: [.996863063589, 1.014876531797, 1.098612288668],
+        4: [1.046183669570, 1.014876531797, 1.098612288668],
     }
     expected_pi = {
         0: [.002873137, .997122594, .000004268],
-        4: [.463701266, .535609869, .000688865],
-        5: [.638819262, .360231721, .000949017],
+        2: [.463701266, .535609869, .000688865],
+        3: [.759176100, .239696083, .001127816],
+        4: [.118328908, .877542087, .004129005],
     }
-    actions = ["look2"] * 5 + ["look1"]
+    actions = ["look2"] * 3 + ["look1"] + ["look2"] * 2
     novelties = []
     for index in range(6):
-        _close(agent.q, [.5, .5])
+        _close(agent.q, [.5, .5] if index < 4 else [1 / 6, 5 / 6])
         previous, through = kwargs["ledger"][-1], len(kwargs["ledger"])
         step = run_step(agent, world, ["look1", "look2", "wait"], u=.5, **kwargs)
         data = step.decided.body.content.as_json()
@@ -229,16 +230,20 @@ def test_l5_learning_reduces_novelty_and_switches_executed_action():
             _close(data["G"], expected_G[index])
         if index in expected_pi:
             _close(data["q_pi"], expected_pi[index], atol=1e-9)
-        k = min(index + 1, 5)
-        _close(agent.counts("look2"), [[1, 1], [1 + .5 * k, 1 + .5 * k], [0, 0]])
+        k = actions[:index + 1].count("look2")
+        _close(agent.counts("look2"), [[1, 1], [1 + k, 1 + k], [0, 0]])
         for action in ("look1", "wait"):
             np.testing.assert_array_equal(agent.counts(action), a[action])
-        expected_q = [.5, .5] if index < 5 else [1 / 6, 5 / 6]
+        expected_q = [.5, .5] if index < 3 else [1 / 6, 5 / 6]
         _close(agent.q, expected_q)
         _close(step.belief.body.content.as_json()["q"], expected_q)
         _close(step.belief.body.content.as_json()["a"]["look2"], agent.counts("look2"))
         _assert_step_links(step, previous, index, through, kwargs)
-    assert all(before > after for before, after in zip(novelties, novelties[1:]))
+    for action, before, after in zip(actions, novelties, novelties[1:]):
+        if action == "look2":
+            assert before > after
+        else:
+            _close(after, before, atol=1e-14)
     assert world.calls == actions
     assert agent.revision == 6
     assert len(kwargs["ledger"]) == len({record.id for record in kwargs["ledger"]}) == 31

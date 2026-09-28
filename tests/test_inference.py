@@ -4,8 +4,9 @@ import numpy as np
 import pytest
 from scipy.special import digamma
 
+import sui.inference as inference
 from sui.inference import (
-    ModelViolation, efe, expected_A, learn, novelty, policy_posterior, posterior, select,
+    ModelViolation, belief, efe, expected_A, ledger, log_likelihood, novelty, policy_posterior, select,
 )
 from worlds import _close, _naive_efe, _naive_novelty, _naive_softmax, _true_A
 
@@ -14,27 +15,29 @@ from worlds import _close, _naive_efe, _naive_novelty, _naive_softmax, _true_A
     ([.9, .1], "look1", 1), ([.3, .7], "look2", 0),
     ([1., 0.], "look1", 1), ([0., 1.], "look2", 0),
 ])
-def test_i1_posterior_matches_bayes_and_keeps_prior_zeros(q, action, outcome):
+def test_i13_belief_matches_bayes_and_keeps_prior_zeros(q, action, outcome):
     q = np.array(q)
     A = _true_A()[action]
     old_q, old_A = q.copy(), A.copy()
     joint = [float(A[outcome, s]) * float(q[s]) for s in range(len(q))]
-    result = posterior(q, A, outcome)
+    n = np.zeros(len(A), dtype=np.int64)
+    n[outcome] = 1
+    result = belief(q, [log_likelihood(A, n, learnable=False)])
     _close(result, [value / sum(joint) for value in joint])
     assert np.all(result[q == 0] == 0)
     np.testing.assert_array_equal(q, old_q)
     np.testing.assert_array_equal(A, old_A)
 
 
-def test_i1_likelihood_zero_and_impossible_observation():
-    _close(posterior(np.array([.4, .6]), np.eye(2), 0), [1., 0.])
+def test_i13_likelihood_zero_and_impossible_observation():
+    _close(belief(np.array([.4, .6]), [log_likelihood(np.eye(2), np.array([1, 0]), learnable=False)]), [1., 0.])
     with pytest.raises(ModelViolation):
-        posterior(np.array([.9, .1]), _true_A()["look1"], 2)
+        belief(np.array([.9, .1]), [log_likelihood(_true_A()["look1"], np.array([0, 0, 1]), learnable=False)])
 
 
-def test_i1_tiny_probabilities_are_computed_in_log_space():
+def test_i13_tiny_probabilities_are_computed_in_log_space():
     A = np.array([[1e-200, 1e-310], [1., 1.]])
-    result = posterior(np.array([1e-200, 1.]), A, 0)
+    result = belief(np.array([1e-200, 1.]), [log_likelihood(A, np.array([1, 0]), learnable=False)])
     expected = math.exp(math.log(1e-200) + math.log(1e-200) - math.log(1e-310))
     assert result[0] == pytest.approx(expected, rel=1e-12, abs=0)
     assert result[1] == 1.0
@@ -45,28 +48,9 @@ def test_i1_tiny_probabilities_are_computed_in_log_space():
     np.array([.2, .7]), np.array([np.nan, 1.]), np.array([np.inf, 0.]),
     np.array([.5, .5000000001]),
 ])
-def test_i1_invalid_belief(q):
+def test_i13_invalid_belief(q):
     with pytest.raises(ValueError):
-        posterior(q, _true_A()["look1"], 0)
-
-
-@pytest.mark.parametrize("A", [
-    np.ones(2), np.empty((0, 2)), np.empty((3, 0)),
-    np.ones((3, 3)) / 3, np.ones((3, 2)),
-    np.array([[1.1, .5], [-.1, .5]]),
-    np.array([[np.nan, .5], [1., .5]]),
-    np.array([[np.inf, .5], [1., .5]]),
-    np.array([[.5, .5], [.5, .5000000001]]),
-])
-def test_i1_invalid_likelihood(A):
-    with pytest.raises(ValueError):
-        posterior(np.array([.9, .1]), A, 0)
-
-
-@pytest.mark.parametrize("outcome,error", [(True, TypeError), (0.0, TypeError), (-1, ValueError), (3, ValueError)])
-def test_i1_invalid_outcome(outcome, error):
-    with pytest.raises(error):
-        posterior(np.array([.9, .1]), _true_A()["look1"], outcome)
+        belief(q, [])
 
 
 @pytest.mark.parametrize("q0,action,risk,ambiguity,G", [
@@ -203,29 +187,6 @@ def test_i7_invalid_probabilities(probabilities):
         select(probabilities, .5)
 
 
-def test_i8_fractional_learning_copies_input_and_preserves_zeros():
-    a = np.array([[9., 5.], [1., 5.], [0., 0.]])
-    q = np.array([.09 / .14, .05 / .14])
-    original_a, original_q = a.copy(), q.copy()
-    result = learn(a, q, 1)
-    _close(result, [[9, 5], [1.642857142857, 5.357142857143], [0, 0]])
-    assert np.all(result[2] == 0)
-    np.testing.assert_array_equal(a, original_a)
-    np.testing.assert_array_equal(q, original_q)
-    _close(learn(np.eye(2), np.array([1., 0.]), 0), [[2., 0.], [0., 1.]])
-
-
-@pytest.mark.parametrize("outcome,q,error", [
-    (2, np.array([.5, .5]), ValueError), (True, np.array([.5, .5]), TypeError),
-    (3, np.array([.5, .5]), ValueError), (-1, np.array([.5, .5]), ValueError),
-    (1, np.array([1.]), ValueError), (1, np.array([.5, .4]), ValueError),
-    (1, np.array([np.nan, 0.]), ValueError),
-])
-def test_i8_invalid_learning(outcome, q, error):
-    with pytest.raises(error):
-        learn(np.array([[1., 1.], [1., 1.], [0., 0.]]), q, outcome)
-
-
 def test_i8_expected_A_is_column_mean_without_mutating_counts():
     a = np.array([[2, 1], [6, 1], [0, 3]])
     old = a.copy()
@@ -243,7 +204,7 @@ def test_i8_invalid_counts_in_both_functions(a):
     with pytest.raises(ValueError):
         expected_A(a)
     with pytest.raises(ValueError):
-        learn(a, np.array([.5, .5]), 0)
+        ledger(a, np.zeros(a.shape[0] if a.ndim == 2 and a.size else 1))
 
 
 def test_i9_nonuniform_preferences_change_ranking():
@@ -263,12 +224,14 @@ def test_i9_invalid_log_preferences(log_C):
 
 @pytest.mark.parametrize("call", [
     lambda: expected_A([[1., 1.]]),
-    lambda: posterior([.5, .5], np.eye(2), 0),
-    lambda: posterior(np.array([.5, .5]), [[1., 0.], [0., 1.]], 0),
+    lambda: log_likelihood([[1., 1.]], np.zeros(1), learnable=False),
+    lambda: belief([.5, .5], []),
+    lambda: belief(np.array([.5, .5]), [[0., 0.]]),
+    lambda: ledger([[1., 1.]], np.zeros(1)),
+    lambda: log_likelihood(np.ones((1, 2)), [0.], learnable=False),
     lambda: efe(np.array([.5, .5]), np.eye(2), [0., 0.]),
     lambda: policy_posterior([1., 2.], 1.0),
     lambda: select([.5, .5], .5),
-    lambda: learn(np.ones((2, 2)), [.5, .5], 0),
     lambda: expected_A(np.array([["1", "1"]])),
     lambda: expected_A(np.array([[1j, 1j]])),
 ])
@@ -377,3 +340,234 @@ def test_i11_three_states_match_fixed_value_and_general_dirichlet_kl():
     result = novelty(q, a)
     _close(result, .158505857092729, atol=1e-14)
     _close(result, _naive_novelty(q, a), atol=1e-14)
+
+
+@pytest.mark.parametrize("learnable", [False, True])
+def test_i12_empty_counts_are_zero_without_calling_betaln(learnable, monkeypatch):
+    def unexpected(*args):
+        pytest.fail("betaln must not be called for zero counts")
+    monkeypatch.setattr(inference, "_betaln", unexpected)
+    result = log_likelihood(np.array([[.9, .1], [.1, .9]]), np.zeros(2), learnable=learnable)
+    np.testing.assert_array_equal(result, [0., 0.])
+    assert result.dtype == np.float64
+
+
+def test_i12_fixed_likelihood_and_dirichlet_multinomial_difference():
+    a, n = np.array([[.9, .1], [.1, .9]]), np.array([2, 1])
+    old_a, old_n = a.copy(), n.copy()
+    a.setflags(write=False)
+    n.setflags(write=False)
+    result = log_likelihood(a, n, learnable=False)
+    _close(result, [2 * math.log(.9) + math.log(.1), 2 * math.log(.1) + math.log(.9)])
+    np.testing.assert_array_equal(a, old_a)
+    np.testing.assert_array_equal(n, old_n)
+    a, n = np.array([[9, 5], [1, 5], [0, 0]]), np.array([0., 2., 0.])
+    old_a, old_n = a.copy(), n.copy()
+    result = log_likelihood(a, n, learnable=True)
+    _close(result[0] - result[1], -2.708050201102210)
+    np.testing.assert_array_equal(a, old_a)
+    np.testing.assert_array_equal(n, old_n)
+
+
+@pytest.mark.parametrize("learnable", [False, True])
+@pytest.mark.parametrize("n,possible", [([1, 0, 0], [True, False]), ([0, 0, 1], [False, True])])
+def test_i12_structural_zeros(n, possible, learnable):
+    result = log_likelihood(np.array([[1, 0], [1, 1], [0, 1]]), np.array(n), learnable=learnable)
+    np.testing.assert_array_equal(np.isfinite(result), possible)
+    assert np.all(np.isneginf(result[~np.array(possible)]))
+
+
+@pytest.mark.parametrize("a,fixed,tolerance", [
+    ([[1e15, 2], [3e15, 5]], .058698365201276, 1e-12),
+    ([[1e300, 2], [1e300, 5]], .516279474448454, 1e-11),
+])
+def test_i12_confident_priors_match_fixed_and_independent_rising_products(a, fixed, tolerance):
+    a, n = np.array(a), np.array([3, 4])
+    exact_logs = []
+    for column in a.T:
+        terms = [math.log(float(x) + j) for x, count in zip(column, n) for j in range(int(count))]
+        terms.extend(-math.log(math.fsum(column) + j) for j in range(7))
+        exact_logs.append(math.fsum(terms))
+    result = log_likelihood(a, n, learnable=True)
+    _close(result[0] - result[1], fixed, atol=tolerance)
+    _close(result[0] - result[1], exact_logs[0] - exact_logs[1], atol=tolerance)
+
+
+def test_i12_random_likelihoods_match_independent_formula():
+    rng = np.random.default_rng(20260929)
+    for case in range(50):
+        states = 2 if case % 2 == 0 else 3
+        while True:
+            a = rng.uniform(.2, 5, (3, states))
+            a[rng.random((3, states)) < .3] = 0
+            if np.all(a.sum(axis=0) > 0):
+                break
+        n = rng.integers(0, 13, size=3)
+        learnable = case % 2 == 0
+        expected = []
+        for column in a.T:
+            if any(x == 0 and count > 0 for x, count in zip(column, n)):
+                expected.append(-math.inf)
+                continue
+            total = math.fsum(column)
+            if learnable:
+                value = math.lgamma(total) - math.lgamma(total + sum(map(int, n)))
+                value += math.fsum(math.lgamma(float(x) + int(count)) - math.lgamma(x)
+                                   for x, count in zip(column, n) if x > 0)
+            else:
+                value = math.fsum(int(count) * (math.log(x) - math.log(total))
+                                   for x, count in zip(column, n) if count > 0)
+            expected.append(value)
+        expected = np.array(expected)
+        result = log_likelihood(a, n, learnable=learnable)
+        finite = np.isfinite(expected)
+        np.testing.assert_array_equal(np.isfinite(result), finite)
+        assert np.all(np.isneginf(result[~finite]))
+        if np.any(finite):
+            r = np.flatnonzero(finite)[0]
+            _close(result[finite] - result[r], expected[finite] - expected[r])
+
+
+@pytest.mark.parametrize("n,error", [
+    (np.zeros(1), ValueError), (np.array([-1, 0]), ValueError),
+    (np.array([1.5, 0]), ValueError), (np.array([np.nan, 0]), ValueError),
+    (np.array([np.inf, 0]), ValueError), (np.ones(2, dtype=bool), TypeError),
+    ([0, 0], TypeError), (np.zeros((1, 2)), ValueError),
+    (np.array([2**53, 0], dtype=np.int64), ValueError),
+    (np.array([2**62, 2**62], dtype=np.int64), ValueError),
+    (np.array([1e308, 0]), ValueError),
+    (np.array([1j, 0j]), TypeError), (np.array(["1", "0"]), TypeError),
+])
+@pytest.mark.parametrize("function", [ledger, log_likelihood])
+def test_i12_i8_invalid_observation_counts(function, n, error):
+    kwargs = {"learnable": True} if function is log_likelihood else {}
+    with pytest.raises(error):
+        function(np.ones((2, 2)), n, **kwargs)
+
+
+@pytest.mark.parametrize("a", [
+    np.ones(2), np.empty((0, 2)), np.empty((2, 0)),
+    np.array([[0., 1.], [0., 1.]]), np.array([[-1., 1.], [2., 1.]]),
+    np.array([[np.nan, 1.], [1., 1.]]), np.array([[np.inf, 1.], [1., 1.]]),
+])
+def test_i12_invalid_prior_counts(a):
+    n = np.zeros(a.shape[0] if a.ndim == 2 and a.size else 1)
+    with pytest.raises(ValueError):
+        log_likelihood(a, n, learnable=True)
+
+
+@pytest.mark.parametrize("value", [1, None, np.bool_(True)])
+def test_i12_learnable_requires_bool(value):
+    with pytest.raises(TypeError):
+        log_likelihood(np.ones((2, 2)), np.zeros(2), learnable=value)
+
+
+def test_i12_overflowing_column_sums_are_only_rejected_when_learnable():
+    a = np.full((3, 2), 1e308)
+    for n in (np.zeros(3), np.array([1, 0, 0])):
+        with pytest.raises(ValueError):
+            log_likelihood(a, n, learnable=True)
+        assert np.all(np.isfinite(log_likelihood(a, n, learnable=False)))
+
+
+def test_i12_fixed_extreme_counts_do_not_lose_possible_observations():
+    result = log_likelihood(np.array([[1e-300, 1], [1e300, 1]]), np.array([1, 0]), learnable=False)
+    _close(result, [-1381.551055796427, -.693147180559945])
+    assert np.all(np.isfinite(result))
+
+
+@pytest.mark.parametrize("n,expected", [([1, 0], 0.), ([2, 0], .405465108108164)])
+def test_i12_subnormal_priors_use_beta_recurrence(n, expected):
+    result = log_likelihood(np.array([[1e-310, 1], [1e-310, 1]]), np.array(n), learnable=True)
+    assert np.all(np.isfinite(result))
+    _close(result[0] - result[1], expected)
+
+
+def test_i12_numerical_failure_is_not_impossibility(monkeypatch):
+    monkeypatch.setattr(inference, "_betaln", lambda *args: np.inf)
+    with pytest.raises(FloatingPointError):
+        log_likelihood(np.ones((2, 2)), np.array([1, 0]), learnable=True)
+
+
+@pytest.mark.parametrize("a,n,expected", [
+    ([[9, 5], [1, 5], [0, 0]], [0, 1, 0], [[9, 5], [2, 6], [0, 0]]),
+    ([[1, 0], [1, 1], [0, 1]], [1, 0, 0], [[2, 0], [1, 1], [0, 1]]),
+    ([[1, 0], [1, 1], [0, 1]], [0, 1, 0], [[1, 0], [2, 2], [0, 1]]),
+    ([[1, 0], [1, 1], [0, 1]], [0, 0, 1], [[1, 0], [1, 1], [0, 2]]),
+    ([[1, 0], [0, 1]], [1, 0], [[2, 0], [0, 1]]),
+    ([[1, 1], [0, 0]], [0, 3], [[1, 1], [0, 0]]),
+])
+def test_i8_ledger_adds_each_count_to_positive_cells_without_mutation(a, n, expected):
+    a, n = np.array(a), np.array(n)
+    old_a, old_n = a.copy(), n.copy()
+    a.setflags(write=False)
+    n.setflags(write=False)
+    result = ledger(a, n)
+    np.testing.assert_array_equal(result, expected)
+    assert result.dtype == np.float64
+    np.testing.assert_array_equal(a, old_a)
+    np.testing.assert_array_equal(n, old_n)
+
+
+@pytest.mark.parametrize("function", [ledger, log_likelihood])
+def test_i12_i8_count_limit_is_inclusive_and_a_is_validated_first(function):
+    kwargs = {"learnable": False} if function is log_likelihood else {}
+    result = function(np.ones((1, 1)), np.array([2**53 - 1], dtype=np.int64), **kwargs)
+    np.testing.assert_array_equal(result, [[2**53]] if function is ledger else [0.])
+    with pytest.raises(ValueError):
+        function(np.array([[-1.]]), [0], **kwargs)
+
+
+@pytest.mark.parametrize("D,likelihoods,expected", [
+    ([.5, .5], [[-800, -800]], [.5, .5]),
+    ([.9, .1], [[-1e20, -1e20]], [.9, .1]),
+    ([.9, .1], [[-1e20, 0], [0, -1e20]], [.9, .1]),
+    ([.5, .5], [[-800, 0], [0, -800]], [.5, .5]),
+    ([.5, .5000000000005], [], [.49999999999975, .50000000000025]),
+    # 最大値は、ほかの尤度や D も含めた共通の支持で引く。
+    ([.9, .1, 0.], [[-1e20, -1e20, 0]], [.9, .1, 0.]),
+    ([.45, .05, .5], [[-1e20, -1e20, 0], [0, 0, -np.inf]], [.9, .1, 0.]),
+])
+def test_i13_normalization_preserves_prior_and_conflicting_evidence(D, likelihoods, expected):
+    D = np.array(D)
+    likelihoods = [np.array(value) for value in likelihoods]
+    old_D, old_likelihoods = D.copy(), [value.copy() for value in likelihoods]
+    result = belief(D, iter(likelihoods))
+    _close(result, expected, atol=1e-15)
+    _close(result.sum(), 1., atol=1e-15)
+    assert result.dtype == np.float64
+    np.testing.assert_array_equal(D, old_D)
+    for value, old in zip(likelihoods, old_likelihoods):
+        np.testing.assert_array_equal(value, old)
+
+
+def test_i13_final_display_probability_can_underflow():
+    result = belief(np.array([.5, .5]), [np.array([0, -800])])
+    assert result[1] < 1e-300
+    assert result[0] == 1.
+
+
+@pytest.mark.parametrize("D,likelihoods", [
+    ([.5, .5], [[-np.inf, -np.inf]]), ([1., 0.], [[-np.inf, 0]]),
+    ([.5, .5], [[0, -np.inf], [-np.inf, 0]]),
+])
+def test_i13_no_common_support_is_model_violation(D, likelihoods):
+    with pytest.raises(ModelViolation):
+        belief(np.array(D), [np.array(value) for value in likelihoods])
+
+
+def test_i13_overflow_is_numerical_failure_without_warnings():
+    with pytest.raises(FloatingPointError):
+        belief(np.array([.5, .5]), [np.array(value) for value in
+               [[-1e308, 0], [0, -1e308], [-1e308, 0], [0, -1e308]]])
+
+
+@pytest.mark.parametrize("value,error", [
+    (np.array([np.inf, 0]), ValueError), (np.array([np.nan, 0]), ValueError),
+    (np.zeros(1), ValueError), (np.zeros((1, 2)), ValueError),
+    ([0, 0], TypeError), (np.ones(2, dtype=bool), TypeError),
+    (np.array([1j, 0j]), TypeError), (np.array(["0", "0"]), TypeError),
+])
+def test_i13_invalid_log_likelihood(value, error):
+    with pytest.raises(error):
+        belief(np.array([.5, .5]), [value])

@@ -5,7 +5,7 @@ from dataclasses import dataclass as _dataclass
 from typing import TYPE_CHECKING as _TYPE_CHECKING, Protocol as _Protocol
 
 from .clock import Clock as _Clock
-from .contracts import ContractRef as _ContractRef
+from .s1_contracts import ATTEMPT, OUTCOME
 from .ids import IdSource as _IdSource, RefKind as _RefKind
 from .records import (
     BODY_KIND as _BODY_KIND, AttemptStarted as _AttemptStarted, Coverage as _Coverage,
@@ -15,10 +15,6 @@ from .records import (
 
 if _TYPE_CHECKING:
     from .agent import Agent as _Agent
-
-
-OUTCOME = _ContractRef("sui.s1.outcome", "1")
-ATTEMPT = _ContractRef("sui.s1.attempt", "1")
 
 
 class Executor(_Protocol):

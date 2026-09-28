@@ -35,7 +35,8 @@ def test_m1_valid_model_owns_readonly_float64_arrays():
     assert GenerativeModel.__dataclass_params__.eq is False
     assert {field.name for field in fields(model)} == {
         "states", "outcomes", "actions", "a", "learnable", "D", "log_C", "gamma",
-    }
+    }, ("状態を変える欄 (遷移など) を足すなら、S1c の『回数から計算する』形は成り立たない。"
+        "信念の更新と学習を一緒に決め直す (ROADMAP S4)")
 
 
 @pytest.mark.parametrize("name,value", [
@@ -70,6 +71,15 @@ def test_m2_invalid_counts(counts):
     a["look1"] = counts
     with pytest.raises(ValueError):
         _model(a=a)
+
+
+def test_m2_learnable_column_sums_must_be_finite():
+    a = _model_kwargs()["a"]
+    a["look1"] = np.full((3, 2), 1e308)
+    with pytest.raises(ValueError):
+        _model(a=a, learnable=frozenset({"look1"}))
+    model = _model(a=a, learnable=frozenset())
+    np.testing.assert_array_equal(model.a["look1"], a["look1"])
 
 
 def test_m2_extra_action_key_and_absolute_normalization_tolerance():
