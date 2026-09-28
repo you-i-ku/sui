@@ -28,7 +28,8 @@ def test_c2_sequence_orders_equal_times(clk):
     assert [a.seq, b.seq, c.seq] == [1, 2, 3]
     assert a.mono_ns == b.mono_ns == c.mono_ns == 0
     assert a.wall_ns == b.wall_ns == c.wall_ns == 1_790_000_000_000_000_000
-    assert a.order_key() == (0, 1)
+    assert a.seq == 1
+    assert not hasattr(a, "order_key")
     assert precedes(a, b) and precedes(b, c)
     assert not precedes(b, a) and not precedes(a, a)
     assert clk.run == Ref(K.RUN, "r1") and clk.run_index == 0
@@ -54,20 +55,25 @@ def test_c4_cross_run_order_and_wall_gap():
                   wall_ns=wall - 100_000_000_000).now()
     with pytest.raises(CrossRunError):
         elapsed_ns(a, b)
-    assert precedes(a, b) and not precedes(b, a)
+    with pytest.raises(CrossRunError):
+        precedes(a, b)
+    with pytest.raises(CrossRunError):
+        precedes(b, a)
     assert wall_gap_ns(a, b) == -100_000_000_000
 
 
 @pytest.mark.parametrize("change", [
-    {"run": Ref(K.RUN, "r2")}, {"run_index": 1}, {"mono_ns": 1}, {"wall_ns": 1},
+    {"run_index": 1}, {"run_index": 1, "seq": 2}, {"mono_ns": 1}, {"wall_ns": 1},
 ])
 def test_c5_inconsistent_order_is_rejected(clk, change):
     a = clk.now()
     b = replace(a, **change)
-    with pytest.raises(ClockError):
+    with pytest.raises(ClockError) as forward:
         precedes(a, b)
-    with pytest.raises(ClockError):
+    assert type(forward.value) is ClockError
+    with pytest.raises(ClockError) as backward:
         precedes(b, a)
+    assert type(backward.value) is ClockError
 
 
 @pytest.mark.parametrize("value, error", [(-1, ValueError), (True, TypeError), (1.0, TypeError), ("1", TypeError)])

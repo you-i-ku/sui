@@ -6,7 +6,8 @@ from sui import records as r
 from sui.clock import FakeClock
 from sui.contracts import ContractRef
 from sui.ids import Ref, RefKind as K, SequentialIds, WrongKind, derive
-from sui.snapshot import Found, Snapshot
+from sui.snapshot import Found, Unknown
+from sui.ledger import Ledger, SequentialSalts
 
 
 TEXT = r.Payload.text("この実験を終わらせる")
@@ -34,10 +35,9 @@ def clk():
 
 @pytest.fixture
 def make_body(clk):
-    coverage = r.Coverage(as_of=clk.now(), ledger="test", through=0, complete=frozenset())
     defaults = {
         r.Observed: dict(route="channel:letter"),
-        r.Decided: dict(basis=coverage, inputs=()),
+        r.Decided: dict(inputs=()),
         r.JobOpened: dict(decision=Ref(K.DECISION, "d1"), step=0),
         r.AttemptStarted: dict(job=Ref(K.JOB, "j1"), content=r.Payload.json({}), contract=C_EMPTY),
         r.Prediction: dict(target="next_letter_text", about=(), basis=()),
@@ -85,21 +85,21 @@ def test_r1_same_text_keeps_distinct_meanings(clk, make_body, make_record):
     interp = make_record(r.Interpretation, writer=r.Role.INTERPRETER,
                          producer=r.Producer(component="llm", code_version="0.1"),
                          body=make_body(r.Interpretation, about=(obs.id,)))
-    basis = r.Coverage(as_of=clk.now(), ledger="test", through=3,
-                       complete=frozenset({r.Observed, r.Prediction, r.Interpretation}))
-    dec = make_record(r.Decided, body=make_body(r.Decided, basis=basis, inputs=(obs.id, pred.id, interp.id)))
+    dec = make_record(r.Decided, body=make_body(r.Decided, inputs=(obs.id, pred.id, interp.id)))
     will = make_record(r.Intention, body=make_body(r.Intention, decided_in=dec.id))
     records = (obs, pred, interp, dec, will)
-    snapshot = Snapshot(records=records, coverage=r.Coverage(
-        as_of=clk.now(), ledger="test", through=5, complete=frozenset(KINDS)))
+    ledger = Ledger(salts=SequentialSalts())
+    for record in records:
+        ledger.append(record, ledger.heads())
+    snapshot = ledger.snapshot(ledger.heads())
     assert all(record.body.content.data == TEXT.data for record in records)
     assert [record.category for record in records] == [
         r.Category.FACT, r.Category.PREDICTION, r.Category.INTERPRETATION, r.Category.FACT, r.Category.INTENTION,
     ]
     assert snapshot.find(r.Intention, lambda rec: rec.body.status is r.IntentionStatus.CONFIRMED
-                         and rec.body.target == Ref(K.RUN, "exp1")) == Found(records=(will,), complete=True)
-    assert snapshot.find(r.Observed) == Found(records=(obs,), complete=True)
-    assert snapshot.find(r.Prediction) == Found(records=(pred,), complete=True)
+                         and rec.body.target == Ref(K.RUN, "exp1")) == Found(records=(will,))
+    assert snapshot.find(r.Observed) == Found(records=(obs,))
+    assert isinstance(snapshot.find(r.Prediction), Unknown)
 
 
 @pytest.mark.parametrize("body_type, allowed", list(WRITERS.items()))
@@ -178,8 +178,8 @@ def test_r6_record_id_matches_body(make_record):
 
 def test_r7_record_schema(make_record):
     with pytest.raises(r.SchemaMismatch) as error:
-        make_record(r.Observed, schema=2)
-    assert str(error.value) == "schema: expected 1, got 2"
+        make_record(r.Observed, schema=1)
+    assert str(error.value) == "schema: expected 2, got 1"
 
 
 def test_r8_payload_encoding_and_media_type():
@@ -321,17 +321,6 @@ def test_r15_category_and_kind_tables():
     }
 
 
-def test_r16_decision_basis_cannot_be_in_future(clk, make_body, make_record):
-    as_of = clk.now()
-    basis = r.Coverage(as_of=as_of, ledger="test", through=0, complete=frozenset())
-    clk.advance(10)
-    at = clk.now()
-    body = make_body(r.Decided, basis=basis)
-    assert make_record(r.Decided, body=body, at=at).body is body
-    assert make_record(r.Decided, body=body, at=as_of).body is body
-    future = replace(basis, as_of=at)
-    with pytest.raises(ValueError):
-        make_record(r.Decided, body=replace(body, basis=future), at=as_of)
 
 
 def test_r16_actual_inputs_and_ledger_position(make_body, make_record):
@@ -341,7 +330,7 @@ def test_r16_actual_inputs_and_ledger_position(make_body, make_record):
     assert body1 != body2
     assert make_record(r.Decided, body=body1).refs() == (o1,)
     assert make_record(r.Decided, body=body2).refs() == (o2,)
-    assert body1.basis != replace(body1.basis, through=body1.basis.through + 1)
+    assert not hasattr(body1, "basis")
     for kind in (K.RUN, K.INDIVIDUAL):
         with pytest.raises(ValueError):
             replace(body1, inputs=(Ref(kind, "r1"),))
@@ -386,7 +375,7 @@ def test_r18_payload_requires_exact_bytes(data):
     (r.JobOpened, {"step": True}), (r.Observed, {"source_time_ns": True}),
     (r.Observed, {"content": b"x"}), (r.Observed, {"contract": "sui.test.text:1"}),
     (r.Observed, {"source_id": 1}), (r.Observed, {"caused_by": "attempt:a1"}),
-    (r.Decided, {"basis": ()}), (r.Decided, {"inputs": [Ref(K.OBSERVATION, "o1")]}),
+    (r.Decided, {"inputs": [Ref(K.OBSERVATION, "o1")]}),
     (r.Interpretation, {"basis": (1,)}), (r.Preference, {"basis": []}),
     (r.Intention, {"target": "run:r1"}),
 ])
@@ -397,9 +386,9 @@ def test_r18_body_field_types(make_body, body_type, changes):
 
 def test_r18_record_validation_priority(make_record):
     with pytest.raises(TypeError):
-        make_record(r.Preference, writer="model", schema=2, id=Ref(K.JOB, "j1"))
+        make_record(r.Preference, writer="model", schema=1, id=Ref(K.JOB, "j1"))
     with pytest.raises(r.SchemaMismatch):
-        make_record(r.Preference, schema=2, id=Ref(K.JOB, "j1"))
+        make_record(r.Preference, schema=1, id=Ref(K.JOB, "j1"))
     with pytest.raises(WrongKind):
         make_record(r.Preference, id=Ref(K.JOB, "j1"))
     with pytest.raises(r.Undecided):

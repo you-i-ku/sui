@@ -24,10 +24,6 @@ class Instant:
         _check_int("mono_ns", self.mono_ns)
         _check_int("wall_ns", self.wall_ns)
 
-    def order_key(self) -> tuple[int, int]:
-        """run の番号と、その中の連番を返す。"""
-        return self.run_index, self.seq
-
 
 class ClockError(ValueError):
     """時計の順序に矛盾がある。"""
@@ -38,16 +34,16 @@ class CrossRunError(ClockError):
 
 
 def precedes(a: Instant, b: Instant) -> bool:
-    """矛盾した時刻を拒み、run の番号と連番で前後を比べる。"""
+    """同じ run の中の連番の見え方。run をまたぐ順は台帳の網が決める。"""
     _check_type("a", a, Instant)
     _check_type("b", b, Instant)
-    if a.run_index == b.run_index and a.run != b.run:
-        raise ClockError(f"run at index {a.run_index}: expected {a.run}, got {b.run}")
-    if a.run == b.run and a.run_index != b.run_index:
+    if a.run != b.run:
+        raise CrossRunError(f"run: expected {a.run}, got {b.run}")
+    if a.run_index != b.run_index:
         raise ClockError(f"run_index for {a.run}: expected {a.run_index}, got {b.run_index}")
-    if a.order_key() == b.order_key() and a != b:
-        raise ClockError(f"instant at {a.order_key()}: expected {a!r}, got {b!r}")
-    return a.order_key() < b.order_key()
+    if a.seq == b.seq and a != b:
+        raise ClockError(f"instant at seq {a.seq}: expected {a!r}, got {b!r}")
+    return a.seq < b.seq
 
 
 def elapsed_ns(a: Instant, b: Instant) -> int:

@@ -12,6 +12,7 @@ from sui.clock import FakeClock
 from sui.contracts import ContractBook, ContractRef, UnknownContract
 from sui.ids import Ref, RefKind, SequentialIds
 from sui.records import Producer
+from sui.ledger import Ledger, SequentialSalts, RECORD_SCHEMA
 from worlds import ScriptedWorld, _model
 
 
@@ -22,16 +23,17 @@ def _actual_records():
     subject = agent.Agent(model=_model(learnable=frozenset({"look1"})), lineage="portable")
     clock = FakeClock(run=Ref(RefKind.RUN, "portable"))
     ids = SequentialIds()
-    records = [subject.belief_record(clock=clock, ids=ids)]
+    records = Ledger(salts=SequentialSalts())
+    subject.belief_record(clock=clock, ids=ids, ledger=records)
     loop.run_step(subject, ScriptedWorld({"look1": ["o1"]}), ["look1"], u=.5,
-                  clock=clock, ids=ids, ledger=records, ledger_name="portable",
+                  clock=clock, ids=ids, ledger=records,
                   membrane=Producer(component="test.executor", code_version="1"))
-    return records
+    return [records.record(e.cid) for e in records.entries()]
 
 
 def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
-    expected = {("sui.s1.belief", "2"), ("sui.s1.decision", "2"),
-                ("sui.s1.action", "1"), ("sui.s1.outcome", "1"), ("sui.s1.attempt", "1")}
+    expected = {("sui.s1.belief", "3"), ("sui.s1.decision", "2"),
+                ("sui.s1.action", "1"), ("sui.s1.outcome", "2"), ("sui.s1.attempt", "1")}
     assert {(c.ref.name, c.ref.version) for c in s1_contracts.DECLARATIONS} == expected
     assert len(s1_contracts.DECLARATIONS) == 5
     assert isinstance(s1_contracts.DECLARATIONS, tuple)
@@ -42,6 +44,9 @@ def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
     for declaration in s1_contracts.DECLARATIONS:
         book.register(declaration)
         assert book.get(declaration.ref) is declaration
+    assert RECORD_SCHEMA.ref == ContractRef("sui.record", "2")
+    book.register(RECORD_SCHEMA)
+    assert book.get(RECORD_SCHEMA.ref) is RECORD_SCHEMA
     records = _actual_records()
     assert len(records) == 6
     assert {(r.body.contract.name, r.body.contract.version) for r in records} == expected
@@ -58,7 +63,7 @@ def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
             with pytest.raises(UnknownContract):
                 partial.get(record.body.contract)
     old_book = ContractBook()
-    old_book.register(replace(book.get(ContractRef("sui.s1.belief", "2")),
+    old_book.register(replace(book.get(ContractRef("sui.s1.belief", "3")),
                               ref=ContractRef("sui.s1.belief", "1")))
     with pytest.raises(UnknownContract):
         old_book.get(records[0].body.contract)
@@ -82,7 +87,7 @@ def test_c1_importing_agent_does_not_import_loop():
 
 def test_c1_meanings_describe_content_shapes():
     keys = {
-        "sui.s1.belief": {"states", "outcomes", "q", "a", "n"},
+        "sui.s1.belief": {"model", "states", "outcomes", "q", "a", "n", "unread"},
         "sui.s1.decision": {"candidates", "risk", "ambiguity", "novelty", "G", "q_o", "q_pi", "gamma", "u", "chosen"},
         "sui.s1.action": {"action"}, "sui.s1.outcome": {"outcome"}, "sui.s1.attempt": {"{}"},
     }
@@ -90,7 +95,7 @@ def test_c1_meanings_describe_content_shapes():
         for key in keys[declaration.ref.name]:
             assert key in declaration.meaning
     belief = next(declaration for declaration in s1_contracts.DECLARATIONS
-                  if declaration.ref == ContractRef("sui.s1.belief", "2"))
+                  if declaration.ref == ContractRef("sui.s1.belief", "3"))
     assert "D の 0" in belief.meaning
     assert "事前の 0 は 0 のまま" in belief.meaning
 

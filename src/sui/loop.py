@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING as _TYPE_CHECKING, Protocol as _Protocol
 from .clock import Clock as _Clock
 from .s1_contracts import ATTEMPT, OUTCOME
 from .ids import IdSource as _IdSource, RefKind as _RefKind
+from .ledger import Ledger as _Ledger
 from .records import (
-    BODY_KIND as _BODY_KIND, AttemptStarted as _AttemptStarted, Coverage as _Coverage,
+    AttemptStarted as _AttemptStarted,
     Observed as _Observed, Payload as _Payload, Producer as _Producer,
     Record as _Record, Role as _Role,
 )
@@ -31,30 +32,26 @@ class StepRecords:
     job: _Record
     attempt: _Record
     observed: _Record
-    belief: _Record | None
+    belief: _Record
 
     def __post_init__(self) -> None:
         for name in ("decided", "job", "attempt", "observed", "belief"):
             value = getattr(self, name)
-            if name == "belief" and value is None:
-                continue
             if not isinstance(value, _Record):
                 raise TypeError(f"{name}: expected Record")
 
 
 def run_step(agent: "_Agent", executor: Executor, candidates: _Iterable[str], *, u: float,
-             clock: _Clock, ids: _IdSource, ledger: list[_Record], ledger_name: str,
+             clock: _Clock, ids: _IdSource, ledger: _Ledger,
              membrane: _Producer) -> StepRecords:
-    """一歩を実行し、成功した記録だけを順番に台帳へ足す。"""
-    basis = _Coverage(as_of=clock.now(), ledger=ledger_name, through=len(ledger),
-                      complete=frozenset(_BODY_KIND))
-    decided, job = agent.decide(candidates, u=u, clock=clock, ids=ids, basis=basis)
+    """実行前に試み、受け取り時に観測を残してから、主体が採用する。"""
+    decided, job = agent.decide(candidates, u=u, clock=clock, ids=ids, ledger=ledger)
     attempt = _Record(
         id=ids.new(_RefKind.ATTEMPT), at=clock.now(), writer=_Role.MEMBRANE,
         producer=membrane,
         body=_AttemptStarted(job=job.id, content=_Payload.json({}), contract=ATTEMPT),
     )
-    agent.started(attempt)
+    ledger.accept(attempt)
     outcome = executor.execute(job.body.content.as_json()["action"])
     observed = _Record(
         id=ids.new(_RefKind.OBSERVATION), at=clock.now(), writer=_Role.MEMBRANE,
@@ -62,10 +59,8 @@ def run_step(agent: "_Agent", executor: Executor, candidates: _Iterable[str], *,
         body=_Observed(route="executor", caused_by=attempt.id,
                        content=_Payload.json({"outcome": outcome}), contract=OUTCOME),
     )
-    belief = agent.observe(observed, clock=clock, ids=ids)
+    ledger.accept(observed)
+    belief = agent.adopt(ledger, clock=clock, ids=ids)
     result = StepRecords(decided=decided, job=job, attempt=attempt,
                          observed=observed, belief=belief)
-    ledger.extend([decided, job, attempt, observed])
-    if belief is not None:
-        ledger.append(belief)
     return result

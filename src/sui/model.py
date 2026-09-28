@@ -3,6 +3,8 @@
 from collections.abc import Mapping as _Mapping
 from dataclasses import dataclass as _dataclass
 from types import MappingProxyType as _MappingProxyType
+import hashlib as _hashlib
+import json as _json
 
 import numpy as _np
 
@@ -117,3 +119,17 @@ class GenerativeModel:
         object.__setattr__(self, "a", _MappingProxyType(counts))
         object.__setattr__(self, "D", _readonly(prior))
         object.__setattr__(self, "log_C", _readonly(preferences))
+
+
+def model_ref(model: GenerativeModel) -> str:
+    """モデルの全入力を正準 JSON にして参照を返す。"""
+    material = {
+        "scheme": "sui.model.1", "states": list(model.states),
+        "outcomes": list(model.outcomes), "actions": list(model.actions),
+        "a": {action: value.tolist() for action, value in model.a.items()},
+        "learnable": sorted(model.learnable), "D": model.D.tolist(),
+        "log_C": model.log_C.tolist(), "gamma": float(model.gamma),
+    }
+    encoded = _json.dumps(material, ensure_ascii=False, sort_keys=True,
+                          separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return "sha256:" + _hashlib.sha256(encoded).hexdigest()

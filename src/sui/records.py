@@ -4,7 +4,7 @@ import json as _json
 from dataclasses import dataclass as _dataclass, fields as _fields
 from enum import StrEnum as _StrEnum
 
-from .clock import Instant as _Instant, precedes as _precedes
+from .clock import Instant as _Instant
 from .contracts import ContractRef as _ContractRef
 from .ids import Ref as _Ref, RefKind as _RefKind, expect as _expect
 from .ids import _check_int, _check_text, _check_type
@@ -94,23 +94,6 @@ class Producer:
             _check_type("state", self.state, StateRef)
 
 
-@_dataclass(frozen=True, slots=True, kw_only=True)
-class Coverage:
-    as_of: _Instant
-    ledger: str
-    through: int
-    complete: frozenset[type]
-
-    def __post_init__(self) -> None:
-        _check_type("as_of", self.as_of, _Instant)
-        _check_text("ledger", self.ledger, r"[0-9a-z_.:-]{1,128}")
-        _check_int("through", self.through, 0)
-        _check_type("complete", self.complete, frozenset)
-        for body_type in self.complete:
-            if body_type not in BODY_KIND:
-                raise ValueError(f"complete item: expected a body type, got {body_type!r}")
-
-
 def _check_content(content: Payload, contract: _ContractRef) -> None:
     _check_type("content", content, Payload)
     _check_type("contract", contract, _ContractRef)
@@ -144,13 +127,11 @@ class Observed:
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class Decided:
-    basis: Coverage
     inputs: tuple[_Ref, ...]
     content: Payload
     contract: _ContractRef
 
     def __post_init__(self) -> None:
-        _check_type("basis", self.basis, Coverage)
         _check_refs("inputs", self.inputs)
         for ref in self.inputs:
             if ref.kind not in BODY_KIND.values():
@@ -287,7 +268,7 @@ WRITERS: dict[type, frozenset[Role] | str] = {
     Preference: UNDECIDED,
 }
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class WriterNotAllowed(ValueError):
@@ -345,8 +326,6 @@ class Record:
             raise Undecided(gate=writers)
         if self.writer not in writers:
             raise WriterNotAllowed(f"{self.writer} cannot write {type(self.body).__name__}")
-        if isinstance(self.body, Decided) and _precedes(self.at, self.body.basis.as_of):
-            raise ValueError(f"basis.as_of: expected <= {self.at!r}, got {self.body.basis.as_of!r}")
 
     @property
     def category(self) -> Category:

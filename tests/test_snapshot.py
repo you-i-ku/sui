@@ -5,155 +5,115 @@ import pytest
 from sui.clock import FakeClock
 from sui.contracts import ContractRef
 from sui.ids import Ref, RefKind as K, SequentialIds
-from sui.records import Coverage, Intention, IntentionStatus, Observed, Payload, Prediction, Producer, Record, Role
+from sui.ledger import Ledger, SequentialSalts, DerivedParent
+from sui.records import (Observed, Prediction, Interpretation, Preference, Intention,
+                         IntentionStatus, Decided, Payload, Producer, Record, Role)
 from sui.snapshot import Absent, Found, Snapshot, Unknown
 
 
 @pytest.fixture
-def clk():
-    return FakeClock(run=Ref(K.RUN, "r1"))
-
-
-@pytest.fixture
-def make_record(clk):
-    ids = SequentialIds()
-    contract = ContractRef("sui.test.text", "1")
-    content = Payload.text("この実験を終わらせる")
-
+def records():
+    clock, ids = FakeClock(run=Ref(K.RUN, "r1")), SequentialIds()
     def make(body_type=Observed, **changes):
+        values = dict(content=Payload.text("この実験を終わらせる"), contract=ContractRef("sui.test", "1"))
         if body_type is Observed:
-            values = dict(route="channel:letter", content=content, contract=contract)
-            kind, writer = K.OBSERVATION, Role.MEMBRANE
+            values.update(route="channel:letter")
+            kind, role = K.OBSERVATION, Role.MEMBRANE
         elif body_type is Prediction:
-            values = dict(target="next_letter_text", about=(), basis=(), content=content, contract=contract)
-            kind, writer = K.PREDICTION, Role.MODEL
+            values.update(target="next", about=(), basis=())
+            kind, role = K.PREDICTION, Role.MODEL
+        elif body_type is Decided:
+            values.update(inputs=())
+            kind, role = K.DECISION, Role.MODEL
         else:
-            assert body_type is Intention
-            values = dict(target=Ref(K.RUN, "exp1"), operation="end", status=IntentionStatus.CONFIRMED,
-                          decided_in=Ref(K.DECISION, "d1"), content=content, contract=contract)
-            kind, writer = K.INTENTION, Role.MODEL
+            values.update(target=Ref(K.RUN, "exp1"), operation="end", status=IntentionStatus.CONFIRMED,
+                          decided_in=Ref(K.DECISION, "missing"))
+            kind, role = K.INTENTION, Role.MODEL
         values.update(changes)
-        return Record(id=ids.new(kind), at=clk.now(), writer=writer,
-                      producer=Producer(component="test", code_version="0.1"), body=body_type(**values))
-
+        return Record(id=ids.new(kind), at=clock.now(), writer=role,
+                      producer=Producer(component="test", code_version="1"), body=body_type(**values))
     return make
 
 
-@pytest.fixture
-def make_snapshot(clk):
-    def make(records=(), complete=frozenset(), **coverage_changes):
-        values = dict(as_of=clk.now(), ledger="test", through=len(records), complete=complete)
-        values.update(coverage_changes)
-        return Snapshot(records=records, coverage=Coverage(**values))
-
-    return make
+def snapshot_of(*records):
+    ledger = Ledger(salts=SequentialSalts())
+    for record in records:
+        ledger.append(record, ledger.heads())
+    return ledger.snapshot(ledger.heads())
 
 
-def test_s1_partial_snapshot_does_not_claim_absence(make_record, make_snapshot):
-    obs = make_record()
-    snapshot = make_snapshot((obs,), frozenset({Observed}))
-    unknown = snapshot.find(Intention)
-    assert isinstance(unknown, Unknown)
-    assert "Intention" in unknown.reason
-    assert snapshot.find(Observed, lambda rec: rec.body.route == "channel:other") == Absent()
+@pytest.mark.parametrize("body_type,kind", [(Prediction, K.PREDICTION),
+    (Interpretation, K.INTERPRETATION), (Preference, K.PREFERENCE)])
+def test_s1_derived_types_are_always_unknown(records, body_type, kind):
+    obs, prediction = records(), records(Prediction)
+    snapshot = snapshot_of(obs, prediction)
+    assert snapshot.records == (obs,)
+    assert isinstance(snapshot.find(body_type), Unknown)
+    assert isinstance(snapshot.resolve(Ref(kind, "missing")), Unknown)
+    assert isinstance(snapshot.resolve(prediction.id), Unknown)
 
 
-def test_s2_complete_kind_can_be_absent(make_snapshot):
-    assert make_snapshot(complete=frozenset({Intention})).find(Intention) == Absent()
+def test_s2_event_types_can_be_absent(records):
+    snapshot = snapshot_of(records())
+    assert snapshot.find(Intention) == Absent()
+    assert snapshot.find(Observed, lambda r: False) == Absent()
 
 
-@pytest.mark.parametrize("complete, expected", [(frozenset(), False), (frozenset({Observed}), True)])
-def test_s3_found_completeness_depends_on_coverage(make_record, make_snapshot, complete, expected):
-    obs = make_record()
-    snapshot = make_snapshot((obs,), complete)
-    assert snapshot.find(Observed) == Found(records=(obs,), complete=expected)
-
-
-def test_s4_resolve_exact_id_and_missing_kinds(make_record, make_snapshot):
-    obs = make_record()
-    snapshot = make_snapshot((obs,), frozenset({Observed}))
-    assert snapshot.resolve(obs.id) == Found(records=(obs,), complete=True)
-    assert snapshot.resolve(Ref(K.OBSERVATION, "missing")) == Absent()
-    assert isinstance(snapshot.resolve(Ref(K.INTENTION, "missing")), Unknown)
-    partial = make_snapshot((obs,))
-    assert partial.resolve(obs.id) == Found(records=(obs,), complete=True)
+def test_s4_resolve_exact_id_and_missing_kinds(records):
+    obs = records()
+    snapshot = snapshot_of(obs)
+    assert snapshot.resolve(obs.id) == Found(records=(obs,))
+    for kind in (K.OBSERVATION, K.INTENTION):
+        assert snapshot.resolve(Ref(kind, "missing")) == Absent()
     for kind in (K.RUN, K.INDIVIDUAL):
         with pytest.raises(ValueError):
             snapshot.resolve(Ref(kind, "r1"))
 
 
-def test_s5_unresolved_excludes_runs_individuals_and_present_records(make_record, make_snapshot):
-    obs_ref, job_ref, dec_ref = Ref(K.OBSERVATION, "o1"), Ref(K.JOB, "j1"), Ref(K.DECISION, "d1")
-    pred = make_record(Prediction, basis=(obs_ref,), about=(job_ref, Ref(K.INDIVIDUAL, "self")))
-    will = make_record(Intention, decided_in=dec_ref)
-    snapshot = make_snapshot((pred, will))
-    assert snapshot.unresolved() == frozenset({obs_ref, job_ref, dec_ref})
-    obs = replace(make_record(), id=obs_ref)
-    assert make_snapshot((obs, pred, will)).unresolved() == frozenset({job_ref, dec_ref})
+def test_s5_unresolved_includes_belief_inputs_and_excludes_runs(records):
+    obs = records()
+    prediction = records(Prediction, basis=(obs.id,))
+    dec = records(Decided, inputs=(obs.id, prediction.id))
+    will = records(Intention, decided_in=dec.id)
+    assert snapshot_of(obs, prediction, dec, will).unresolved() == {prediction.id}
+    assert snapshot_of(records(Intention)).unresolved() == {Ref(K.DECISION, "missing")}
 
 
-def test_s6_duplicate_ids_are_rejected(make_record, make_snapshot):
-    obs = make_record()
+def test_s6_duplicate_ids_and_wrong_types_are_rejected(records):
+    obs = records()
     with pytest.raises(ValueError):
-        make_snapshot((obs, replace(obs)))
-
-
-def test_s6_future_record_is_rejected(clk, make_record, make_snapshot):
-    as_of = clk.now()
-    obs = make_record()
+        Snapshot(records=(obs, replace(obs)), frontier=frozenset())
+    for values in ([obs], ("text",)):
+        with pytest.raises(TypeError):
+            Snapshot(records=values, frontier=frozenset())
+    with pytest.raises(TypeError):
+        Snapshot(records=(), frontier=None)
     with pytest.raises(ValueError):
-        make_snapshot((obs,), as_of=as_of)
-    assert make_snapshot((obs,), as_of=obs.at).records == (obs,)
-
-
-def test_s6_snapshot_and_lookup_types(make_record, make_snapshot):
-    obs = make_record()
+        Found(records=())
     with pytest.raises(TypeError):
-        make_snapshot([obs])
-    with pytest.raises(TypeError):
-        make_snapshot(("text",))
-    with pytest.raises(TypeError):
-        Snapshot(records=(), coverage=None)
-    with pytest.raises(ValueError):
-        Found(records=(), complete=True)
-    with pytest.raises(TypeError):
-        Found(records=[obs], complete=True)
-    with pytest.raises(TypeError):
-        Found(records=(obs,), complete=1)
+        Found(records=[obs])
     with pytest.raises(TypeError):
         Unknown(reason=1)
     with pytest.raises(TypeError):
-        Unknown("reason")
+        Found((obs,))
     with pytest.raises(TypeError):
-        Found((obs,), True)
+        Unknown("reason")
 
 
-@pytest.mark.parametrize("changes, error", [
-    ({"complete": frozenset({str})}, ValueError), ({"complete": {Observed}}, TypeError),
-    ({"through": -1}, ValueError), ({"through": True}, TypeError),
-    ({"ledger": ""}, ValueError), ({"ledger": "Book"}, ValueError),
-    ({"ledger": "x" * 129}, ValueError), ({"as_of": 1}, TypeError),
-])
-def test_s7_coverage_validation(clk, changes, error):
-    values = dict(as_of=clk.now(), ledger="test", through=0, complete=frozenset())
-    values.update(changes)
-    with pytest.raises(error):
-        Coverage(**values)
-
-
-def test_s8_find_preserves_snapshot_order_and_applies_filter(make_record, make_snapshot):
-    first, second, third = make_record(), make_record(route="channel:other"), make_record()
-    pred = make_record(Prediction)
-    snapshot = make_snapshot((third, pred, first, second), frozenset({Observed}))
-    assert snapshot.find(Observed) == Found(records=(third, first, second), complete=True)
-    assert snapshot.find(Observed, lambda rec: rec.body.route == "channel:letter") == Found(
-        records=(third, first), complete=True)
+def test_s8_find_preserves_causal_order_and_applies_filter(records):
+    first, second, third = records(), records(route="channel:other"), records()
+    snapshot = snapshot_of(first, second, third)
+    assert snapshot.find(Observed) == Found(records=(first, second, third))
+    assert snapshot.find(Observed, lambda r: r.body.route == "channel:letter") == Found(records=(first, third))
     with pytest.raises(ValueError):
         snapshot.find(str)
 
 
-def test_s9_unknown_reason_includes_ledger_position(make_snapshot):
-    snapshot = make_snapshot(ledger="book", through=3)
-    expected = Unknown(reason="Intention is not fully covered as of book@3")
-    assert snapshot.find(Intention) == expected
-    assert snapshot.resolve(Ref(K.INTENTION, "missing")) == expected
+def test_s9_unknown_reason_and_derived_frontier(records):
+    ledger = Ledger(salts=SequentialSalts())
+    leaf = ledger.append(records(Prediction), ())
+    with pytest.raises(DerivedParent):
+        ledger.snapshot({leaf.cid})
+    expected = Unknown(reason="derived records are not part of a snapshot; rebuild them from the model and the facts")
+    assert ledger.snapshot(()).find(Prediction) == expected
+    assert ledger.snapshot(()).resolve(leaf.id) == expected

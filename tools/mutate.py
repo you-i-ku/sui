@@ -35,6 +35,9 @@ def run(mut: dict, work: Path) -> tuple[str, str]:
             [str(PY), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rf"],
             cwd=work, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300, env=ENV,
         )
+    except subprocess.TimeoutExpired:
+        # 時間切れは「落ちた試験で気づいた」ではないので KILLED にしない (S2a)
+        return "TIMEOUT", "pytest exceeded 300 s"
     finally:
         target.write_text(text, encoding="utf-8")
     failed = [l.split("::")[-1].split(" ")[0] for l in r.stdout.splitlines() if l.startswith("FAILED")]
