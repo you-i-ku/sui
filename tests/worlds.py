@@ -3,6 +3,7 @@
 import math as _math
 
 import numpy as _np
+from scipy.special import digamma as _digamma
 
 from sui.model import GenerativeModel as _GenerativeModel
 
@@ -75,6 +76,24 @@ def _naive_efe(q, A, log_C):
             if A[o, s] > 0:
                 ambiguity -= float(q[s]) * float(A[o, s]) * _math.log(float(A[o, s]))
     return risk, ambiguity, q_o
+
+
+def _naive_novelty(q, a):
+    """正の支持上で Dirichlet KL の一般式を観測・状態ごとに平均する。"""
+    result = 0.0
+    for state in range(len(q)):
+        alpha = [float(value) for value in a[:, state] if value > 0]
+        total = sum(alpha)
+        for outcome, count in enumerate(alpha):
+            updated = alpha.copy()
+            updated[outcome] += 1
+            updated_total = sum(updated)
+            kl = (_math.lgamma(updated_total) - sum(map(_math.lgamma, updated))
+                  - _math.lgamma(total) + sum(map(_math.lgamma, alpha)))
+            kl += sum((after - before) * (_digamma(after) - _digamma(updated_total))
+                      for after, before in zip(updated, alpha))
+            result += float(q[state]) * (count / total) * float(kl)
+    return result
 
 
 def _naive_softmax(G, gamma):

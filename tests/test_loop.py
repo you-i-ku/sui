@@ -16,8 +16,8 @@ from sui.records import (
 from worlds import SampledWorld, ScriptedWorld, _close, _model, _true_A
 
 
-def _setup(*, learnable=frozenset()):
-    agent = Agent(model=_model(learnable=learnable), lineage="line1")
+def _setup(*, learnable=frozenset(), **model_changes):
+    agent = Agent(model=_model(learnable=learnable, **model_changes), lineage="line1")
     clock = FakeClock(run=Ref(K.RUN, "r1"))
     ids = SequentialIds()
     ledger = [agent.belief_record(clock=clock, ids=ids)]
@@ -92,20 +92,25 @@ def test_l1_closed_loop_changes_executed_action_and_preserves_evidence_chain():
         _close(agent.counts(action), 10 * A)
 
 
-def test_l2_learning_changes_the_second_action_with_the_same_belief():
+def test_l2_learning_and_novelty_reach_fixed_decision_values():
     agent, kwargs = _setup(learnable=frozenset({"look1"}))
-    world = ScriptedWorld({"look1": ["o1", "o1"], "look2": ["o1", "o1"]})
+    world = ScriptedWorld({"look1": ["o1", "o1", "o1"], "look2": ["o1", "o1"]})
     expected_G = [
-        [1.055538197712, 1.065009290053, 1.098612288668],
-        [1.025854473448, 1.008551405495, 1.098612288668],
-        [1.021778050493, .996863063589, 1.098612288668],
+        [1.012819438525, 1.065009290053, 1.098612288668],
+        [.982293076046, 1.008551405495, 1.098612288668],
+        [.989688441321, 1.001488288459, 1.098612288668],
     ]
     expected_pi = [
-        [.621525219, .339008974, .039465808],
-        [.247772039, .749874213, .002353748],
-        [.168535297, .830231328, .001233375],
+        [.961948764, .034083408, .003967828],
+        [.842559828, .156947536, .000492636],
+        [.679874445, .319487428, .000638127],
     ]
-    expected_q = [.9, .642857142857, .5, .357142857143]
+    expected_q = [.9, .642857142857, .349458609850, .151386925373]
+    expected_o1_counts = [
+        [1.642857142857, 5.357142857143],
+        [1.992315752706951, 6.007684247293049],
+        [2.143702678079681, 6.856297321920319],
+    ]
     for index in range(3):
         _close(agent.q[0], expected_q[index])
         previous, through = kwargs["ledger"][-1], len(kwargs["ledger"])
@@ -113,10 +118,14 @@ def test_l2_learning_changes_the_second_action_with_the_same_belief():
         data = step.decided.body.content.as_json()
         _close(data["G"], expected_G[index])
         _close(data["q_pi"], expected_pi[index], atol=1e-9)
+        _close(data["G"], np.array(data["risk"]) + data["ambiguity"] - data["novelty"])
+        assert data["chosen"] == "look1"
         _close(agent.q[0], expected_q[index + 1])
         _assert_step_links(step, previous, index, through, kwargs)
-        _close(agent.counts("look1"), [[9, 5], [1.642857142857, 5.357142857143], [0, 0]])
-    assert world.calls == ["look1", "look2", "look2"]
+        _close(agent.counts("look1"), [[9, 5], expected_o1_counts[index], [0, 0]])
+        for action in ("look2", "wait"):
+            _close(agent.counts(action), 10 * _true_A()[action])
+    assert world.calls == ["look1"] * 3
     assert agent.revision == 3
 
 
@@ -184,3 +193,52 @@ def test_l4_failed_step_leaves_ledger_untouched(failure):
         run_step(agent, world, ["look1", "look2", "wait"], u=.5, **kwargs)
     assert kwargs["ledger"] == before
     # 失敗した Agent と ledger はここで破棄し、続行しない。
+
+
+def test_l5_learning_reduces_novelty_and_switches_executed_action():
+    a = {action: 10 * A for action, A in _true_A().items()}
+    a["look2"] = np.array([[1., 1.], [1., 1.], [0., 0.]])
+    agent, kwargs = _setup(learnable=frozenset({"look2"}), a=a,
+                           D=np.array([.5, .5]), gamma=64.0)
+    world = ScriptedWorld({"look1": ["o1"] * 12, "look2": ["o1"] * 12})
+    expected_novelty = [.193147180560, .160862744791, .136514168295,
+                        .118163215572, .104001811285, .092798067666]
+    expected_G = {
+        0: [.996863063589, .905465108108, 1.098612288668],
+        5: [.996863063589, 1.005814221002, 1.098612288668],
+    }
+    expected_pi = {
+        0: [.002873137, .997122594, .000004268],
+        4: [.463701266, .535609869, .000688865],
+        5: [.638819262, .360231721, .000949017],
+    }
+    actions = ["look2"] * 5 + ["look1"]
+    novelties = []
+    for index in range(6):
+        _close(agent.q, [.5, .5])
+        previous, through = kwargs["ledger"][-1], len(kwargs["ledger"])
+        step = run_step(agent, world, ["look1", "look2", "wait"], u=.5, **kwargs)
+        data = step.decided.body.content.as_json()
+        assert data["candidates"] == ["look1", "look2", "wait"]
+        assert data["chosen"] == actions[index]
+        assert data["novelty"][0] == data["novelty"][2] == 0.0
+        novelties.append(data["novelty"][1])
+        _close(novelties[-1], expected_novelty[index])
+        _close(data["G"], np.array(data["risk"]) + data["ambiguity"] - data["novelty"])
+        if index in expected_G:
+            _close(data["G"], expected_G[index])
+        if index in expected_pi:
+            _close(data["q_pi"], expected_pi[index], atol=1e-9)
+        k = min(index + 1, 5)
+        _close(agent.counts("look2"), [[1, 1], [1 + .5 * k, 1 + .5 * k], [0, 0]])
+        for action in ("look1", "wait"):
+            np.testing.assert_array_equal(agent.counts(action), a[action])
+        expected_q = [.5, .5] if index < 5 else [1 / 6, 5 / 6]
+        _close(agent.q, expected_q)
+        _close(step.belief.body.content.as_json()["q"], expected_q)
+        _close(step.belief.body.content.as_json()["a"]["look2"], agent.counts("look2"))
+        _assert_step_links(step, previous, index, through, kwargs)
+    assert all(before > after for before, after in zip(novelties, novelties[1:]))
+    assert world.calls == actions
+    assert agent.revision == 6
+    assert len(kwargs["ledger"]) == len({record.id for record in kwargs["ledger"]}) == 31

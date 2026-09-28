@@ -2,9 +2,12 @@ import math
 
 import numpy as np
 import pytest
+from scipy.special import digamma
 
-from sui.inference import ModelViolation, efe, expected_A, learn, policy_posterior, posterior, select
-from worlds import _close, _naive_efe, _naive_softmax, _true_A
+from sui.inference import (
+    ModelViolation, efe, expected_A, learn, novelty, policy_posterior, posterior, select,
+)
+from worlds import _close, _naive_efe, _naive_novelty, _naive_softmax, _true_A
 
 
 @pytest.mark.parametrize("q,action,outcome", [
@@ -272,3 +275,105 @@ def test_i9_invalid_log_preferences(log_C):
 def test_i1_array_types_are_checked(call):
     with pytest.raises(TypeError):
         call()
+
+
+@pytest.mark.parametrize("q", [[.5, .5], [.9, .1], [.2, .8]])
+def test_i11_unknown_counts_have_fixed_novelty(q):
+    result = novelty(np.array(q), np.array([[1, 1], [1, 1], [0, 0]]))
+    _close(result, math.log(2) - .5, atol=1e-14)
+    _close(result, .193147180559945, atol=1e-14)
+    assert type(result) is float
+
+
+@pytest.mark.parametrize("a,q,expected", [
+    ([[9, 5], [1, 5], [0, 0]], [.9, .1], .042718759187663),
+    ([[9, 5], [1, 5], [0, 0]], [.2, .8], .046447037538944),
+    ([[5, 1], [5, 9], [0, 0]], [.9, .1], .046979648731984),
+    ([[90, 50], [10, 50], [0, 0]], [.9, .1], .004921741466061),
+    ([[0, 0], [0, 0], [4, 2]], [.9, .1], 0.0),
+    ([[1, 0], [1, 1], [0, 1]], [.9, .1], .193147180559945),
+    ([[9, 5], [1, 5], [0, 0]], [1., 0.], .042186147994622),
+    ([[2, 1], [3, 1], [5, 2]], [.3, .7], .172176634283505),
+    ([[2, 8], [2, 8], [0, 0]], [.5, .5], .070044588707353),
+])
+def test_i11_fixed_novelty_and_inputs_are_unchanged(a, q, expected):
+    a, q = np.array(a), np.array(q)
+    old_a, old_q = a.copy(), q.copy()
+    a.setflags(write=False)
+    q.setflags(write=False)
+    result = novelty(q, a)
+    _close(result, expected, atol=1e-14)
+    assert type(result) is float and result >= 0
+    np.testing.assert_array_equal(a, old_a)
+    np.testing.assert_array_equal(q, old_q)
+
+
+def test_i11_more_counts_reduce_novelty():
+    a = np.array([[9, 5], [1, 5], [0, 0]])
+    q = np.array([.9, .1])
+    assert novelty(q, 10 * a) < novelty(q, a)
+
+
+@pytest.mark.parametrize("a,q", [
+    ([[9, 5], [1, 5], [0, 0]], [.9, .1]),
+    ([[9, 5], [1, 5], [0, 0]], [.2, .8]),
+    ([[5, 1], [5, 9], [0, 0]], [.9, .1]),
+])
+def test_i11_matches_independent_general_dirichlet_kl(a, q):
+    a, q = np.array(a, dtype=float), np.array(q)
+    _close(novelty(q, a), _naive_novelty(q, a), atol=1e-14)
+
+
+@pytest.mark.parametrize("q", [
+    np.array([1.]), np.array([]), np.ones((1, 2)), np.array([-.1, 1.1]),
+    np.array([.2, .7]), np.array([np.nan, 1.]), np.array([np.inf, 0.]),
+    np.array([.5, .5000000001]),
+])
+def test_i11_invalid_belief(q):
+    with pytest.raises(ValueError):
+        novelty(q, np.ones((2, 2)))
+
+
+@pytest.mark.parametrize("a", [
+    np.ones(2), np.empty((0, 2)), np.empty((2, 0)),
+    np.array([[0., 1.], [0., 1.]]), np.array([[-1., 1.], [2., 1.]]),
+    np.array([[np.nan, 1.], [1., 1.]]), np.array([[np.inf, 1.], [1., 1.]]),
+])
+def test_i11_invalid_counts(a):
+    with pytest.raises(ValueError):
+        novelty(np.array([.5, .5]), a)
+
+
+@pytest.mark.parametrize("q,a", [
+    ([.5, .5], np.ones((2, 2))),
+    (np.array([.5, .5]), [[1., 1.], [1., 1.]]),
+    (np.array([True, False]), np.ones((2, 2))),
+    (np.array([.5, .5]), np.ones((2, 2), dtype=bool)),
+    (np.array([.5j, .5j]), np.ones((2, 2))),
+    (np.array([.5, .5]), np.array([["1", "1"]])),
+])
+def test_i11_invalid_array_types(q, a):
+    with pytest.raises(TypeError):
+        novelty(q, a)
+
+
+def test_i11_overflowing_column_sums_still_give_finite_nonnegative_novelty():
+    result = novelty(np.array([.5, .5]), np.full((2, 2), 1e308))
+    assert math.isfinite(result)
+    assert 0 <= result <= 1e-300
+
+
+@pytest.mark.parametrize("x", [999.999, 1000.0])
+def test_i11_both_sides_of_series_boundary_match_direct_digamma(x):
+    g_x = float(digamma(x + 1)) - math.log(x)
+    g_total = float(digamma(2 * x + 1)) - math.log(2 * x)
+    result = novelty(np.array([1.0]), np.array([[x], [x]]))
+    _close(result, g_x - g_total, atol=1e-14)
+
+
+def test_i11_three_states_match_fixed_value_and_general_dirichlet_kl():
+    a = np.array([[1., 2., 3.], [2., 1., 1.], [1., 1., 4.]])
+    q = np.array([.2, .3, .5])
+    result = novelty(q, a)
+    _close(result, .158505857092729, atol=1e-14)
+    _close(result, _naive_novelty(q, a), atol=1e-14)

@@ -15,7 +15,7 @@ from sui.records import (
     BODY_KIND, AttemptStarted, Coverage, Decided, IdConflict, JobOpened,
     Observed, Payload, Prediction, Producer, Record, Role, StateRef,
 )
-from worlds import _close, _model, _naive_efe, _naive_softmax, _true_A
+from worlds import _close, _model, _naive_efe, _naive_novelty, _naive_softmax, _true_A
 
 
 def _setup(model=None, *, record=True):
@@ -79,9 +79,9 @@ def test_a1_initial_state_and_belief_record():
         _decide(rig)
     _close(rig.agent.q, [.9, .1])
     assert rig.agent.revision == 0
-    assert rig.agent.producer == Producer(component="sui.agent", code_version="s1",
+    assert rig.agent.producer == Producer(component="sui.agent", code_version="s1b",
                                           state=StateRef(lineage="line1", revision=0))
-    assert CODE_VERSION == "s1"
+    assert CODE_VERSION == "s1b"
     belief = rig.agent.belief_record(clock=rig.clock, ids=rig.ids)
     assert isinstance(belief.body, Prediction)
     assert belief.writer is Role.MODEL
@@ -134,21 +134,23 @@ def test_a2_decision_job_contents_and_unchanged_state():
     before = _state(rig)
     decision, job = _decide(rig, ["wait", "look2", "look1"])
     assert isinstance(decision.body, Decided)
-    assert decision.body.contract == DECISION == ContractRef("sui.s1.decision", "1")
+    assert decision.body.contract == DECISION == ContractRef("sui.s1.decision", "2")
     assert decision.body.inputs == (rig.belief.id,)
     assert decision.writer is job.writer is Role.MODEL
     assert decision.producer == job.producer == rig.agent.producer
     data = decision.body.content.as_json()
-    assert set(data) == {"candidates", "risk", "ambiguity", "G", "q_o", "q_pi", "gamma", "u", "chosen"}
+    assert set(data) == {"candidates", "risk", "ambiguity", "novelty", "G", "q_o",
+                         "q_pi", "gamma", "u", "chosen"}
     assert data["candidates"] == ["look1", "look2", "wait"]
     _close(data["risk"], [.693648803604, .408668530210, 1.098612288668])
     _close(data["ambiguity"], [.361889394108, .656340759843, 0.])
+    assert data["novelty"] == [0.0, 0.0, 0.0]
     _close(data["G"], [1.055538197712, 1.065009290053, 1.098612288668])
     _close(data["q_o"], [[.86, .14, 0.], [.46, .54, 0.], [0., 0., 1.]])
     _close(data["q_pi"], [.621525219, .339008974, .039465808], atol=1e-9)
     assert data["chosen"] == "look1"
     assert data["u"] == .5 and data["gamma"] == 64.0
-    for name in ("risk", "ambiguity", "G", "q_pi"):
+    for name in ("risk", "ambiguity", "novelty", "G", "q_pi"):
         assert all(type(value) is float for value in data[name])
     assert all(type(value) is float for row in data["q_o"] for value in row)
     assert type(data["gamma"]) is type(data["u"]) is float
@@ -202,10 +204,14 @@ def test_a3_decision_uses_current_learned_counts():
     _close(rig.agent.counts("look2"), expected_a)
     data = _decide(rig)[0].body.content.as_json()
     expected_A = expected_a / expected_a.sum(axis=0)
-    expected = sum(_naive_efe([.2, .8], expected_A, rig.model.log_C)[:2])
+    expected_novelty = _naive_novelty([.2, .8], expected_a)
+    expected = sum(_naive_efe([.2, .8], expected_A, rig.model.log_C)[:2]) - expected_novelty
     _close(data["G"][1], expected)
-    _close(data["G"][1], 1.095432503619133, atol=1e-14)
-    _close(old["G"][1], math.log(3))
+    _close(data["G"][1], .943255823791)
+    _close(data["novelty"][1], expected_novelty, atol=1e-14)
+    _close(data["novelty"][1], .152176679828004, atol=1e-14)
+    _close(old["G"], [1.037854627602, .905465108108, 1.098612288668])
+    _close(old["novelty"][1], math.log(2) - .5, atol=1e-14)
     assert abs(data["G"][1] - old["G"][1]) > .001
 
 
@@ -502,3 +508,33 @@ def test_a10_public_belief_record_failure_keeps_latest_record():
     with pytest.raises(RuntimeError):
         rig.agent.belief_record(clock=rig.clock, ids=_FailingIds(rig.ids, fail_on=1))
     _assert_unchanged(rig, before, rig.belief)
+
+
+def test_a11_only_learnable_novelty_reaches_decision_in_candidate_order():
+    rig = _setup(_model(learnable=frozenset({"look1"})))
+    before = _state(rig)
+    decision, job = _decide(rig)
+    data = decision.body.content.as_json()
+    assert data["candidates"] == ["look1", "look2", "wait"]
+    _close(data["novelty"][0], .042718759187663, atol=1e-14)
+    assert data["novelty"][1:] == [0.0, 0.0]
+    assert all(type(value) is float for value in data["novelty"])
+    _close(data["risk"][0], .693648803604171, atol=1e-14)
+    _close(data["ambiguity"][0], .361889394108298, atol=1e-14)
+    _close(data["G"][0], 1.012819438524806, atol=1e-14)
+    _close(data["G"], np.array(data["risk"]) + data["ambiguity"] - data["novelty"])
+    _close(data["q_pi"], [.961948764, .034083408, .003967828], atol=1e-9)
+    assert data["chosen"] == job.body.content.as_json()["action"] == "look1"
+    assert decision.body.contract == ContractRef("sui.s1.decision", "2")
+    assert decision.producer.code_version == job.producer.code_version == "s1b"
+    reordered = _decide(rig, ["wait", "look2", "look1"])[0].body.content.as_json()
+    assert reordered == data
+    _assert_unchanged(rig, before, rig.belief)
+
+
+def test_a11_multiple_learnable_candidates_each_receive_novelty():
+    rig = _setup(_model(D=np.array([.9, .1]), learnable=frozenset({"look1", "look2"})))
+    data = _decide(rig)[0].body.content.as_json()
+    assert data["candidates"] == ["look1", "look2", "wait"]
+    _close(data["novelty"], [.042718759187663, .046979648731984, 0.0])
+    _close(data["G"], np.array(data["risk"]) + data["ambiguity"] - data["novelty"])

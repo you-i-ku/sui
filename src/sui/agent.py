@@ -8,7 +8,7 @@ from .clock import Clock as _Clock
 from .contracts import ContractRef as _ContractRef, require as _require
 from .ids import IdSource as _IdSource, Ref as _Ref, RefKind as _RefKind
 from .inference import (
-    efe as _efe, expected_A as _expected_A, learn as _learn,
+    efe as _efe, expected_A as _expected_A, learn as _learn, novelty as _novelty,
     policy_posterior as _policy_posterior, posterior as _posterior, select as _select,
 )
 from .loop import ATTEMPT as _ATTEMPT, OUTCOME as _OUTCOME
@@ -21,9 +21,9 @@ from .records import (
 )
 
 
-CODE_VERSION = "s1"
+CODE_VERSION = "s1b"
 BELIEF = _ContractRef("sui.s1.belief", "1")
-DECISION = _ContractRef("sui.s1.decision", "1")
+DECISION = _ContractRef("sui.s1.decision", "2")
 ACTION = _ContractRef("sui.s1.action", "1")
 
 
@@ -109,14 +109,16 @@ class Agent:
         if not unique:
             raise ValueError("candidates: expected at least one action")
         actions = sorted(unique)
-        risks, ambiguities, outcomes = [], [], []
+        risks, ambiguities, novelties, outcomes = [], [], [], []
         for action in actions:
             risk, ambiguity, q_o = _efe(self._q, _expected_A(self._a[action]),
                                         self._model.log_C)
             risks.append(risk)
             ambiguities.append(ambiguity)
+            novelties.append(_novelty(self._q, self._a[action])
+                             if action in self._model.learnable else 0.0)
             outcomes.append(q_o.tolist())
-        G = _np.array(risks) + _np.array(ambiguities)
+        G = _np.array(risks) + _np.array(ambiguities) - _np.array(novelties)
         q_pi = _policy_posterior(G, self._model.gamma)
         chosen = actions[_select(q_pi, u)]
         decided = _Record(
@@ -125,6 +127,7 @@ class Agent:
             body=_Decided(basis=basis, inputs=(self._belief.id,), contract=DECISION,
                           content=_Payload.json({
                               "candidates": actions, "risk": risks, "ambiguity": ambiguities,
+                              "novelty": novelties,
                               "G": G.tolist(), "q_o": outcomes, "q_pi": q_pi.tolist(),
                               "gamma": float(self._model.gamma), "u": float(u), "chosen": chosen,
                           })),

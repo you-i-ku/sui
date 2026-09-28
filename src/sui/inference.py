@@ -1,6 +1,7 @@
 """信念・評価・選択・数え上げの純粋な計算。"""
 
 import numpy as _np
+from scipy.special import digamma as _digamma
 
 from .model import (
     _array, _counts, _log_preferences, _logsumexp, _positive_float, _probability,
@@ -66,6 +67,42 @@ def efe(q: _np.ndarray, A: _np.ndarray,
     terms[positive] = -A[positive] * _np.log(A[positive])
     ambiguity = terms.sum(axis=0) @ q
     return float(risk), float(ambiguity), q_o
+
+
+def _g_series(inverse):
+    """1/x から g(x) の大きな x 向け級数を計算する。"""
+    square = inverse * inverse
+    return inverse / 2 - square * (1 / 12 - square * (1 / 120 - square / 252))
+
+
+def novelty(q: _np.ndarray, a: _np.ndarray) -> float:
+    """状態が分かった時の、数え上げの期待情報利得を nat で返す。"""
+    q = _probability(q, "q")
+    a = _counts(a)
+    if len(q) != a.shape[1]:
+        raise ValueError("q: length does not match states")
+    result = 0.0
+    # 極小の重み・級数の項が 0 に丸まることは許す。
+    with _np.errstate(under="ignore"):
+        A = expected_A(a)
+        for state in range(len(q)):
+            support = a[:, state] > 0
+            column = a[support, state]
+            if len(column) == 1:
+                continue  # 正の支持が一つの列は点質量。
+            log_column = _np.log(column)
+            log_total = _logsumexp(log_column)
+            g = _np.empty_like(column)
+            small = column < 1000
+            g[small] = _digamma(column[small] + 1) - log_column[small]
+            g[~small] = _g_series(1 / column[~small])
+            if log_total < _np.log(1000):
+                g_total = _digamma(_np.exp(log_total) + 1) - log_total
+            else:
+                g_total = _g_series(_np.exp(-log_total))
+            kl = _np.maximum(g - g_total, 0.0)
+            result += float(q[state] * (A[support, state] @ kl))
+    return result
 
 
 def policy_posterior(G: _np.ndarray, gamma: float) -> _np.ndarray:
