@@ -11,7 +11,7 @@ ATTEMPT = _ContractRef("sui.s1.attempt", "1")
 
 _BELIEF_DECLARATION = _Contract(
     ref=BELIEF,
-    meaning='主体の信念の記録 (`Prediction`、target "belief")。content = {states, outcomes, q, a, n}。states・outcomes は軸の名前と順。n[行動] = その行動で各観測を実際に見た回数 (int、全部の行動)。q = (生成モデル, n) から計算した状態の事後の確率。とても小さい確率は 0.0 と表示されうるが構造上の不可能ではない (不可能は n と数え上げの 0 から決まる)。a[学ぶ行動] = 状態の仮説ごとの帳面 (列 k は「状態が k なら」の Dirichlet の数え上げ = 事前 + 回数)、a[学ばない行動] = モデルの数え上げ。q・a は同じモデルと n からぴったり作り直せる派生物。状態は時間で変わらない前提',
+    meaning='主体の信念の記録 (`Prediction`、target "belief")。content = {states, outcomes, q, a, n}。states・outcomes は軸の名前と順。n[行動] = その行動で各観測を実際に見た回数 (int、全部の行動)。q = (生成モデル, n) から計算した状態の事後の確率。とても小さい確率は 0.0 と表示されうるが構造上の不可能ではない (不可能は D の 0 か、回数が正の升目にある事前の数え上げの 0 から決まる)。a[学ぶ行動] = 状態の仮説ごとの帳面 (列 k は「状態が k なら」の Dirichlet の数え上げ = 事前が正の升目にだけ回数を足したもの。事前の 0 は 0 のまま)、a[学ばない行動] = モデルの数え上げ。q・a は同じモデルと n からぴったり作り直せる派生物。状態は時間で変わらない前提',
     unit='q は確率 (和 1)、a は Dirichlet の数え上げ、n は回数',
     state_owner='sui.agent (Producer.state の lineage・revision)',
     persistence='メモリの中の台帳だけ。保存と、作り直しに要るモデルの参照は未実装 (S2)',

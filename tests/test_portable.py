@@ -89,6 +89,10 @@ def test_c1_meanings_describe_content_shapes():
     for declaration in s1_contracts.DECLARATIONS:
         for key in keys[declaration.ref.name]:
             assert key in declaration.meaning
+    belief = next(declaration for declaration in s1_contracts.DECLARATIONS
+                  if declaration.ref == ContractRef("sui.s1.belief", "2"))
+    assert "D の 0" in belief.meaning
+    assert "事前の 0 は 0 のまま" in belief.meaning
 
 
 def test_c2_dependencies_match_requirements_and_external_imports():

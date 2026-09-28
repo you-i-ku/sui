@@ -698,3 +698,30 @@ def test_a15_ledger_is_derived_from_prior_and_total_counts():
         record = _observe(rig, _observed(rig, _start(rig, "look"), "o0"))
     assert rig.agent.counts("look")[0, 0] == 2**53 + 2
     assert record.body.content.as_json()["n"]["look"] == [2, 0]
+
+
+@pytest.mark.parametrize("error", [ValueError, FloatingPointError])
+def test_a16_failed_derivation_is_atomic_and_retryable(monkeypatch, error):
+    rig = _setup(_model(learnable=frozenset({"look1"})))
+    obs = _observed(rig, _start(rig))
+    before = _state(rig)
+
+    def fail_likelihood(a, n, *, learnable):
+        raise error("injected derivation failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr("sui.agent._log_likelihood", fail_likelihood)
+        with pytest.raises(error, match="injected derivation failure"):
+            _observe(rig, obs)
+        _assert_unchanged(rig, before, rig.belief)
+
+    record = _observe(rig, obs)
+    assert record is not None
+    assert record.body.content.as_json()["n"] == {
+        "look1": [0, 1, 0], "look2": [0, 0, 0], "wait": [0, 0, 0],
+    }
+    _close(rig.agent.q, [9 / 14, 5 / 14])
+    _close(rig.agent.counts("look1"), [[9, 5], [2, 6], [0, 0]])
+    assert rig.agent.revision == 1
+    assert record.body.basis == (obs.id,)
+    assert _decide(rig)[0].body.inputs == (record.id,)
