@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable as _Iterable
 import math as _math
+from itertools import product as _product
 
 import numpy as _np
 from scipy.special import betaln as _betaln
@@ -17,6 +18,83 @@ from .model import (
 
 class ModelViolation(ValueError):
     """モデル上で確率 0 の観測。"""
+
+
+def remaining(duration_ns: tuple[tuple[int, float], ...],
+              unseen_ns: int) -> tuple[tuple[int, float], ...]:
+    """未到着を確かめた所までで絞り、総所要と正規化した重みを返す (E1・E3・E4)。"""
+    points = tuple((ns, p) for ns, p in duration_ns if ns >= unseen_ns)
+    if not points:
+        raise ModelViolation("the hand's time model cannot explain the facts")
+    total = _math.fsum(p for _, p in points)
+    return tuple((ns, p / total) for ns, p in points)
+
+
+def _hand_joint_log(D, Q, history, pending, candidate_ns):
+    """観測の組×候補時の状態×現在の状態を対数で運ぶ (I1・I2・P1・F2)。
+
+    過去の測定も後の証拠で平滑化し、最後だけ現在の状態を周辺化する。
+    """
+    events = {}
+    for ns, likelihood in history:
+        events.setdefault(ns, []).append(("history", likelihood))
+    for ns, a in pending:
+        events.setdefault(ns, []).append(("pending", _log_A(a)))
+    events.setdefault(candidate_ns, []).append(("candidate", None))
+    table = _np.full((1, 1, len(D)), -_np.inf)
+    table[0, 0, D > 0] = _np.log(D[D > 0])
+    previous = 0
+    for ns in sorted(events):
+        if type(ns) is not int or ns < previous:
+            raise ValueError("hand: expected nonnegative integer measurement times")
+        if ns > previous:
+            B = transition(Q, (ns - previous) / 1e9)
+            log_B = _np.full_like(B, -_np.inf)
+            log_B[B > 0] = _np.log(B[B > 0])
+            table = _scipy_logsumexp(
+                table[:, :, None, :] + log_B[None, None, :, :], axis=-1)
+        for kind, value in events[ns]:
+            if kind == "history":
+                table = table + value[None, None, :]
+            elif kind == "pending":
+                table = (table[:, None, :, :] + value[None, :, None, :]).reshape(
+                    -1, table.shape[1], len(D))
+            else:
+                captured = _np.full((len(table), len(D), len(D)), -_np.inf)
+                states = _np.arange(len(D))
+                captured[:, states, states] = table[:, 0, :]
+                table = captured
+            maximum = table.max()
+            if _np.isfinite(maximum):
+                table = table - maximum
+        previous = ns
+    joint = _scipy_logsumexp(table, axis=-1)
+    total = _scipy_logsumexp(joint)
+    if not _np.isfinite(total):
+        raise ModelViolation("the model cannot explain the facts")
+    return joint - total
+
+
+def _hand_efe(D, Q, history, pending, candidate, log_C):
+    """所要の直積の枝ごとに評価し、risk・ambiguity・q_oを平均する (I1〜I3・E6)。"""
+    a, candidate_times = candidate
+    risk, ambiguity = 0.0, 0.0
+    q_o = _np.zeros(a.shape[0])
+    A = expected_A(a)
+    for combination in _product(*(times for _, times in pending), candidate_times):
+        weight = _math.prod(p for _, p in combination)
+        measured = tuple((ns, waiting_a) for (waiting_a, _), (ns, _) in
+                         zip(pending, combination[:-1]))
+        joint = _hand_joint_log(D, Q, history, measured, combination[-1][0])
+        masses = _scipy_logsumexp(joint, axis=1)
+        for log_q, mass in zip(joint, masses):
+            if _np.isfinite(mass):
+                probability = weight * _math.exp(float(mass))
+                r, amb, obs = efe(_log_probability(log_q), A, log_C)
+                risk += probability * r
+                ambiguity += probability * amb
+                q_o += probability * obs
+    return risk, ambiguity, 0.0, q_o
 
 
 def _duration(value, name):

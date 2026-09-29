@@ -8,7 +8,7 @@ from time import monotonic
 from types import MappingProxyType
 from typing import Protocol
 
-from .agent import Agent, Commit as Prepared, Draft, View, _read_jobs, plan, read
+from .agent import Agent, Commit as Prepared, Draft, View, _read_jobs, _evaluation_ns, plan, read
 from .clock import Clock
 from .contracts import ContractRef
 from .ids import IdSource, Ref, RefKind
@@ -104,6 +104,7 @@ class Think:
     candidates: tuple[str, ...]
     u: float
     now_ns: int | None = None
+    observed_ns: int | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -161,6 +162,7 @@ class Pledges:
     記録は書く前に預け、効き目が済んでから外す。預かった記録は再作成しない。
     信念の葉は預けず、プロセスをまたぐ永続化もしない (K1〜K14)。
     latest_nsは最後に成功した受け付け。Thinkのnowも作り直しで保つ (J2・J3・J5)。
+    所要ありは評価nowと未到着observedを分け、両方を保つ (J7・J13)。
     """
 
     items: list[Item] = field(default_factory=list)
@@ -364,15 +366,20 @@ class Window:
             while p.waiting and self.status().used["think"] < self.capacity["think"]:
                 request = p.waiting[0]
                 self._adopt()
-                now = None
-                if self.agent._model.Q is not None:
+                now, observed = None, None
+                if self.agent._model.Q is not None or self.agent._model.durations:
                     axis = self.agent._reading.timeline
                     if (axis is None or self.clock.run not in axis.runs
                             or p.latest_ns is None or p.latest_ns[0] != self.clock.run):
                         raise ValueError("Think: current run boot and received time are required")
                     now = axis.to_axis(*p.latest_ns)
-                work = Think(work=f"think:{p.issued + 1}", view=self.agent.view(now_ns=now),
-                             candidates=request.candidates, u=request.u, now_ns=now)
+                    if self.agent._model.durations:
+                        observed = now
+                        now = _evaluation_ns(self.agent._reading, self.clock.run, now)
+                work = Think(work=f"think:{p.issued + 1}",
+                             view=self.agent.view(now_ns=now, observed_ns=observed),
+                             candidates=request.candidates, u=request.u,
+                             now_ns=now, observed_ns=observed)
                 p.thinking[work.work] = work
                 self._outbox.append(work)
                 p.issued += 1

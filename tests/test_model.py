@@ -35,8 +35,9 @@ def test_m1_valid_model_owns_readonly_float64_arrays():
     assert GenerativeModel.__dataclass_params__.eq is False
     assert {field.name for field in fields(model)} == {
         "states", "outcomes", "actions", "a", "learnable", "D", "log_C", "gamma", "Q", "arrivals",
+        "durations", "measures",
     }, ("Qを持つモデルはS4aの濾過を使い、learnableとの同時は拒む。"
-        "変わる状態での学習はS4bで決め直す")
+        "変わる状態での学習はS4bで決め直す。所要と測る時刻は S4c")
 
 
 @pytest.mark.parametrize("name,value", [

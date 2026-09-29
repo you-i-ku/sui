@@ -123,6 +123,104 @@ def _time_model(world="W2", *, changing=True, **changes):
     return _GenerativeModel(**values)
 
 
+def _hand_model(*, measure="report", duration=((1., .5), (4., .5)), world="W2", **changes):
+    """S4cのW2・WP2。所要も測る時刻も試験が与える。"""
+    from dataclasses import replace
+    model = _time_model()
+    a = dict(model.a)
+    durations = {"look": duration, "wait": ((0., 1.),)}
+    measures = {"look": measure, "wait": "report"}
+    if world == "WP2":
+        perfect = _np.array([[1., 0.], [0., 1.], [0., 0.]])
+        a.update(peek=perfect, ask=perfect)
+        durations.update(peek=((.5, 1.),), ask=((10., 1.),))
+        measures.update(peek="start", ask="report")
+    values = dict(actions=tuple(a), a=a, durations=durations, measures=measures)
+    values.update(changes)
+    return replace(model, **values)
+
+
+class HandHistory:
+    """FakeClockで出発・受信・記録を別々に指定するS4cの事実。"""
+
+    def __init__(self, run="r1", index=0, wall=100):
+        from sui.clock import FakeClock
+        from sui.ids import Ref, RefKind, SequentialIds
+        self.clock = FakeClock(run=Ref(RefKind.RUN, run), run_index=index, wall_ns=round(wall * 1e9))
+        self.ids = SequentialIds(prefix=run)
+        self.records = []
+
+    def at(self, seconds):
+        self.clock.advance(round(seconds * 1e9) - self.clock.mono_ns())
+
+    def add(self, body, seconds):
+        from sui.records import Record, Role, Producer, BODY_KIND, Observed, AttemptStarted
+        self.at(seconds)
+        record = Record(id=self.ids.new(BODY_KIND[type(body)]), at=self.clock.now(),
+            writer=Role.MEMBRANE if isinstance(body, (Observed, AttemptStarted)) else Role.MODEL,
+            producer=Producer(component="test.hand_time", code_version="1"), body=body)
+        self.records.append(record)
+        return record
+
+    def boot(self, seconds=0):
+        from sui.records import Observed, Payload
+        from sui.s4_contracts import BOOT
+        return self.add(Observed(route="membrane", content=Payload.json({}), contract=BOOT,
+                                received_ns=round(seconds * 1e9)), seconds)
+
+    def start(self, action="look", seconds=0, *, job=None):
+        from sui.ids import Ref, RefKind
+        from sui.records import JobOpened, AttemptStarted, Payload
+        from sui.s1_contracts import ACTION, ATTEMPT
+        if job is None:
+            job = self.add(JobOpened(decision=Ref(RefKind.DECISION, "decision"), step=0,
+                content=Payload.json({"action": action}), contract=ACTION), seconds).id
+        return self.add(AttemptStarted(job=job, content=Payload.json({}), contract=ATTEMPT), seconds)
+
+    def observe(self, attempt, outcome, seconds, *, recorded=None):
+        from sui.records import Observed, Payload
+        from sui.s1_contracts import OUTCOME
+        return self.add(Observed(route="executor", content=Payload.json({"outcome": outcome}),
+            contract=OUTCOME, caused_by=attempt.id, received_ns=round(seconds * 1e9)),
+            seconds if recorded is None else recorded)
+
+
+def _hand_path_efe(model, history, pending, action, candidate_ns):
+    """試験の独立解。時刻ごとの状態の道を全列挙して周辺化する。"""
+    from itertools import product
+    from scipy.linalg import expm
+    times = sorted({0, candidate_ns, *(ns for ns, _, _ in history), *(ns for ns, _ in pending)})
+    A = {name: counts / counts.sum(axis=0) for name, counts in model.a.items()}
+    transitions = [expm(model.Q * ((end - begin) / 1e9)) for begin, end in zip(times, times[1:])]
+    index = {ns: i for i, ns in enumerate(times)}
+    joint = {}
+    for path in product(range(len(model.D)), repeat=len(times)):
+        weight = float(model.D[path[0]])
+        for i, B in enumerate(transitions):
+            weight *= float(B[path[i + 1], path[i]])
+        for ns, name, outcome in history:
+            weight *= float(A[name][outcome, path[index[ns]]])
+        for observations in product(range(len(model.outcomes)), repeat=len(pending)):
+            mass = weight
+            for (ns, name), outcome in zip(pending, observations):
+                mass *= float(A[name][outcome, path[index[ns]]])
+            key = (observations, path[index[candidate_ns]])
+            joint[key] = joint.get(key, 0.) + mass
+    total = _math.fsum(joint.values())
+    risk, ambiguity = 0., 0.
+    predicted = _np.zeros(len(model.outcomes))
+    for observations in product(range(len(model.outcomes)), repeat=len(pending)):
+        weights = _np.array([joint.get((observations, state), 0.) / total
+                            for state in range(len(model.D))])
+        mass = weights.sum()
+        if mass > 0:
+            r, amb, obs = _naive_efe(weights / mass, A[action], model.log_C)
+            risk += mass * r
+            ambiguity += mass * amb
+            predicted += mass * _np.array(obs)
+    return risk, ambiguity, predicted
+
+
 def _close(actual, expected, atol=1e-12):
     _np.testing.assert_allclose(actual, expected, atol=atol, rtol=0)
 

@@ -15,20 +15,22 @@ from .inference import (
     policy_posterior as _policy_posterior, select as _select,
     reachable as _reachable, filter_log as _filter_log, arrival_posterior as _arrival_posterior,
     _log_A, _log_predict, _log_probability, _log_update,
+    remaining as _remaining, _hand_efe,
 )
 from .s1_contracts import ACTION, BELIEF, DECISION, ATTEMPT as _ATTEMPT, OUTCOME as _OUTCOME
 from .s3_contracts import ABANDON as _ABANDON
 from .s4_contracts import BOOT as _BOOT, LISTEN as _LISTEN, BELIEF as _TIME_BELIEF, DECISION as _TIME_DECISION
+from .s4_contracts import HAND_BELIEF as _HAND_BELIEF, HAND_DECISION as _HAND_DECISION
 from .timeline import (Timeline as _Timeline, TimelineError as _TimelineError,
                        ArrivalStats as _ArrivalStats, timeline as _timeline,
                        _facts, _membrane, _listen, _arrivals)
-from .model import GenerativeModel as _GenerativeModel, model_ref as _model_ref, _readonly
+from .model import GenerativeModel as _GenerativeModel, model_ref as _model_ref, _readonly, _duration_ns
 from .ledger import Ledger as _Ledger, DerivedParent as _DerivedParent, UnknownEntry as _UnknownEntry
 from .records import (
     AttemptStarted as _AttemptStarted, Decided as _Decided,
     JobOpened as _JobOpened, Observed as _Observed, Payload as _Payload,
     Prediction as _Prediction, Producer as _Producer, Record as _Record,
-    Role as _Role, StateRef as _StateRef,
+    Role as _Role, StateRef as _StateRef, Category as _Category,
 )
 
 
@@ -58,6 +60,9 @@ class Reading:
     sequence: tuple[tuple[int, int, int, _Ref, str, str], ...] = ()
     arrivals: _Mapping[str, _ArrivalStats] = _field(default_factory=dict)
     _clock_issues: tuple[dict, ...] = ()
+    started: _Mapping[_Ref, tuple[int, ...]] = _field(default_factory=dict)
+    _started_runs: _Mapping[_Ref, tuple[_Ref, ...]] = _field(default_factory=dict)
+    _event_ns: _Mapping[_Ref, int] = _field(default_factory=dict)
 
     def __post_init__(self) -> None:
         counts = {}
@@ -69,6 +74,10 @@ class Reading:
         object.__setattr__(self, "unread", _MappingProxyType(dict(self.unread)))
         object.__setattr__(self, "pending", _MappingProxyType(dict(self.pending)))
         object.__setattr__(self, "arrivals", _MappingProxyType(dict(self.arrivals)))
+        for name in ("started", "_started_runs"):
+            object.__setattr__(self, name, _MappingProxyType(
+                {key: tuple(value) for key, value in getattr(self, name).items()}))
+        object.__setattr__(self, "_event_ns", _MappingProxyType(dict(self._event_ns)))
         object.__setattr__(self, "_clock_issues", tuple(
             _MappingProxyType(dict(issue)) for issue in self._clock_issues))
 
@@ -104,8 +113,11 @@ def read(model: _GenerativeModel, records: _Iterable[_Record]) -> Reading:
     静的な読みはS3のまま。時間の読みは受信順・到達可能性・開閉から
     作り直す。時刻不明を補わず、Qなしの結果は回数として読む。
     到着の本文は問わない (T7・T7b・Q9〜Q13・H1〜H10)。
+    所要ありは測定時刻順と試みの時刻の組を事実から作る (F1〜F3・J9・J15)。
     """
     records = _facts(records)
+    if model.durations:
+        records = tuple(r for r in records if r.category in (_Category.FACT, _Category.INTENTION))
     timed = _timed(model)
     axis, issues, arrivals, counted = None, (), {}, set()
     if timed:
@@ -184,17 +196,43 @@ def read(model: _GenerativeModel, records: _Iterable[_Record]) -> Reading:
                 unread[ref] = "ambiguous_attempt"
         else:
             ref, action, outcome = observations[0]
+            measured_ns = axis.received_ns.get(ref) if axis is not None else None
+            if model.durations and model.measures[action] == "start":
+                attempt = by_id[by_id[ref].body.caused_by]
+                if axis is None or attempt.at.run not in axis.runs:
+                    if model.Q is not None:
+                        unread[ref] = "no_clock"
+                        continue
+                    measured_ns = None
+                else:
+                    measured_ns = axis.to_axis(attempt.at.run, attempt.at.mono_ns)
             n[action][model.outcomes.index(outcome)] += 1
-            if axis is not None and ref in axis.received_ns:
+            if measured_ns is not None:
                 record = by_id[ref]
-                sequence.append((axis.received_ns[ref], record.at.run_index, record.at.seq,
+                sequence.append((measured_ns, record.at.run_index, record.at.seq,
                                  ref, action, outcome))
-    return Reading(n=n, unread=unread,
-                   pending={j: action for j, action in jobs.items()
-                            if j not in finished and j not in abandoned},
+    pending = {j: action for j, action in jobs.items() if j not in finished and j not in abandoned}
+    started, started_runs, event_ns = {}, {}, {}
+    if model.durations:
+        started = {job: [] for job in pending}
+        started_runs = {job: [] for job in pending}
+        for record in records:
+            on_axis = axis is not None and record.at.run in axis.runs
+            if on_axis:
+                ns = axis.to_axis(record.at.run, record.at.mono_ns)
+                event_ns[record.at.run] = max(event_ns.get(record.at.run, ns), ns)
+            if isinstance(record.body, _AttemptStarted) and record.body.job in pending:
+                job = record.body.job
+                started_runs[job].append(record.at.run)
+                if on_axis:
+                    started[job].append(ns)
+        started = {job: tuple(sorted(times)) for job, times in started.items()}
+        started_runs = {job: tuple(sorted(runs, key=str)) for job, runs in started_runs.items()}
+    return Reading(n=n, unread=unread, pending=pending,
                    timeline=axis, sequence=tuple(sorted(sequence, key=lambda item:
                        (item[0], item[1], item[2], str(item[3])))),
-                   arrivals=arrivals, _clock_issues=issues)
+                   arrivals=arrivals, _clock_issues=issues, started=started,
+                   _started_runs=started_runs, _event_ns=event_ns)
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -204,6 +242,7 @@ class View:
     belief: _Ref
     reading: Reading
     now_ns: int | None = None
+    observed_ns: int | None = None
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -235,7 +274,11 @@ def _derive(model, n):
 
 
 def _timed(model):
-    return model.Q is not None or bool(model.arrivals)
+    return model.Q is not None or bool(model.arrivals) or bool(model.durations)
+
+
+def _belief_contract(model):
+    return _HAND_BELIEF if model.durations else (_TIME_BELIEF if _timed(model) else BELIEF)
 
 
 def _anchor(reading):
@@ -245,6 +288,50 @@ def _anchor(reading):
     if reading.sequence:
         return reading.sequence[-1][3], reading.sequence[-1][0]
     return axis.origin, axis.received_ns[axis.origin]
+
+
+def _model_anchor(model, reading):
+    if model.durations and model.Q is None:
+        axis = reading.timeline
+        if axis is None or axis.origin is None:
+            return None, None
+        return axis.origin, axis.received_ns[axis.origin]
+    return _anchor(reading)
+
+
+def _evaluation_ns(reading, run, now_ns):
+    """評価は取り込み済みの今のrunの出来事まで。葉も新しい時計も使わない (J7・J10)。"""
+    return max(now_ns, reading._event_ns.get(run, now_ns))
+
+
+def _hand_times(view, pending):
+    """開始とrunごとの未到着から測る時刻の枝を作る (E1〜E6・J12・J14・J15)。"""
+    model, reading = view.model, view.reading
+    axis = reading.timeline
+    run = axis.runs[-1]
+    branches, earlier = [], []
+    for job, action in pending:
+        starts = reading.started[job]
+        runs = reading._started_runs[job]
+        if len(runs) > 1:
+            raise ModelFalsified("a pending job with several attempts needs S5")
+        if len(starts) != len(runs):
+            raise ModelFalsified("a pending attempt has no clock")
+        start = starts[0] if starts else view.now_ns
+        if start > view.now_ns:
+            raise ValueError("plan: now_ns precedes a pending attempt")
+        observed = view.observed_ns
+        if runs and runs[0] != run:
+            observed = axis.run_end_ns[runs[0]]
+            earlier.append(str(job))
+        unseen = max(0, observed - start) if starts else 0
+        try:
+            points = _remaining(tuple((_duration_ns(d), p) for d, p in model.durations[action]), unseen)
+        except _ModelViolation as exc:
+            raise ModelFalsified("the hand's time model cannot explain the facts") from exc
+        branches.append((model.a[action], tuple(
+            (start if model.measures[action] == "start" else start + d, p) for d, p in points)))
+    return tuple(branches), earlier
 
 
 def _filtered(model, reading):
@@ -274,13 +361,14 @@ def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
     仮の回数を事実にせず、到着はモデルどおり必ず起こると仮定する。
     進行中なしは S1c と同じ計算順。失敗は例外、状態は持たない。
     P3・P3b・P4・P5・P6・P7・P8・P9、W1・W5。
-    Qありはanchorからnowへ進め、枝は今を測る近似として記す (Q1・Q6・Q11)。
-    Qなしは起動もnowも要らず、timeを加えない (T7b)。
+    Qあり・所要なしはanchorからnowへ進め、枝は今を測る近似として記す (Q1・Q6・Q11)。
+    所要ありは測定時刻ごとの対数の表。静的なら所要の検査後S3の計算 (I1〜I3・P2)。
+    Qも所要もなければ起動もnowも要らず、timeを加えない (T7b)。
     """
     model = view.model
     time = None
-    if model.Q is not None:
-        anchor, anchor_ns = _anchor(view.reading)
+    if model.Q is not None or model.durations:
+        anchor, anchor_ns = _model_anchor(model, view.reading)
         if anchor is None:
             raise ValueError("plan: an adopted boot is required")
         if type(view.now_ns) is not int:
@@ -290,6 +378,12 @@ def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
         time = {"anchor": str(anchor), "anchor_ns": anchor_ns,
                 "now_ns": view.now_ns, "dt_s": (view.now_ns - anchor_ns) / 1e9,
                 "pending_measures": "now"}
+        if model.durations:
+            if type(view.observed_ns) is not int or view.observed_ns > view.now_ns:
+                raise ValueError("plan: integer observed_ns must not follow now_ns")
+            time.pop("pending_measures")
+            time.update(observed_ns=view.observed_ns, measures="model", start_is="attempt_record",
+                        candidate_start="now", queued_start="now")
     unique = set()
     for action in candidates:
         if not isinstance(action, str):
@@ -301,6 +395,9 @@ def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
         raise ValueError("candidates: expected at least one action")
     actions = sorted(unique)
     pending = sorted(view.reading.pending.items(), key=lambda item: str(item[0]))
+    hand_pending = None
+    if model.durations:
+        hand_pending, time["earlier_run_pending"] = _hand_times(view, pending)
 
     def expectation(n, index, action):
         q, a = _derive(model, n)
@@ -350,13 +447,28 @@ def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
 
     if view.reading._clock_issues:
         raise ModelFalsified("the timeline cannot explain the facts")
-    if model.Q is not None:
+    if model.Q is not None and not model.durations:
         now_log = _log_predict(_filtered(model, view.reading), model.Q, time["dt_s"])
+
+    if model.Q is not None and model.durations:
+        logs = {action: _log_A(model.a[action]) for action in model.actions}
+        history = tuple((ns, logs[action][model.outcomes.index(outcome)])
+                        for ns, _, _, _, action, outcome in view.reading.sequence)
 
     risks, ambiguities, novelties, outcomes = [], [], [], []
     for action in actions:
-        risk, ambiguity, novelty, q_o = (expectation(view.reading.n, 0, action)
-            if model.Q is None else changing_expectation(now_log, 0, action))
+        if model.Q is not None and model.durations:
+            candidate = (model.a[action], tuple(
+                (view.now_ns if model.measures[action] == "start" else view.now_ns + _duration_ns(d), p)
+                for d, p in model.durations[action]))
+            try:
+                risk, ambiguity, novelty, q_o = _hand_efe(
+                    model.D, model.Q, history, hand_pending, candidate, model.log_C)
+            except _ModelViolation as exc:
+                raise ModelFalsified("the model cannot explain the facts") from exc
+        else:
+            risk, ambiguity, novelty, q_o = (expectation(view.reading.n, 0, action)
+                if model.Q is None else changing_expectation(now_log, 0, action))
         risks.append(risk)
         ambiguities.append(ambiguity)
         novelties.append(novelty)
@@ -520,7 +632,7 @@ class Agent:
                        for ref, reason in sorted(reading.unread.items(), key=lambda item: str(item[0]))],
         }
         if _timed(self._model):
-            anchor, ns = _anchor(reading)
+            anchor, ns = _model_anchor(self._model, reading)
             issues = reading._clock_issues if reading.timeline is None else reading.timeline.clock_issues
             content["time"] = {"anchor": None if anchor is None else str(anchor),
                                "anchor_ns": ns, "clock_issues": [
@@ -538,7 +650,7 @@ class Agent:
             id=ids.new(_RefKind.PREDICTION), at=clock.now(), writer=_Role.MODEL,
             producer=self._producer(revision),
             body=_Prediction(target="belief", about=(), basis=(),
-                             contract=_TIME_BELIEF if _timed(self._model) else BELIEF,
+                             contract=_belief_contract(self._model),
                              content=_Payload.json(self._content(reading, q, a))),
         )
 
@@ -550,14 +662,14 @@ class Agent:
         self._belief = record
         return record
 
-    def view(self, *, now_ns: int | None = None) -> View:
+    def view(self, *, now_ns: int | None = None, observed_ns: int | None = None) -> View:
         """今の先端の変わらない入力。信念が無い・説明不能なら例外 (P9・W10)。"""
         if self._q is None:
             raise ModelFalsified("the model cannot explain the facts")
         if self._belief is None:
             raise ValueError("view: a belief record is required")
         return View(model=self._model, frontier=self.frontier,
-                    belief=self._belief.id, reading=self._reading, now_ns=now_ns)
+                    belief=self._belief.id, reading=self._reading, now_ns=now_ns, observed_ns=observed_ns)
 
     def prepare(self, draft: Draft, *, clock: _Clock, ids: _IdSource) -> Commit:
         """両記録を作るだけ。見た親を保ち、台帳・主体を変えない (P10・K4・W12)。"""
@@ -565,7 +677,8 @@ class Agent:
             id=ids.new(_RefKind.DECISION), at=clock.now(), writer=_Role.MODEL,
             producer=self.producer,
             body=_Decided(inputs=(draft.belief,),
-                          contract=_TIME_DECISION if self._model.Q is not None else DECISION,
+                          contract=(_HAND_DECISION if self._model.durations else
+                                    _TIME_DECISION if self._model.Q is not None else DECISION),
                           content=draft.content),
         )
         job = _Record(
@@ -596,7 +709,7 @@ class Agent:
                 isinstance(ledger.record(entry.cid).body, _Prediction)
                 and ledger.record(entry.cid).body.target == "belief"
                 and ledger.record(entry.cid).body.contract ==
-                    (_TIME_BELIEF if _timed(self._model) else BELIEF)
+                    _belief_contract(self._model)
                 and entry.parents == prepared.parents for entry in beliefs):
             raise ValueError("commit: belief parents differ")
         entry = ledger.append(prepared.decided, prepared.parents)
@@ -604,15 +717,27 @@ class Agent:
 
     def decide(self, candidates: _Iterable[str], *, u: float, clock: _Clock,
                ids: _IdSource, ledger: _Ledger,
-               now_mono_ns: int | None = None) -> tuple[_Record, _Record]:
-        """同期もview→plan→prepare→commit。Qありは今のrunの起動が要る (T5・T7b・J4)。"""
-        now = None
-        if self._model.Q is not None:
+               now_mono_ns: int | None = None,
+               observed_mono_ns: int | None = None) -> tuple[_Record, _Record]:
+        """同期も同じ計算。所要ありの既定observedは取り込み済みの受信まで (J11)。
+
+        既定は同じ受信の道を順番どおり抜けなく取り込む場合に使う。
+        Qか所要ありは今のrunの起動とnowが要る (T5・T7b・J4・J8)。
+        """
+        now, observed = None, None
+        if self._model.Q is not None or self._model.durations:
             axis = self._reading.timeline
             if axis is None or clock.run not in axis.runs or type(now_mono_ns) is not int:
                 raise ValueError("decide: current run boot and now_mono_ns are required")
             now = axis.to_axis(clock.run, now_mono_ns)
-        prepared = self.prepare(plan(self.view(now_ns=now), candidates, u=u), clock=clock, ids=ids)
+            if self._model.durations:
+                now = _evaluation_ns(self._reading, clock.run, now)
+                if observed_mono_ns is not None and type(observed_mono_ns) is not int:
+                    raise ValueError("decide: observed_mono_ns must be integer nanoseconds")
+                observed = (axis.run_end_ns[clock.run] if observed_mono_ns is None else
+                            axis.to_axis(clock.run, observed_mono_ns))
+        prepared = self.prepare(plan(self.view(now_ns=now, observed_ns=observed), candidates, u=u),
+                                clock=clock, ids=ids)
         self.commit(prepared, ledger=ledger)
         return prepared.decided, prepared.job
 
@@ -645,7 +770,7 @@ class Agent:
         record = ledger.record(belief)
         if not isinstance(record.body, _Prediction) or record.body.target != "belief":
             raise ValueError("belief: expected Prediction with target belief")
-        if record.body.contract != (_TIME_BELIEF if _timed(model) else BELIEF):
+        if record.body.contract != _belief_contract(model):
             raise ValueError("belief: incompatible contract")
         if record.producer.state is None:
             raise ValueError("belief: producer.state is required")

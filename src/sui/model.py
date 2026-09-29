@@ -5,8 +5,20 @@ from dataclasses import dataclass as _dataclass, field as _field
 from types import MappingProxyType as _MappingProxyType
 import hashlib as _hashlib
 import json as _json
+import math as _math
 
 import numpy as _np
+
+
+Duration = tuple[tuple[float, float], ...]
+
+
+def _duration_ns(seconds: float) -> int:
+    """所要秒を偶数丸めでnsへ。非有限・負・あふれは拒む (M13)。"""
+    if (not isinstance(seconds, float) or not _math.isfinite(seconds)
+            or seconds < 0 or not _math.isfinite(seconds * 1e9)):
+        raise ValueError("durations: expected finite nonnegative seconds convertible to ns")
+    return round(seconds * 1e9)
 
 
 def _array(value: _np.ndarray, name: str, ndim: int) -> _np.ndarray:
@@ -103,6 +115,7 @@ class GenerativeModel:
 
     Q が無ければ回数から厳密に学ぶ (S1c)。Q は列から行への率で、
     Q と学習の同時は S4b。時間モデルのDは最初の起動時、arrivalsは状態と独立 (M10〜M12)。
+    所要は全行動の有限な点の分布、測る時刻はstartかreport (M13・M14)。
     """
 
     states: tuple[str, ...]
@@ -115,6 +128,8 @@ class GenerativeModel:
     gamma: float
     Q: _np.ndarray | None = None
     arrivals: _Mapping[str, ArrivalPrior] = _field(default_factory=dict)
+    durations: _Mapping[str, Duration] = _field(default_factory=dict)
+    measures: _Mapping[str, str] = _field(default_factory=dict)
 
     def __post_init__(self) -> None:
         for name in ("states", "outcomes", "actions"):
@@ -164,6 +179,37 @@ class GenerativeModel:
             if not isinstance(prior_value, ArrivalPrior):
                 raise TypeError("arrivals: expected ArrivalPrior")
         object.__setattr__(self, "arrivals", _MappingProxyType(dict(self.arrivals)))
+        if not isinstance(self.durations, _Mapping) or not isinstance(self.measures, _Mapping):
+            raise ValueError("durations/measures: expected mappings")
+        if self.durations:
+            if set(self.durations) != set(self.actions) or set(self.measures) != set(self.actions):
+                raise ValueError("durations/measures: expected exactly the actions as keys")
+        elif self.measures:
+            raise ValueError("measures: durations are required")
+        durations = {}
+        for action, points in self.durations.items():
+            if not isinstance(points, tuple) or not points:
+                raise ValueError("durations: expected a nonempty tuple of points")
+            seen, probabilities = set(), []
+            for point in points:
+                if not isinstance(point, tuple) or len(point) != 2:
+                    raise ValueError("durations: expected (seconds, probability) points")
+                seconds, probability = point
+                ns = _duration_ns(seconds)
+                if ns in seen:
+                    raise ValueError("durations: duplicate nanoseconds")
+                seen.add(ns)
+                if (not isinstance(probability, float) or not _math.isfinite(probability)
+                        or probability <= 0 or probability > 1 + 1e-12):
+                    raise ValueError("durations: expected finite positive probabilities")
+                probabilities.append(probability)
+            if abs(_math.fsum(probabilities) - 1) > 1e-12:
+                raise ValueError("durations: probabilities must sum to one")
+            if self.measures[action] not in ("start", "report"):
+                raise ValueError("measures: expected start or report")
+            durations[action] = tuple(sorted(points))
+        object.__setattr__(self, "durations", _MappingProxyType(durations))
+        object.__setattr__(self, "measures", _MappingProxyType(dict(self.measures)))
         object.__setattr__(self, "a", _MappingProxyType(counts))
         object.__setattr__(self, "D", _readonly(prior))
         object.__setattr__(self, "log_C", _readonly(preferences))
@@ -178,10 +224,13 @@ def model_json(model: GenerativeModel) -> bytes:
         "learnable": sorted(model.learnable), "D": model.D.tolist(),
         "log_C": model.log_C.tolist(), "gamma": float(model.gamma),
     }
-    if model.Q is not None or model.arrivals:
+    if model.Q is not None or model.arrivals or model.durations:
         material.update(scheme="sui.model.2", Q=None if model.Q is None else model.Q.tolist(),
                         arrivals={route: {"alpha": prior.alpha, "beta_s": prior.beta_s}
                                   for route, prior in model.arrivals.items()})
+    if model.durations:
+        material.update(scheme="sui.model.3", durations=dict(model.durations),
+                        measures=dict(model.measures))
     return _json.dumps(material, ensure_ascii=False, sort_keys=True,
                           separators=(",", ":"), allow_nan=False).encode("utf-8")
 
@@ -194,11 +243,13 @@ def model_from_json(data: bytes) -> GenerativeModel:
         value = _json.loads(data)
         keys = {"scheme", "states", "outcomes", "actions", "a", "learnable",
                 "D", "log_C", "gamma"}
-        if isinstance(value, dict) and value.get("scheme") == "sui.model.2":
+        if isinstance(value, dict) and value.get("scheme") in ("sui.model.2", "sui.model.3"):
             keys |= {"Q", "arrivals"}
+        if isinstance(value, dict) and value.get("scheme") == "sui.model.3":
+            keys |= {"durations", "measures"}
         if not isinstance(value, dict) or set(value) != keys:
             raise ValueError("model: unexpected keys")
-        if value["scheme"] not in ("sui.model.1", "sui.model.2"):
+        if value["scheme"] not in ("sui.model.1", "sui.model.2", "sui.model.3"):
             raise ValueError("model: unsupported scheme")
         model = GenerativeModel(
             states=tuple(value["states"]), outcomes=tuple(value["outcomes"]),
@@ -209,6 +260,9 @@ def model_from_json(data: bytes) -> GenerativeModel:
             log_C=_np.array(value["log_C"], dtype=_np.float64), gamma=float(value["gamma"]),
             Q=None if value.get("Q") is None else _np.array(value["Q"], dtype=_np.float64),
             arrivals={route: ArrivalPrior(**prior) for route, prior in value.get("arrivals", {}).items()},
+            durations={action: tuple(tuple(point) for point in points)
+                       for action, points in value.get("durations", {}).items()},
+            measures=value.get("measures", {}),
         )
         if model_json(model) != data:
             raise ValueError("model: expected canonical encoding")
