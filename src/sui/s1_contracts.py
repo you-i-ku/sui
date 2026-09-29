@@ -3,7 +3,7 @@
 from .contracts import Contract as _Contract, ContractRef as _ContractRef
 
 BELIEF = _ContractRef("sui.s1.belief", "3")
-DECISION = _ContractRef("sui.s1.decision", "2")
+DECISION = _ContractRef("sui.s1.decision", "3")
 ACTION = _ContractRef("sui.s1.action", "1")
 OUTCOME = _ContractRef("sui.s1.outcome", "2")
 ATTEMPT = _ContractRef("sui.s1.attempt", "1")
@@ -23,13 +23,13 @@ _BELIEF_DECLARATION = _Contract(
 
 _DECISION_DECLARATION = _Contract(
     ref=DECISION,
-    meaning='決定の記録 (`Decided`)。content = {candidates, risk, ambiguity, novelty, G, q_o, q_pi, gamma, u, chosen}。candidates は重複を除いて名前の昇順に並べた行動の名前で、ほかの配列はこの順。G = risk + ambiguity − novelty (1 回の観測の期待自由エネルギー)。q_o = 候補ごとの予測の観測分布。q_pi = softmax(−γG)。u は外から渡した [0, 1) の数で、chosen は q_pi の累積が初めて u を超える候補。inputs はその時の最新の信念の記録',
+    meaning='決定の記録 (`Decided`)。content = {candidates, risk, ambiguity, novelty, G, q_o, q_pi, gamma, u, chosen, pending}。pending = [{job, action}] は進行中の仕事の参照の文字列の昇順。risk・ambiguity・novelty・q_o・G は進行中の仕事の観測の起こりうる値についての期待値 (成分ごと)。進行中が無ければ "2" と同じ値。進行中の観測はモデルどおり必ず届くと仮定する。candidates は重複を除いて名前の昇順に並べた行動の名前で、ほかの配列はこの順。G = risk + ambiguity − novelty (1 回の観測の期待自由エネルギー)。q_o = 候補ごとの予測の観測分布。q_pi = softmax(−γG)。u は外から渡した [0, 1) の数で、chosen は q_pi の累積が初めて u を超える候補。inputs は View の信念の記録、親は View の先端 (確定の時に増えた事実を含めない)',
     unit='risk・ambiguity・novelty・G は nat、q_o・q_pi は確率、gamma は方策の確信度 (無次元)',
     state_owner='sui.agent',
     persistence='台帳 (S2a メモリ、S2b 永続)',
-    failure='候補が空・知らない行動・型の誤り・信念の記録がない・説明できない状態 (ModelFalsified) の時は記録を作らず、状態を変えない',
+    failure='候補が空・知らない行動・型の誤り・信念の記録がない・説明できない状態 (ModelFalsified) の時は記録を作らず、状態を変えない。commit の親の検査は書く前に済ませ、途中の書き込みの失敗は同じ Commit で続ける',
     cancel='決定の取り消しはない。実行は仕事と試みの記録で別に',
-    redelivery='主体が作る記録で、再配送の対象ではない',
+    redelivery='同じ Commit の書き直しは点を増やさない',
 )
 
 
@@ -41,7 +41,7 @@ _ACTION_DECLARATION = _Contract(
     persistence='台帳 (S2a メモリ、S2b 永続)',
     failure='決定と一緒に作り、記録を作れない時は台帳に足さない。採用: 形が違う・行動がモデルに無い仕事は読めない仕事になる',
     cancel='仕事の取り消しはない (S5)',
-    redelivery='主体が作る記録で、再配送の対象ではない',
+    redelivery='同じ Commit の書き直しは点を増やさない',
 )
 
 

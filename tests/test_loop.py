@@ -229,6 +229,24 @@ def test_l4_impossible_outcome_is_preserved_as_unread():
     assert step.belief.body.content.as_json()["n"]["look1"] == [0, 0, 0]
 
 
+def test_l4b_failed_synchronous_step_is_pending_only_after_adoption():
+    agent, kwargs = _setup(learnable=frozenset({"look1", "look2"}))
+    with pytest.raises(RuntimeError):
+        run_step(agent, _FailingExecutor(), ["look1"], u=.4, **kwargs)
+    failed_job = next(kwargs["ledger"].record(e.cid) for e in kwargs["ledger"].entries()
+                      if e.body_type is JobOpened)
+    decision_args = {name: kwargs[name] for name in ("clock", "ids", "ledger")}
+    before, extra_job = agent.decide(["look2"], u=.4, **decision_args)
+    assert before.body.content.as_json()["pending"] == []
+    agent.adopt(kwargs["ledger"], clock=kwargs["clock"], ids=kwargs["ids"])
+    after, _ = agent.decide(["look2"], u=.4, **decision_args)
+    assert after.body.contract == ContractRef("sui.s1.decision", "3")
+    assert after.body.content.as_json()["pending"] == sorted([
+        {"job": str(failed_job.id), "action": "look1"},
+        {"job": str(extra_job.id), "action": "look2"},
+    ], key=lambda item: item["job"])
+
+
 def test_l5_learning_reduces_novelty_and_switches_executed_action():
     a = {action: 10 * A for action, A in _true_A().items()}
     a["look2"] = np.array([[1., 1.], [1., 1.], [0., 0.]])

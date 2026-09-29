@@ -15,8 +15,9 @@ from .inference import (
     policy_posterior as _policy_posterior, select as _select,
 )
 from .s1_contracts import ACTION, BELIEF, DECISION, ATTEMPT as _ATTEMPT, OUTCOME as _OUTCOME
+from .s3_contracts import ABANDON as _ABANDON
 from .model import GenerativeModel as _GenerativeModel, model_ref as _model_ref, _readonly
-from .ledger import Ledger as _Ledger, DerivedParent as _DerivedParent
+from .ledger import Ledger as _Ledger, DerivedParent as _DerivedParent, UnknownEntry as _UnknownEntry
 from .records import (
     AttemptStarted as _AttemptStarted, Decided as _Decided,
     JobOpened as _JobOpened, Observed as _Observed, Payload as _Payload,
@@ -25,7 +26,7 @@ from .records import (
 )
 
 
-CODE_VERSION = "s2a"
+CODE_VERSION = "s3"
 
 
 class ModelMismatch(ValueError):
@@ -46,6 +47,7 @@ class ModelFalsified(ValueError):
 class Reading:
     n: _Mapping[str, _np.ndarray]
     unread: _Mapping[_Ref, str]
+    pending: _Mapping[_Ref, str]
 
     def __post_init__(self) -> None:
         counts = {}
@@ -55,6 +57,7 @@ class Reading:
             counts[action] = copy
         object.__setattr__(self, "n", _MappingProxyType(counts))
         object.__setattr__(self, "unread", _MappingProxyType(dict(self.unread)))
+        object.__setattr__(self, "pending", _MappingProxyType(dict(self.pending)))
 
 
 def _json_content(content: _Payload):
@@ -71,15 +74,31 @@ def _named_content(content, key):
     return None
 
 
-def read(model: _GenerativeModel, records: _Iterable[_Record]) -> Reading:
-    """仕事・試み・観測を別々に読み、渡された記録の並びには依存しない。"""
-    records = tuple(records)
+def _read_jobs(model: _GenerativeModel, records: _Iterable[_Record]) -> dict[_Ref, str]:
     jobs = {}
     for record in records:
         if isinstance(record.body, _JobOpened) and record.body.contract == ACTION:
             action = _named_content(record.body.content, "action")
             if action in model.actions:
                 jobs[record.id] = action
+    return jobs
+
+
+def read(model: _GenerativeModel, records: _Iterable[_Record]) -> Reading:
+    """事実の集合から読む。順番待ちも pending、観測は約束を問わず終端。
+
+    ABANDON は対応する仕事だけを pending から外す。n・unread の読みは
+    S2a のまま、pending を含めて読み取り専用の写しを返す (P1・P2・P9)。
+    """
+    records = tuple(records)
+    jobs = _read_jobs(model, records)
+    arrived = {r.body.caused_by for r in records if isinstance(r.body, _Observed)}
+    finished = {r.body.job for r in records
+                if isinstance(r.body, _AttemptStarted) and r.id in arrived}
+    abandoned = {r.body.inputs[0] for r in records
+                 if isinstance(r.body, _Decided) and r.body.contract == _ABANDON
+                 and len(r.body.inputs) == 1
+                 and _named_content(r.body.content, "job") == str(r.body.inputs[0])}
     attempts = {}
     for record in records:
         if isinstance(record.body, _AttemptStarted):
@@ -120,7 +139,108 @@ def read(model: _GenerativeModel, records: _Iterable[_Record]) -> Reading:
         else:
             _, action, outcome = observations[0]
             n[action][model.outcomes.index(outcome)] += 1
-    return Reading(n=n, unread=unread)
+    return Reading(n=n, unread=unread,
+                   pending={j: action for j, action in jobs.items()
+                            if j not in finished and j not in abandoned})
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class View:
+    model: _GenerativeModel
+    frontier: frozenset[str]
+    belief: _Ref
+    reading: Reading
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class Draft:
+    parents: frozenset[str]
+    belief: _Ref
+    content: _Payload
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class Commit:
+    parents: frozenset[str]
+    decided: _Record
+    job: _Record
+
+
+def _derive(model, n):
+    try:
+        q = _belief(model.D, [
+            _log_likelihood(model.a[action], n[action], learnable=action in model.learnable)
+            for action in model.actions
+        ])
+    except _ModelViolation:
+        q = None
+    a = {action: (_ledger(model.a[action], n[action])
+                  if action in model.learnable else model.a[action])
+         for action in model.actions}
+    return q, a
+
+
+def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
+    """予測の枝で成分ごとに平均し、その G から一度だけ選ぶ純粋な計算。
+
+    仮の回数を事実にせず、到着はモデルどおり必ず起こると仮定する。
+    進行中なしは S1c と同じ計算順。失敗は例外、状態は持たない。
+    P3・P3b・P4・P5・P6・P7・P8・P9、W1・W5。
+    """
+    model = view.model
+    unique = set()
+    for action in candidates:
+        if not isinstance(action, str):
+            raise TypeError("candidate: expected str")
+        if action not in model.actions:
+            raise ValueError("candidate: unknown or empty action")
+        unique.add(action)
+    if not unique:
+        raise ValueError("candidates: expected at least one action")
+    actions = sorted(unique)
+    pending = sorted(view.reading.pending.items(), key=lambda item: str(item[0]))
+
+    def expectation(n, index, action):
+        q, a = _derive(model, n)
+        if q is None:
+            raise ModelFalsified("the model cannot explain the facts")
+        if index == len(pending):
+            risk, ambiguity, q_o = _efe(q, _expected_A(a[action]), model.log_C)
+            novelty = _novelty(q, a[action]) if action in model.learnable else 0.0
+            return risk, ambiguity, novelty, q_o
+        waiting_action = pending[index][1]
+        _, _, predicted = _efe(q, _expected_A(a[waiting_action]), model.log_C)
+        risk, ambiguity, novelty = 0.0, 0.0, 0.0
+        q_o = _np.zeros(len(model.outcomes))
+        for outcome, probability in enumerate(predicted):
+            if probability > 0:
+                branch = dict(n)
+                branch[waiting_action] = n[waiting_action].copy()
+                branch[waiting_action][outcome] += 1
+                r, a_value, nov, obs = expectation(branch, index + 1, action)
+                risk += probability * r
+                ambiguity += probability * a_value
+                novelty += probability * nov
+                q_o += probability * obs
+        return risk, ambiguity, novelty, q_o
+
+    risks, ambiguities, novelties, outcomes = [], [], [], []
+    for action in actions:
+        risk, ambiguity, novelty, q_o = expectation(view.reading.n, 0, action)
+        risks.append(risk)
+        ambiguities.append(ambiguity)
+        novelties.append(novelty)
+        outcomes.append(q_o.tolist())
+    G = _np.array(risks) + _np.array(ambiguities) - _np.array(novelties)
+    q_pi = _policy_posterior(G, model.gamma)
+    chosen = actions[_select(q_pi, u)]
+    return Draft(parents=view.frontier, belief=view.belief, content=_Payload.json({
+        "candidates": actions, "risk": risks, "ambiguity": ambiguities,
+        "novelty": novelties, "G": G.tolist(), "q_o": outcomes,
+        "q_pi": q_pi.tolist(), "gamma": float(model.gamma), "u": float(u),
+        "chosen": chosen,
+        "pending": [{"job": str(j), "action": action} for j, action in pending],
+    }))
 
 
 _REASONS = frozenset({"no_attempt", "unknown_attempt", "unreadable_attempt", "contract",
@@ -235,18 +355,7 @@ class Agent:
                          state=_StateRef(lineage=self._lineage, revision=revision))
 
     def _derive(self, n: _Mapping[str, _np.ndarray]) -> tuple[_np.ndarray | None, dict[str, _np.ndarray]]:
-        try:
-            q = _belief(self._model.D, [
-                _log_likelihood(self._model.a[action], n[action],
-                                learnable=action in self._model.learnable)
-                for action in self._model.actions
-            ])
-        except _ModelViolation:
-            q = None
-        a = {action: (_ledger(self._model.a[action], n[action])
-                      if action in self._model.learnable else self._model.a[action])
-             for action in self._model.actions}
-        return q, a
+        return _derive(self._model, n)
 
     def _content(self, reading, q, a) -> dict:
         return {
@@ -274,55 +383,61 @@ class Agent:
         self._belief = record
         return record
 
-    def decide(self, candidates: _Iterable[str], *, u: float, clock: _Clock,
-               ids: _IdSource, ledger: _Ledger) -> tuple[_Record, _Record]:
-        """現在のモデルで候補を評価し、決定と仕事を記録する。"""
+    def view(self) -> View:
+        """今の先端の変わらない入力。信念が無い・説明不能なら例外 (P9・W10)。"""
         if self._q is None:
             raise ModelFalsified("the model cannot explain the facts")
         if self._belief is None:
-            raise ValueError("decide: a belief record is required")
-        unique = set()
-        for action in candidates:
-            if not isinstance(action, str):
-                raise TypeError("candidate: expected str")
-            if action not in self._a:
-                raise ValueError("candidate: unknown or empty action")
-            unique.add(action)
-        if not unique:
-            raise ValueError("candidates: expected at least one action")
-        actions = sorted(unique)
-        risks, ambiguities, novelties, outcomes = [], [], [], []
-        for action in actions:
-            risk, ambiguity, q_o = _efe(self._q, _expected_A(self._a[action]),
-                                        self._model.log_C)
-            risks.append(risk)
-            ambiguities.append(ambiguity)
-            novelties.append(_novelty(self._q, self._a[action])
-                             if action in self._model.learnable else 0.0)
-            outcomes.append(q_o.tolist())
-        G = _np.array(risks) + _np.array(ambiguities) - _np.array(novelties)
-        q_pi = _policy_posterior(G, self._model.gamma)
-        chosen = actions[_select(q_pi, u)]
+            raise ValueError("view: a belief record is required")
+        return View(model=self._model, frontier=self.frontier,
+                    belief=self._belief.id, reading=self._reading)
+
+    def prepare(self, draft: Draft, *, clock: _Clock, ids: _IdSource) -> Commit:
+        """両記録を作るだけ。見た親を保ち、台帳・主体を変えない (P10・K4・W12)。"""
         decided = _Record(
             id=ids.new(_RefKind.DECISION), at=clock.now(), writer=_Role.MODEL,
             producer=self.producer,
-            body=_Decided(inputs=(self._belief.id,), contract=DECISION,
-                          content=_Payload.json({
-                              "candidates": actions, "risk": risks, "ambiguity": ambiguities,
-                              "novelty": novelties,
-                              "G": G.tolist(), "q_o": outcomes, "q_pi": q_pi.tolist(),
-                              "gamma": float(self._model.gamma), "u": float(u), "chosen": chosen,
-                          })),
+            body=_Decided(inputs=(draft.belief,), contract=DECISION, content=draft.content),
         )
         job = _Record(
             id=ids.new(_RefKind.JOB), at=clock.now(), writer=_Role.MODEL,
             producer=self.producer,
             body=_JobOpened(decision=decided.id, step=0, contract=ACTION,
-                            content=_Payload.json({"action": chosen})),
+                            content=_Payload.json({"action": draft.content.as_json()["chosen"]})),
         )
-        entry = ledger.append(decided, self.frontier)
-        ledger.append(job, {entry.cid})
-        return decided, job
+        return Commit(parents=draft.parents, decided=decided, job=job)
+
+    def commit(self, prepared: Commit, *, ledger: _Ledger) -> None:
+        """親と信念の親を先に検査し、決定→仕事を書く。主体は変えない。
+
+        検査失敗は無書き込み。同じ Commit の再試行で途中から続く (P10・K4・W12)。
+        """
+        for cid in prepared.parents:
+            try:
+                parent = ledger.entry(cid)
+            except _UnknownEntry as exc:
+                raise ValueError("commit: missing parent") from exc
+            if not parent.is_event:
+                raise ValueError("commit: parents must be events")
+        inputs = prepared.decided.body.inputs
+        if len(inputs) != 1:
+            raise ValueError("commit: one belief is required")
+        beliefs = ledger.entries_of(inputs[0])
+        if not beliefs or not any(
+                isinstance(ledger.record(entry.cid).body, _Prediction)
+                and ledger.record(entry.cid).body.target == "belief"
+                and ledger.record(entry.cid).body.contract == BELIEF
+                and entry.parents == prepared.parents for entry in beliefs):
+            raise ValueError("commit: belief parents differ")
+        entry = ledger.append(prepared.decided, prepared.parents)
+        ledger.append(prepared.job, {entry.cid})
+
+    def decide(self, candidates: _Iterable[str], *, u: float, clock: _Clock,
+               ids: _IdSource, ledger: _Ledger) -> tuple[_Record, _Record]:
+        """同期の入口も view→plan→prepare→commit を使う (R1・L4b)。"""
+        prepared = self.prepare(plan(self.view(), candidates, u=u), clock=clock, ids=ids)
+        self.commit(prepared, ledger=ledger)
+        return prepared.decided, prepared.job
 
     def adopt(self, ledger: _Ledger, *, clock: _Clock, ids: _IdSource,
               through: _Iterable[str] | None = None) -> _Record | None:

@@ -173,3 +173,262 @@ def _exact_posterior(D, a, learnable, observations):
     assert _math.isfinite(maximum), "fixture must contain a possible hypothesis"
     weights = [_math.exp(value - maximum) for value in log_joint]
     return _np.array([weight / _math.fsum(weights) for weight in weights]), tally
+
+
+def _naive_conditional_G(model, pending, candidates=None, *, observations=()):
+    """P6: 同時予測のエントロピー差による独立の式 (§6-6)。
+
+    sui.inference・plan を使わず、状態ごとの Pólya の壺と E[H(O|θ)] で計算。
+    """
+    from itertools import product
+    candidates = model.actions if candidates is None else candidates
+    q, n = _exact_posterior(model.D, model.a, model.learnable, observations)
+    columns = {action: _np.where(prior > 0, prior + n[action][:, None], 0)
+               if action in model.learnable else prior
+               for action, prior in model.a.items()}
+
+    def joint(actions):
+        distribution = []
+        for outcomes in product(range(len(model.outcomes)), repeat=len(actions)):
+            probability = 0.0
+            for state, weight in enumerate(q):
+                urns = {action: list(a[:, state]) for action, a in columns.items()}
+                p = float(weight)
+                for action, outcome in zip(actions, outcomes):
+                    urn = urns[action]
+                    p *= float(urn[outcome]) / _math.fsum(urn)
+                    if action in model.learnable:
+                        urn[outcome] += 1
+                probability += p
+            distribution.append(probability)
+        return distribution
+
+    def entropy(distribution):
+        return -_math.fsum(p * _math.log(p) for p in distribution if p > 0)
+
+    before = entropy(joint(tuple(pending)))
+    result = []
+    for action in candidates:
+        expected_entropy = 0.0
+        for state, weight in enumerate(q):
+            alpha = [float(a) for a in columns[action][:, state] if a > 0]
+            total = _math.fsum(alpha)
+            if action in model.learnable:
+                h = float(_digamma(total + 1)) - _math.fsum(
+                    a / total * float(_digamma(a + 1)) for a in alpha)
+            else:
+                h = entropy([a / total for a in alpha])
+            expected_entropy += float(weight) * h
+        information = entropy(joint(tuple(pending) + (action,))) - before - expected_entropy
+        preference = -_math.fsum(p * float(c) for p, c in zip(joint((action,)), model.log_C))
+        result.append(preference - information)
+    return result
+
+
+class ScriptDrive:
+    """規則は試験が渡す。呼び出し・成功した返事を分けて記録する。"""
+
+    def __init__(self, *rules):
+        self.rules = rules
+        self.calls = []
+        self.successes = []
+
+    def react(self, status, event):
+        self.calls.append((status, event))
+        replies = []
+        for rule in self.rules:
+            for request in rule(status, event):
+                replies.append(request)
+                yield request
+        self.successes.append((status, event, tuple(replies)))
+
+
+class GatedHand:
+    """資源・結果の台本。任意の行動を Event で待たせる (必ず時間切れ付き)。"""
+
+    def __init__(self, resources, script, *, gates=None):
+        from threading import Event, Lock
+        self._resources = {action: frozenset(names) for action, names in resources.items()}
+        self._script = {action: list(values) for action, values in script.items()}
+        self.gates = {} if gates is None else dict(gates)
+        self.calls = []
+        self.threads = {}
+        self.entered = {action: Event() for action in resources}
+        self._lock = Lock()
+
+    def resources(self, action):
+        return self._resources[action]
+
+    def execute(self, action):
+        from threading import current_thread
+        with self._lock:
+            self.calls.append(action)
+            self.threads[action] = current_thread()
+            result = self._script[action].pop(0)
+            self.entered[action].set()
+        gate = self.gates.get(action)
+        if gate is not None and not gate.wait(timeout=5):
+            raise TimeoutError("test hand gate timed out")
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+class WriteCounts:
+    """二つの置き場に共通の書き込みの計数器。"""
+
+    def __init__(self):
+        from threading import Lock
+        self._lock = Lock()
+        self.threads = []
+        self.active = 0
+        self.maximum = 0
+
+    @_contextmanager
+    def writing(self):
+        from threading import get_ident
+        with self._lock:
+            self.threads.append(get_ident())
+            self.active += 1
+            self.maximum = max(self.maximum, self.active)
+        try:
+            yield
+        finally:
+            with self._lock:
+                self.active -= 1
+
+
+class _CountingStore:
+    def __init__(self, delegate, counts=None):
+        self.delegate = delegate
+        self.counts = WriteCounts() if counts is None else counts
+
+    def __getattr__(self, name):
+        return getattr(self.delegate, name)
+
+
+class CountingEntries(_CountingStore):
+    def add(self, *args):
+        with self.counts.writing():
+            return self.delegate.add(*args)
+
+
+class CountingContents(_CountingStore):
+    def put(self, *args):
+        with self.counts.writing():
+            return self.delegate.put(*args)
+
+
+class _FlakyStore:
+    def __init__(self, delegate, fail_on=()):
+        self.delegate = delegate
+        self.fail_on = set(fail_on)
+        self.calls = 0
+
+    def __getattr__(self, name):
+        return getattr(self.delegate, name)
+
+    def fail_next(self, offset=1):
+        self.fail_on.add(self.calls + offset)
+
+    def _write(self, method, *args):
+        from sui.store import StorageFull
+        self.calls += 1
+        if self.calls in self.fail_on:
+            raise StorageFull("injected write failure")
+        return getattr(self.delegate, method)(*args)
+
+
+class FlakyEntries(_FlakyStore):
+    def add(self, *args):
+        return self._write("add", *args)
+
+
+class FlakyContents(_FlakyStore):
+    def put(self, *args):
+        return self._write("put", *args)
+
+
+class ManualHost:
+    """§3-6 の手順を一回ずつ運ぶ試験用ホスト。finish だけが係を動かす。"""
+
+    def __init__(self, make_window):
+        from collections import deque
+        from sui.runtime import Pledges
+        self.make_window = make_window
+        self.pledges = Pledges()
+        self.window = None
+        self.queue = deque()
+        self.current = None
+        self.unstarted = []
+        self.work = []
+        self.started = []
+        self.number = 0
+        self.mono_ns = 0
+        self.start = self._start_work
+
+    def post(self, event):
+        from sui.runtime import Envelope
+        self.number += 1
+        self.queue.append(Envelope(number=self.number, event=event))
+
+    def advance(self, ns):
+        from sui.runtime import Tick
+        self.mono_ns += ns
+        self.post(Tick(mono_ns=self.mono_ns))
+
+    def _collect(self):
+        if self.window is not None:
+            self.unstarted.extend((work, self.window.hand) for work in self.window.drain())
+
+    def _start_work(self, work, hand):
+        self.work.append((work, hand))
+        self.started.append(work)
+
+    def _start(self):
+        while self.unstarted:
+            self.start(*self.unstarted[0])
+            self.unstarted.pop(0)
+
+    def _failed(self, original):
+        self._collect()
+        self.window = None
+        try:
+            self._start()
+        except Exception as start_error:
+            start_error.__context__ = None
+            original.__context__ = start_error
+
+    def step(self):
+        if self.window is None:
+            try:
+                self.window = self.make_window(self.pledges)
+                self.window.settle()
+            except Exception as exc:
+                self._failed(exc)
+                raise
+        self._collect()
+        self._start()
+        if self.current is None:
+            if not self.queue:
+                return
+            self.current = self.queue.popleft()
+        try:
+            self.window.accept(self.current)
+            self.current = None
+            self.window.settle()
+        except Exception as exc:
+            self._failed(exc)
+            raise
+        self._collect()
+        self._start()
+
+    def finish(self, work):
+        from sui.runtime import _perform
+        for index, (candidate, hand) in enumerate(self.work):
+            if candidate is work:
+                self.work.pop(index)
+                event = _perform(work, hand)
+                self.post(event)
+                return event
+        raise ValueError("work has not been started or has already finished")

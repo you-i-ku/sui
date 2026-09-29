@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from sui.agent import (ACTION, BELIEF, CODE_VERSION, DECISION, Agent, read,
+from sui.agent import (ACTION, BELIEF, CODE_VERSION, DECISION, Agent, plan, read,
                        ModelMismatch, RebuildMismatch, ModelFalsified)
 from sui.ledger import Ledger, SequentialSalts, DerivedParent
 from sui.clock import FakeClock
@@ -118,9 +118,9 @@ def test_a1_initial_state_and_belief_record():
         _decide(rig)
     _close(rig.agent.q, [.9, .1])
     assert rig.agent.revision == 0
-    assert rig.agent.producer == Producer(component="sui.agent", code_version="s2a",
+    assert rig.agent.producer == Producer(component="sui.agent", code_version="s3",
                                           state=StateRef(lineage="line1", revision=0))
-    assert CODE_VERSION == "s2a"
+    assert CODE_VERSION == "s3"
     belief = rig.agent.belief_record(clock=rig.clock, ids=rig.ids, ledger=rig.ledger)
     assert isinstance(belief.body, Prediction)
     assert belief.writer is Role.MODEL
@@ -177,13 +177,13 @@ def test_a2_decision_job_contents_and_unchanged_state():
     before = _state(rig)
     decision, job = _decide(rig, ["wait", "look2", "look1"])
     assert isinstance(decision.body, Decided)
-    assert decision.body.contract == DECISION == ContractRef("sui.s1.decision", "2")
+    assert decision.body.contract == DECISION == ContractRef("sui.s1.decision", "3")
     assert decision.body.inputs == (rig.belief.id,)
     assert decision.writer is job.writer is Role.MODEL
     assert decision.producer == job.producer == rig.agent.producer
     data = decision.body.content.as_json()
     assert set(data) == {"candidates", "risk", "ambiguity", "novelty", "G", "q_o",
-                         "q_pi", "gamma", "u", "chosen"}
+                         "q_pi", "gamma", "u", "chosen", "pending"}
     assert data["candidates"] == ["look1", "look2", "wait"]
     _close(data["risk"], [.693648803604, .408668530210, 1.098612288668])
     _close(data["ambiguity"], [.361889394108, .656340759843, 0.])
@@ -240,7 +240,8 @@ def test_a3_decision_uses_current_learned_counts():
     a = {action: 10 * A for action, A in _true_A().items()}
     a["look2"] = np.array([[1., 1.], [1., 1.], [0., 0.]])
     rig = _setup(_model(D=np.array([.2, .8]), a=a, learnable=frozenset({"look2"})))
-    old = _decide(rig)[0].body.content.as_json()
+    # 比較用の評価で仕事を開くと、S3 では未完の仕事として次の評価の条件に入る。
+    old = plan(rig.agent.view(), rig.model.actions, u=.5).content.as_json()
     _observe(rig, _observed(rig, _start(rig, "look2")))
     expected_a = np.array([[1., 1.], [2., 2.], [0., 0.]])
     _close(rig.agent.q, [.2, .8])
@@ -579,8 +580,8 @@ def test_a11_only_learnable_novelty_reaches_decision_in_candidate_order():
     _close(data["G"], np.array(data["risk"]) + data["ambiguity"] - data["novelty"])
     _close(data["q_pi"], [.961948764, .034083408, .003967828], atol=1e-9)
     assert data["chosen"] == job.body.content.as_json()["action"] == "look1"
-    assert decision.body.contract == ContractRef("sui.s1.decision", "2")
-    assert decision.producer.code_version == job.producer.code_version == "s2a"
+    assert decision.body.contract == ContractRef("sui.s1.decision", "3")
+    assert decision.producer.code_version == job.producer.code_version == "s3"
     reordered = _decide(rig, ["wait", "look2", "look1"])[0].body.content.as_json()
     assert reordered == data
     _assert_unchanged(rig, before, rig.belief)
