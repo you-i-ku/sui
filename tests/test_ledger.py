@@ -41,7 +41,7 @@ def test_s2b_ledger_store_substitution(tmp_path, backend):
 
 F1 = "sha256:f781b457f1344b913984a8884673e21fcb23329ebf3888ea557084b49421a7de"
 ZERO, FF = "sha256:" + "0" * 64, "sha256:" + "f" * 64
-F2 = b'{"at":{"mono_ns":0,"run":"run:r1","run_index":0,"seq":4,"wall_ns":1790000000000000000},"body":{"caused_by":"attempt:a1","contract":{"name":"sui.s1.outcome","version":"2"},"route":"executor","source_id":null,"source_time_ns":null,"type":"Observed"},"id":"observation:o1","parents":[],"producer":{"code_version":"s2a","component":"sui.membrane","state":null},"schema":2,"seal":"sha256:f781b457f1344b913984a8884673e21fcb23329ebf3888ea557084b49421a7de","writer":"membrane"}'
+F2 = b'{"at":{"mono_ns":0,"run":"run:r1","run_index":0,"seq":4,"wall_ns":1790000000000000000},"body":{"caused_by":"attempt:a1","contract":{"name":"sui.s1.outcome","version":"2"},"received_ns":null,"route":"executor","source_id":null,"source_time_ns":null,"type":"Observed"},"id":"observation:o1","parents":[],"producer":{"code_version":"s2a","component":"sui.membrane","state":null},"schema":3,"seal":"sha256:f781b457f1344b913984a8884673e21fcb23329ebf3888ea557084b49421a7de","writer":"membrane"}'
 
 
 def _f4():
@@ -96,10 +96,10 @@ def test_g2_canonical_header_and_cid_fixed_values():
     record = _record()
     assert encode_header(record, F1, frozenset()) == F2
     for parents, expected in [
-        ([], "890a4c57769d1ac96473a5e98e69b7233ce08b6758dcf7f0e30de8d7e507a623"),
-        ([ZERO], "12793c3acfbe357acfa6cdf3b48ae07959b62a8d969ce922562d4277552fb718"),
-        ([ZERO, FF], "c39b5cb7bc234dbe7d631591676bc082b432f142f9015668aad72225643b559b"),
-        ([FF, ZERO], "c39b5cb7bc234dbe7d631591676bc082b432f142f9015668aad72225643b559b"),
+        ([], "7f3bd8513bb63144c3981ad979a68e966cf7b753f2c5eceb42aa6ca1dd592381"),
+        ([ZERO], "41e894214e31a48a301909bef5706bff85f6f941bd74a2cdc67fad9c7413a528"),
+        ([ZERO, FF], "d96a415667766149665a21daba1211cb839aa888df14b2e0924bf29f140e627f"),
+        ([FF, ZERO], "d96a415667766149665a21daba1211cb839aa888df14b2e0924bf29f140e627f"),
     ]:
         assert hashlib.sha256(encode_header(record, F1, frozenset(parents))).hexdigest() == expected
     class FixedSalt:
@@ -107,7 +107,7 @@ def test_g2_canonical_header_and_cid_fixed_values():
             return bytes(range(16))
     ledger = Ledger(salts=FixedSalt())
     entry = ledger.accept(record)
-    assert entry.cid == "sha256:890a4c57769d1ac96473a5e98e69b7233ce08b6758dcf7f0e30de8d7e507a623"
+    assert entry.cid == "sha256:7f3bd8513bb63144c3981ad979a68e966cf7b753f2c5eceb42aa6ca1dd592381"
     assert entry.header == F2
     assert ledger.record(entry.cid) == record
 
@@ -131,7 +131,7 @@ def test_g3_all_bodies_round_trip(kind, full):
     record = _record(body=body, producer=producer)
     header = encode_header(record, F1, frozenset({ZERO, FF}))
     assert decode_record(header, body.content) == record
-    for schema in (1, 3):
+    for schema in (1, 4):
         data = json.loads(header)
         data["schema"] = schema
         with pytest.raises(SchemaMismatch):
@@ -229,13 +229,14 @@ def test_g8_storage_failure_does_not_add_entry():
     assert ledger.entries() == () and ledger.heads() == frozenset()
 
 
-def test_g9_redelivery_ignores_delivery_metadata_and_parents():
+def test_g9_redelivery_checks_metadata_but_ignores_new_parents():
     ledger = Ledger(salts=SequentialSalts())
     record = _record()
     first = ledger.accept(record)
     later = replace(record, at=replace(record.at, seq=9), producer=Producer(component="other", code_version="2"))
-    assert ledger.accept(later) is first
-    assert ledger.append(later, {ZERO}) is first
+    with pytest.raises(IdConflict):
+        ledger.accept(later)
+    assert ledger.append(record, {ZERO}) is first
     assert ledger.entries() == (first,)
 
 

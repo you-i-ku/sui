@@ -276,7 +276,9 @@ def test_a5_redelivery_and_conflict_are_checked_before_used_attempt():
     belief = _observe(rig, obs)
     before = _state(rig)
     assert _observe(rig, obs) is None
-    assert _observe(rig, replace(obs, at=rig.clock.now())) is None
+    with pytest.raises(IdConflict, match="at"):
+        _observe(rig, replace(obs, at=rig.clock.now()))
+    _assert_unchanged(rig, before, belief)
     for body in (replace(obs.body, content=Payload.json({"outcome": "o0"})),
                  replace(obs.body, caused_by=None)):
         with pytest.raises(IdConflict):
@@ -831,6 +833,23 @@ def test_a17b_unread_is_sorted_by_ref_not_causal_order():
     assert rig.agent.unread == ((Ref(K.OBSERVATION, "a"), "no_attempt"), (Ref(K.OBSERVATION, "z"), "no_attempt"))
 
 
+def test_a17b_unread_sorts_ambiguous_observations_added_after_other_reasons():
+    rig = _setup()
+    attempt = _start(rig)
+    first = replace(_observed(rig, attempt, "o0"), id=Ref(K.OBSERVATION, "a"))
+    second = replace(_observed(rig, attempt, "o1"), id=Ref(K.OBSERVATION, "b"))
+    external = replace(_observed(rig), id=Ref(K.OBSERVATION, "z"))
+    for observation in (first, second, external):
+        rig.ledger.accept(observation)
+    record = rig.agent.adopt(rig.ledger, clock=rig.clock, ids=rig.ids)
+    # ambiguous_attempt は no_attempt より後で分かっても、名札の順で記す。
+    assert record.body.content.as_json()["unread"] == [
+        {"id": "observation:a", "reason": "ambiguous_attempt"},
+        {"id": "observation:b", "reason": "ambiguous_attempt"},
+        {"id": "observation:z", "reason": "no_attempt"},
+    ]
+
+
 def test_a17c_late_attempt_turns_unknown_observation_into_evidence():
     rig = _setup(_model(learnable=frozenset({"look1"})))
     attempt = _start(rig)
@@ -895,6 +914,19 @@ def test_a17d_r2_falsified_models_keep_counts_and_allow_further_adoption(learnab
     }
     assert _full_state(_restore(rig)) == _full_state(rig.agent)
     assert _decide(rig, ["look"])[0].body.content.as_json()["chosen"] == "look"
+
+
+def test_g13_read_counts_an_identical_record_twice_as_one_observation():
+    rig = _setup()
+    attempt = _start(rig)
+    observation = _observed(rig, attempt, "o1")
+    facts = rig.ledger.snapshot(rig.ledger.heads()).records
+    # 重複は snapshot を通さず、read へ直接渡す。
+    reading = read(rig.model, (*facts, observation, observation))
+    assert {action: counts.tolist() for action, counts in reading.n.items()} == {
+        "look1": [0, 1, 0], "look2": [0, 0, 0], "wait": [0, 0, 0],
+    }
+    assert reading.unread == {}
 
 
 def test_r1_read_is_independent_of_twenty_permutations_and_reverse_order():

@@ -34,9 +34,9 @@ def test_m1_valid_model_owns_readonly_float64_arrays():
     assert not hasattr(model, "__dict__")
     assert GenerativeModel.__dataclass_params__.eq is False
     assert {field.name for field in fields(model)} == {
-        "states", "outcomes", "actions", "a", "learnable", "D", "log_C", "gamma",
-    }, ("状態を変える欄 (遷移など) を足すなら、S1c の『回数から計算する』形は成り立たない。"
-        "信念の更新と学習を一緒に決め直す (ROADMAP S4)")
+        "states", "outcomes", "actions", "a", "learnable", "D", "log_C", "gamma", "Q", "arrivals",
+    }, ("Qを持つモデルはS4aの濾過を使い、learnableとの同時は拒む。"
+        "変わる状態での学習はS4bで決め直す")
 
 
 @pytest.mark.parametrize("name,value", [

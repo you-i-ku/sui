@@ -19,6 +19,7 @@ from .records import (
     IntentionStatus as _IntentionStatus, Payload as _Payload, Producer as _Producer,
     Record as _Record, Role as _Role, SchemaMismatch as _SchemaMismatch,
     StateRef as _StateRef, Undecided as _Undecided, admit as _admit,
+    representative as _representative,
 )
 from .snapshot import Snapshot as _Snapshot
 from .store import EntryStore as _EntryStore, MemoryEntries as _MemoryEntries, ReadOnlyStore
@@ -155,6 +156,7 @@ def _encode(value):
 
 
 def encode_header(record: _Record, seal: str, parents: frozenset[str]) -> bytes:
+    """版3は受信時刻も符号化し、読んだ版2は元の正準バイトを保つ (V1)。"""
     state = record.producer.state
     return _canon({
         "schema": record.schema, "id": str(record.id),
@@ -167,7 +169,8 @@ def encode_header(record: _Record, seal: str, parents: frozenset[str]) -> bytes:
                      {"lineage": state.lineage, "revision": state.revision}},
         "body": {"type": type(record.body).__name__, **{
             field.name: _encode(getattr(record.body, field.name))
-            for field in _fields(record.body) if field.name != "content"}},
+            for field in _fields(record.body) if field.name != "content"
+            and not (record.schema == 2 and field.name == "received_ns")}},
         "seal": seal, "parents": sorted(parents),
     })
 
@@ -203,7 +206,7 @@ def _decode_v2(data: dict, content: _Payload) -> _Record:
                    schema=data["schema"])
 
 
-_DECODERS = {2: _decode_v2}
+_DECODERS = {2: _decode_v2, 3: _decode_v2}
 
 
 def decode_record(header: bytes, content: _Payload) -> _Record:
@@ -238,7 +241,7 @@ def entry_from_header(cid: str, header: bytes) -> Entry:
         data = _json.loads(header)
         if not isinstance(data, dict) or type(data.get("schema")) is not int:
             raise ValueError("schema: expected int")
-        if data["schema"] != 2:
+        if data["schema"] not in _DECODERS:
             raise _SchemaMismatch(f"schema: unsupported version {data['schema']}")
         if set(data) != {"schema", "id", "at", "writer", "producer", "body", "seal", "parents"}:
             raise ValueError("header: unexpected keys")
@@ -256,7 +259,9 @@ def entry_from_header(cid: str, header: bytes) -> Entry:
             producer["state"] = _StateRef(**producer["state"])
         _Producer(**producer)
         body_type = {kind.__name__: kind for kind in _BODY_KIND}[data["body"]["type"]]
-        if set(data["body"]) != {"type"} | {f.name for f in _fields(body_type) if f.name != "content"}:
+        body_fields = {f.name for f in _fields(body_type) if f.name != "content"
+                       and not (data["schema"] == 2 and f.name == "received_ns")}
+        if set(data["body"]) != {"type"} | body_fields:
             raise ValueError("body: unexpected fields")
         return Entry(cid=cid, header=header, id=_ref(data["id"]), body_type=body_type,
                      at=_Instant(**at), writer=_Role(data["writer"]),
@@ -414,15 +419,18 @@ class Ledger:
         return Relation.CONCURRENT
 
     def snapshot(self, frontier: _Iterable[str]) -> _Snapshot:
+        """代表が最初に現れる因果の順で出来事を返す (S8・T10b)。"""
         frontier = frozenset(frontier)
         for cid in frontier:
             if not self.entry(cid).is_event:
                 raise DerivedParent(cid)
-        records, seen = [], set()
-        for entry in self.between((), frontier):
-            if entry.is_event and entry.id not in seen:
-                records.append(self.record(entry.cid))
-                seen.add(entry.id)
+        candidates = tuple(self.record(entry.cid)
+                           for entry in self.between((), frontier) if entry.is_event)
+        selected = {record.id: record for record in _representative(candidates)}
+        records = []
+        for record in candidates:
+            if selected.get(record.id) == record:
+                records.append(selected.pop(record.id))
         return _Snapshot(records=tuple(records), frontier=frontier)
 
     def merge(self, other: "Ledger", *, events_only: bool = False) -> None:
@@ -483,12 +491,12 @@ class Ledger:
 
 
 RECORD_SCHEMA = _Contract(
-    ref=_ContractRef("sui.record", "2"),
-    meaning='台帳の点。cid = 骨組みの正準 JSON (UTF-8、キー昇順、空白なし) の SHA-256。親 = 書き手がその時に見ていた出来事の先端 (膜は台帳の先端、モデルは主体が取り込み済みの先端、派生物は取り込んだ先端)。本文は塩つきの封 sui.seal.1 で分け、点は封だけを持つ。出来事 (事実・意思) だけが親になれ、派生物 (予測・解釈) は葉。順番の基本は因果の順。同時の点の見え方は cid の昇順',
+    ref=_ContractRef("sui.record", "3"),
+    meaning='台帳の点。版3のObservedはreceived_nsを持ち、Noneは受信時刻不明。版2は元の骨組みとcidを保って読む。cid = 骨組みの正準 JSON (UTF-8、キー昇順、空白なし) の SHA-256。親 = 書き手がその時に見ていた出来事の先端 (膜は台帳の先端、モデルは主体が取り込み済みの先端、派生物は取り込んだ先端)。本文は塩つきの封 sui.seal.1 で分け、点は封だけを持つ。出来事 (事実・意思) だけが親になれ、派生物 (予測・解釈) は葉。順番の基本は因果の順。同時の点の見え方は cid の昇順',
     unit='cid・封は sha256: + 小文字の16進64桁、時刻は Instant のナノ秒',
     state_owner='台帳 (Ledger)。点は変わらない',
     persistence='点は点の置き場 (EntryStore: メモリか SQLite の ledger.sqlite、sui.store "1")、本文と塩は本文の置き場 (Contents: メモリか SQLite の contents.sqlite) に。書く順は本文 → 点、親 → 子で、1つずつ確定する。故障の後に残るのは親で閉じた点の集合と、どの点からも指されない本文 (孤児、事実ではない) だけ',
     failure='親が無い・派生物を親にした・同じ run の時刻が逆・同じ ID で違う中身は、台帳を変えずに拒む',
     cancel='なし (手放すは S8)',
-    redelivery='同じ ID・同じ中身は新しい点を作らず既存の cid が最小の点を返す。合わせた台帳では同じ事実が複数の点になりうるので、数える時は ID の集合で',
+    redelivery='版3は同じIDの全欄が一致した書き直しだけをまとめる。版2同士の観測は本文だけを比べる。既存のcidが最小の点を返す。受け取り直しは別の名札。合わせた台帳では同じ事実が複数の点になりうるので、数える時はIDの集合で',
 )

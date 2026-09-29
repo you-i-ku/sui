@@ -8,6 +8,8 @@ mutations.json: [{"id": "M1", "file": "src/sui/ids.py", "old": "...", "new": "..
 - expect はテスト関数名の接頭辞 (test_<id>_) の <id>。そのどれかが落ちれば KILLED
 - paths (任意、既定 ["tests"]) は pytest に渡す試験の場所。バックアップの係の変異は ["backup"] (S2b)
 - backup/ (本体の外の係) があれば一緒に写し、変異を入れる前に tests と backup の両方が通ることを確かめる (S2b)
+- 既定では変異ごとに expect の試験だけを回す (pytest -k "test_<id>_ or ...")。判定は同じで速い。
+  KILLED_ELSEWHERE (狙い以外だけで落ちた) は SURVIVED として出る。全部の試験を回すなら第 2 引数に --full (S4a)
 """
 import json
 import os
@@ -21,6 +23,7 @@ from pathlib import Path
 ENV = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
 SUI = Path(__file__).resolve().parents[1]
 PY = SUI / ".venv" / "Scripts" / "python.exe"
+FULL = False
 
 
 def run(mut: dict, work: Path) -> tuple[str, str]:
@@ -32,9 +35,11 @@ def run(mut: dict, work: Path) -> tuple[str, str]:
             return "SETUP_ERROR", f"old appears {mutated.count(old)} times: {old[:40]!r}"
         mutated = mutated.replace(old, new)
     target.write_text(mutated, encoding="utf-8")
+    # 判定は expect の試験が落ちたかだけなので、既定ではその試験だけを回す (S4a)。--full で全部
+    select = [] if FULL else ["-k", " or ".join(f"test_{e}_" for e in mut["expect"])]
     try:
         r = subprocess.run(
-            [str(PY), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rf", *mut.get("paths", ["tests"])],
+            [str(PY), "-m", "pytest", "-q", "-p", "no:cacheprovider", "-rf", *select, *mut.get("paths", ["tests"])],
             cwd=work, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300, env=ENV,
         )
     except subprocess.TimeoutExpired:
@@ -53,6 +58,8 @@ def run(mut: dict, work: Path) -> tuple[str, str]:
 
 
 def main() -> int:
+    global FULL
+    FULL = "--full" in sys.argv[2:]
     muts = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     with tempfile.TemporaryDirectory() as d:
         work = Path(d) / "sui"

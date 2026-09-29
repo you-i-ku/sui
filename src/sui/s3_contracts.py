@@ -14,7 +14,7 @@ DECLARATIONS: tuple[_Contract, ...] = (
         persistence='台帳。書く前の記録はホストの Pledges に預ける',
         failure='書けなければ窓口を作り直し、同じ記録を書き直す',
         cancel='作用の停止を記す事実であって、取り消しの依頼ではない',
-        redelivery='同じ ID は点を増やさない。窓口は一つの試みの結果を一度だけ受け付ける',
+        redelivery='同じ記録の書き直しは点を増やさない。受け取り直しは同じ試みでも毎回新しい名札で残し、駆動に知らせる。資源は最初の結果だけで返る (P7)',
     ),
     _Contract(
         ref=ABANDON,

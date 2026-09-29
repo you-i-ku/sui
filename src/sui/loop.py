@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING as _TYPE_CHECKING, Protocol as _Protocol
 
 from .clock import Clock as _Clock
 from .s1_contracts import ATTEMPT, OUTCOME
+from .s4_contracts import BOOT as _BOOT
 from .ids import IdSource as _IdSource, RefKind as _RefKind
 from .ledger import Ledger as _Ledger
 from .records import (
@@ -45,7 +46,8 @@ def run_step(agent: "_Agent", executor: Executor, candidates: _Iterable[str], *,
              clock: _Clock, ids: _IdSource, ledger: _Ledger,
              membrane: _Producer) -> StepRecords:
     """実行前に試み、受け取り時に観測を残してから、主体が採用する。"""
-    decided, job = agent.decide(candidates, u=u, clock=clock, ids=ids, ledger=ledger)
+    decided, job = agent.decide(candidates, u=u, clock=clock, ids=ids, ledger=ledger,
+                                now_mono_ns=clock.mono_ns())
     attempt = _Record(
         id=ids.new(_RefKind.ATTEMPT), at=clock.now(), writer=_Role.MEMBRANE,
         producer=membrane,
@@ -53,14 +55,28 @@ def run_step(agent: "_Agent", executor: Executor, candidates: _Iterable[str], *,
     )
     ledger.accept(attempt)
     outcome = executor.execute(job.body.content.as_json()["action"])
+    observed_id, at = ids.new(_RefKind.OBSERVATION), clock.now()
     observed = _Record(
-        id=ids.new(_RefKind.OBSERVATION), at=clock.now(), writer=_Role.MEMBRANE,
+        id=observed_id, at=at, writer=_Role.MEMBRANE,
         producer=membrane,
         body=_Observed(route="executor", caused_by=attempt.id,
-                       content=_Payload.json({"outcome": outcome}), contract=OUTCOME),
+                       content=_Payload.json({"outcome": outcome}), contract=OUTCOME,
+                       received_ns=at.mono_ns),
     )
     ledger.accept(observed)
     belief = agent.adopt(ledger, clock=clock, ids=ids)
     result = StepRecords(decided=decided, job=job, attempt=attempt,
                          observed=observed, belief=belief)
     return result
+
+
+def boot(agent: "_Agent", *, clock: _Clock, ids: _IdSource, ledger: _Ledger,
+         membrane: _Producer) -> _Record:
+    """同期のrunの最初に起動の事実を書き、採用する (T5・J4)。"""
+    ref, at = ids.new(_RefKind.OBSERVATION), clock.now()
+    record = _Record(id=ref, at=at, writer=_Role.MEMBRANE, producer=membrane,
+                     body=_Observed(route="membrane", content=_Payload.json({}),
+                                    contract=_BOOT, received_ns=at.mono_ns))
+    ledger.accept(record)
+    agent.adopt(ledger, clock=clock, ids=ids)
+    return record

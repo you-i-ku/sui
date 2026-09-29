@@ -51,9 +51,9 @@ _OUTCOME_DECLARATION = _Contract(
     unit='観測の名前',
     state_owner='none (膜が受け取った事実。主体は読むだけ)',
     persistence='膜が受け取った時に台帳へ (推論の成否に関わらない。S2a メモリ、S2b 永続)',
-    failure='受理 (台帳): 同じ ID で違う中身は IdConflict。それ以外は中身・約束の版に関わらず受け取る。採用 (主体の読み): 読めない観測は信念の記録の unread に理由つきで残り、学ばない',
+    failure='受理 (台帳): 版3は同じIDの全欄を比べ、違えばIdConflict。版2同士の観測は本文だけを比べる。新しいIDなら中身・約束の版に関わらず受け取る。採用 (主体の読み): 読めない観測は信念の記録のunreadに理由つきで残り、学ばない',
     cancel='なし',
-    redelivery='同じ ID は新しい点を作らない。同じ試みの別の ID の観測も事実として残る (読みは主体の ambiguous_attempt)',
+    redelivery='同じ記録の書き直しは新しい点を作らない。受け取り直しは同じ試みでも毎回新しい名札で残す (P7)。読める結果が複数なら主体の読みでambiguous_attempt',
 )
 
 

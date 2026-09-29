@@ -1,6 +1,7 @@
 """記録の本文・作成者・参照範囲と再送の判定。"""
 
 import json as _json
+from collections.abc import Iterable as _Iterable
 from dataclasses import dataclass as _dataclass, fields as _fields
 from enum import StrEnum as _StrEnum
 
@@ -113,6 +114,7 @@ class Observed:
     caused_by: _Ref | None = None
     source_id: str | None = None
     source_time_ns: int | None = None
+    received_ns: int | None = None
 
     def __post_init__(self) -> None:
         _check_text("route", self.route)
@@ -123,6 +125,8 @@ class Observed:
             _check_text("source_id", self.source_id)
         if self.source_time_ns is not None:
             _check_int("source_time_ns", self.source_time_ns)
+        if self.received_ns is not None:
+            _check_int("received_ns", self.received_ns)
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -268,7 +272,7 @@ WRITERS: dict[type, frozenset[Role] | str] = {
     Preference: UNDECIDED,
 }
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class WriterNotAllowed(ValueError):
@@ -318,8 +322,13 @@ class Record:
         if type(self.body) not in BODY_KIND:
             raise TypeError(f"body: expected a body type, got {self.body!r}")
         _check_int("schema", self.schema)
-        if self.schema != SCHEMA_VERSION:
-            raise SchemaMismatch(f"schema: expected {SCHEMA_VERSION}, got {self.schema}")
+        if self.schema not in (2, SCHEMA_VERSION):
+            raise SchemaMismatch(f"schema: expected 2 or {SCHEMA_VERSION}, got {self.schema}")
+        if isinstance(self.body, Observed) and self.body.received_ns is not None:
+            if self.schema == 2:
+                raise SchemaMismatch("schema 2: received_ns must be None")
+            if self.body.received_ns > self.at.mono_ns:
+                raise ValueError("received_ns: must not follow the record time")
         _expect(self.id, BODY_KIND[type(self.body)])
         writers = WRITERS[type(self.body)]
         if isinstance(writers, str):
@@ -344,7 +353,7 @@ class Record:
 
 
 def admit(existing: Record | None, incoming: Record) -> Admission:
-    """再送・再生を判定し、衝突なら異なる欄を示す。記録は変えない。"""
+    """版3は全欄を比べる。版2同士の観測だけは本文を比べる (V4・V5)。"""
     _check_type("incoming", incoming, Record)
     if existing is None:
         return Admission.NEW
@@ -353,7 +362,8 @@ def admit(existing: Record | None, incoming: Record) -> Admission:
         raise ValueError(f"incoming.id: expected {existing.id}, got {incoming.id}")
     differences = []
     for field in _fields(Record):
-        if isinstance(existing.body, Observed) and field.name != "body":
+        if (existing.schema == incoming.schema == 2
+                and isinstance(existing.body, Observed) and field.name != "body"):
             continue
         old, new = getattr(existing, field.name), getattr(incoming, field.name)
         if old == new:
@@ -368,3 +378,21 @@ def admit(existing: Record | None, incoming: Record) -> Admission:
     if differences:
         raise IdConflict(existing.id, tuple(differences))
     return Admission.DUPLICATE
+
+
+def representative(records: _Iterable[Record]) -> tuple[Record, ...]:
+    """admitで検査し、名札ごとに時刻の組が最小の記録を名札順で返す (T10・T10b)。
+
+    古い記録を読む規則であり、本当の最初の受け取りを確定しない。
+    """
+    def order(record):
+        at = record.at
+        return at.run_index, at.seq, at.mono_ns, at.wall_ns, str(at.run)
+
+    unique = {}
+    for record in records:
+        existing = unique.get(record.id)
+        admit(existing, record)
+        if existing is None or order(record) < order(existing):
+            unique[record.id] = record
+    return tuple(unique[ref] for ref in sorted(unique, key=str))

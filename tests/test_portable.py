@@ -7,7 +7,7 @@ import tomllib
 
 import pytest
 
-from sui import agent, loop, s1_contracts, s3_contracts
+from sui import agent, loop, s1_contracts, s3_contracts, s4_contracts
 from sui.clock import FakeClock
 from sui.contracts import ContractBook, ContractRef, UnknownContract
 from sui.ids import Ref, RefKind, SequentialIds
@@ -51,7 +51,7 @@ def _actual_s3_records():
     host = ManualHost(lambda pledges: Window(
         agent=subject, ledger=ledger, clock=clock, ids=ids, hand=hand,
         membrane=Producer(component="test.executor", code_version="1"),
-        route="executor", drive=ScriptDrive(rule), capacity={"think": 1}, pledges=pledges))
+        route="executor", drive=ScriptDrive(rule), capacity={"think": 1}, pledges=pledges), clock=clock)
     host.advance(1)
     host.step()
     host.finish(next(work for work, _ in host.work if isinstance(work, Think)))
@@ -73,12 +73,12 @@ def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
     assert {(c.ref.name, c.ref.version) for c in s3_contracts.DECLARATIONS} == {
         ("sui.s3.ended", "1"), ("sui.s3.abandon", "1")}
     assert isinstance(s3_contracts.DECLARATIONS, tuple) and len(s3_contracts.DECLARATIONS) == 2
-    declarations = s1_contracts.DECLARATIONS + s3_contracts.DECLARATIONS
+    declarations = s1_contracts.DECLARATIONS + s3_contracts.DECLARATIONS + (s4_contracts.DECLARATIONS[0],)
     book = ContractBook()
     for declaration in declarations:
         book.register(declaration)
         assert book.get(declaration.ref) is declaration
-    assert RECORD_SCHEMA.ref == ContractRef("sui.record", "2")
+    assert RECORD_SCHEMA.ref == ContractRef("sui.record", "3")
     book.register(RECORD_SCHEMA)
     assert book.get(RECORD_SCHEMA.ref) is RECORD_SCHEMA
     records = _actual_records()

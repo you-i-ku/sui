@@ -24,7 +24,7 @@ from sui.clock import FakeClock
 from sui.contracts import ContractRef
 from sui.ids import Ref, RefKind as K, SequentialIds
 from sui.ledger import Ledger, SequentialSalts
-from sui.loop import run_step
+from sui.loop import boot, run_step
 from sui.records import AttemptStarted, Decided, JobOpened, Observed, Payload, Producer, Record, Role
 from sui.runtime import (
     Abandon, Act, Arrived, Commit, Done, Envelope, Failed, Observe, Pledges,
@@ -32,6 +32,7 @@ from sui.runtime import (
 )
 from sui.s1_contracts import ACTION, ATTEMPT, DECISION, OUTCOME
 from sui.s3_contracts import ABANDON, ENDED
+from sui.s4_contracts import BOOT
 from sui.store import StorageFull
 from worlds import (
     CountingContents, CountingEntries, FlakyContents, FlakyEntries, GatedHand,
@@ -122,7 +123,8 @@ def rig_factory(tmp_path):
                 return window
 
             rig.make_window = make_window
-            rig.host = ThreadHost(make_window) if threaded else ManualHost(make_window)
+            rig.host = (ThreadHost(make_window, clock=rig.clock) if threaded
+                        else ManualHost(make_window, clock=rig.clock))
             rigs.append(rig)
             return rig
 
@@ -442,7 +444,7 @@ def test_w2_think_capacity_and_exact_drive_notice_count(rig_factory, slots):
         _finish(r, _work(r, Think)[0])
         maximum = max(maximum, _status(r).thinking)
     assert maximum == slots and _status(r).waiting == 0
-    assert len(drive.calls) == 4  # Tick と三つの有効な Thought だけ。
+    assert len(drive.calls) == 5  # Boot・Tick と三つの有効な Thought。
     assert len(_records(r, Decided, DECISION)) == 3
 
 
@@ -533,7 +535,7 @@ def test_w5_queued_pending_and_late_thought_keep_original_decisions(rig_factory)
     _finish(r, a)
     b = _work(r, Act)[0]
     assert b.action == "look2" and _job(r, b) == bjob
-    observation = _records(r, Observed)[0]
+    observation = _records(r, Observed, OUTCOME)[0]
     bdecision = next(d for d in _records(r, Decided, DECISION)
                      if d.id == r.ledger.record(r.ledger.entries_of(bjob)[0].cid).body.decision)
     assert _entry(r, observation).cid not in r.ledger.ancestors(_entry(r, bdecision).parents)
@@ -596,13 +598,14 @@ def test_w7_failed_hand_records_ended_without_learning(rig_factory):
     ended = _records(r, Observed, ENDED)[0]
     assert ended.body.content.as_json() == {"error": "RuntimeError"}
     assert ended.body.caused_by == a.attempt and ended.body.route == "executor"
-    assert dict(r.agent.unread) == {ended.id: "contract"}
+    born, = _records(r, Observed, BOOT)
+    assert dict(r.agent.unread) == {born.id: "no_attempt", ended.id: "contract"}
     assert not _status(r).pending and not _status(r).awaiting
     assert _status(r).used["eye1"] == 0
     assert _counts(r, "look1") == [0, 0, 0]
 
 
-def test_w8_duplicate_and_unknown_worker_results_do_not_notify_drive(rig_factory):
+def test_w8_duplicate_thoughts_drop_but_every_result_is_recorded_and_notified(rig_factory):
     r = rig_factory(drive=ScriptDrive(lambda s, e: [_reconsider()]
                                     if isinstance(e, (Tick, Done)) else []))
     thought = _finish(r, _kick(r))
@@ -613,7 +616,9 @@ def test_w8_duplicate_and_unknown_worker_results_do_not_notify_drive(rig_factory
     r.host.post(Done(attempt=Ref(K.ATTEMPT, "unknown"), outcome="o0"))
     for _ in range(3):
         r.host.step()
-    assert len(r.drive.calls) == calls
+    assert len(r.drive.calls) == calls + 1
+    unknown = _records(r, Observed, OUTCOME)[0]
+    assert dict(r.agent.unread)[unknown.id] == "unknown_attempt"
     assert len(_records(r, Decided, DECISION)) == len(_records(r, JobOpened)) == 1
     assert len(_records(r, AttemptStarted)) == len(_work(r, Act)) == 1
     _finish(r, a)
@@ -622,9 +627,15 @@ def test_w8_duplicate_and_unknown_worker_results_do_not_notify_drive(rig_factory
     r.host.post(Failed(attempt=a.attempt, error="RuntimeError"))
     r.host.step()
     r.host.step()
-    assert len(_records(r, Observed)) == 1
-    assert _records(r, Observed)[0].body.content.as_json() == {"outcome": "o0"}
-    assert r.host.pledges.issued == issued and len(r.drive.calls) == calls
+    observations = _records(r, Observed)
+    assert len(observations) == 5  # 起動・未知の試みの結果・同じ試みの三つの結果。
+    results = [o for o in observations if o.body.caused_by == a.attempt and o.body.contract == OUTCOME]
+    assert {o.body.content.as_json()["outcome"] for o in results} == {"o0", "o1"}
+    assert all(dict(r.agent.unread)[o.id] == "ambiguous_attempt" for o in results)
+    assert len(r.drive.calls) == calls + 2
+    assert r.host.pledges.issued == issued
+    assert not _status(r).awaiting
+    assert _status(r).used["eye1"] == 0
 
 
 def test_w8_abandon_twice_only_writes_once(rig_factory):
@@ -643,10 +654,11 @@ def test_w9_arrived_never_becomes_an_awaited_result(rig_factory):
                     contract=OUTCOME, source_id="source1")
     r.host.post(event)
     r.host.step()
-    observed = _records(r, Observed)[0]
+    observed = _records(r, Observed, OUTCOME)[0]
     assert observed.body.caused_by is None and observed.body.source_id == "source1"
     assert observed.body.route == "external"
-    assert dict(r.agent.unread) == {observed.id: "no_attempt"}
+    born, = _records(r, Observed, BOOT)
+    assert dict(r.agent.unread) == {born.id: "no_attempt", observed.id: "no_attempt"}
     assert _counts(r, "look1") == [0, 0, 0]
     assert a.attempt in _status(r).awaiting and _job(r, a) in _status(r).pending
 
@@ -677,7 +689,7 @@ def test_w12_late_commit_parents_are_the_think_frontier(rig_factory):
     a = _start_one(r)
     b = _kick(r)
     _finish(r, a)
-    observed = _records(r, Observed)[0]
+    observed = _records(r, Observed, OUTCOME)[0]
     assert _entry(r, observed).cid in r.ledger.ancestors(r.agent.frontier)
     _finish(r, b)
     decision = next(d for d in _records(r, Decided, DECISION) if d.body.inputs == (b.view.belief,))
@@ -731,7 +743,7 @@ def test_k1_partial_drive_reply_is_not_accepted(rig_factory):
     r.host.step()
     assert len(r.windows) == 2
     assert len(_work(r, Think)) == 1
-    assert len(_successes(r, Tick)) == 1 and len(r.drive.calls) == 2
+    assert len(_successes(r, Tick)) == 1 and len(r.drive.calls) == 3  # BootとTickの再試行。
     assert len(_successes(r, Tick)[0][2]) == 1
 
 
@@ -748,7 +760,7 @@ def test_k2_recovered_observation_frees_resource_in_same_settle(rig_factory, sto
     assert not r.ledger.entries_of(saved.id)
     r.host.step()
     _assert_saved(r, saved)
-    assert len(_records(r, Observed)) == 1
+    assert len(_records(r, Observed, OUTCOME)) == 1
     assert _job(r, _work(r, Act)[0]) == bjob
     assert _status(r).used["eye"] == 1 and not _status(r).queued
     assert len(_successes(r, Done)) == 1
@@ -823,7 +835,7 @@ def test_k5_observation_written_adoption_failed_notice_gets_new_frontier(rig_fac
     r.host.finish(a)
     with pytest.raises(StorageFull):
         r.host.step()
-    observation = _records(r, Observed)[0]
+    observation = _records(r, Observed, OUTCOME)[0]
     assert _entry(r, observation).cid not in r.ledger.ancestors(r.agent.frontier)
     assert not r.host.pledges.items and len(r.host.pledges.notices) == 1
     r.host.step()
@@ -944,24 +956,26 @@ def test_k8_arrived_settled_once_per_receipt_even_after_drive_failure(rig_factor
     with pytest.raises(DriveFailure):
         r.host.step()
     r.host.step()
-    assert len(_records(r, Observed)) == len(_successes(r, Arrived)) == 1
+    assert len(_records(r, Observed, OUTCOME)) == len(_successes(r, Arrived)) == 1
     assert len(_work(r, Think)) == 1
     r.host.post(event)
     r.host.step()
-    assert len(_records(r, Observed)) == len(_successes(r, Arrived)) == 2
+    assert len(_records(r, Observed, OUTCOME)) == len(_successes(r, Arrived)) == 2
     assert _status(r).waiting == 1  # 同じ中身でも別の受け取り。
 
 
 def test_k8b_arrived_record_is_not_recreated_after_failed_write(rig_factory):
     r = rig_factory()
+    r.host.step()  # 起動を片づけてから、到着の書き込みを失敗させる。
     r.contents.fail_next()
     r.host.post(_external())
     with pytest.raises(StorageFull):
         r.host.step()
     saved = r.host.pledges.items[0].record
+    assert saved.body.contract == OUTCOME
     r.host.step()
     _assert_saved(r, saved)
-    assert len(_records(r, Observed)) == len(_successes(r, Arrived)) == 1
+    assert len(_records(r, Observed, OUTCOME)) == len(_successes(r, Arrived)) == 1
 
 
 def test_k9_start_failure_keeps_only_unstarted_work(rig_factory):
@@ -1029,7 +1043,7 @@ def test_k11_failed_envelope_keeps_queue_order(rig_factory, phase):
         assert r.host.current is None
     r.host.step()
     r.host.step()
-    observations = sorted(_records(r, Observed), key=lambda record: record.at.seq)
+    observations = sorted(_records(r, Observed, OUTCOME), key=lambda record: record.at.seq)
     assert [o.body.caused_by for o in observations] == [a.attempt, None]
     assert len(_successes(r, Done)) == len(_successes(r, Arrived)) == 1
 
@@ -1069,7 +1083,7 @@ def test_k13_reconstruction_can_fail_again_without_losing_observation(rig_factor
     assert r.host.window is None and r.host.pledges is p
     r.host.step()
     _assert_saved(r, saved)
-    assert len(_records(r, Observed)) == 1
+    assert len(_records(r, Observed, OUTCOME)) == 1
     assert _counts(r, "look1") == [1, 0, 0]
     assert _job(r, _work(r, Act)[0]) == bjob
 
@@ -1129,6 +1143,7 @@ def test_r1_three_nonoverlapping_cycles_match_run_step_cids(rig_factory):
 
     async_rig = rig_factory(drive=ScriptDrive(rule))
     world = ScriptedWorld({"look1": ["o0"] * 3, "look2": ["o1"] * 3, "wait": ["none"] * 3})
+    boot(sync.agent, clock=sync.clock, ids=sync.ids, ledger=sync.ledger, membrane=sync.membrane)
     for _ in range(3):
         run_step(sync.agent, world, CANDIDATES, u=.4, clock=sync.clock, ids=sync.ids,
                  ledger=sync.ledger, membrane=sync.membrane)
@@ -1136,13 +1151,38 @@ def test_r1_three_nonoverlapping_cycles_match_run_step_cids(rig_factory):
     for _ in range(3):
         _finish(async_rig, _work(async_rig, Think)[0])
         _finish(async_rig, _work(async_rig, Act)[0])
-    assert len(sync.ledger.entries()) == len(async_rig.ledger.entries()) == 16
+    assert len(sync.ledger.entries()) == len(async_rig.ledger.entries()) == 18
+    assert len(_records(async_rig, Observed, BOOT)) == 1
     assert [e.cid for e in async_rig.ledger.entries()] == [e.cid for e in sync.ledger.entries()]
     assert world.calls == async_rig.hand.calls
     before = async_rig.ledger.entries()
     async_rig.host.window.settle()
     async_rig.host.window.settle()
     assert async_rig.ledger.entries() == before
+
+
+def test_r1_rebuilt_window_clears_adoption_without_an_extra_belief(rig_factory):
+    # 起動を採用済みの同じ先端で窓口を作り直し、思考の返事を後から届ける。
+    continuous = rig_factory(model=_model(learnable=frozenset()))
+    rebuilt = rig_factory(model=_model(learnable=frozenset()))
+    thinking = [_kick(r) for r in (continuous, rebuilt)]
+    assert rebuilt.agent.frontier == rebuilt.ledger.heads()
+    before = rebuilt.ledger.entries()
+    assert len(before) == 3  # 最初の信念・起動・起動を採用した信念。
+    assert [e.cid for e in before] == [e.cid for e in continuous.ledger.entries()]
+    rebuilt.host.window = rebuilt.make_window(rebuilt.host.pledges)
+    rebuilt.host.window.settle()
+    assert rebuilt.ledger.entries() == before
+    assert rebuilt.host.pledges.thinking[thinking[1].work] is thinking[1]
+    for r, think in zip((continuous, rebuilt), thinking):
+        _finish(r, think)
+    # 決定・仕事・試みの3点だけ。印が残ると決定の後に余分な信念が入り7点になる。
+    assert len(continuous.ledger.entries()) == len(rebuilt.ledger.entries()) == 6
+    assert [e.cid for e in rebuilt.ledger.entries()] == [e.cid for e in continuous.ledger.entries()]
+    for r in (continuous, rebuilt):
+        _finish(r, _work(r, Act)[0])
+    assert len(continuous.ledger.entries()) == len(rebuilt.ledger.entries()) == 8
+    assert [e.cid for e in rebuilt.ledger.entries()] == [e.cid for e in continuous.ledger.entries()]
 
 
 def _two_in_flight(status, event):
@@ -1262,7 +1302,7 @@ def test_r5_thread_host_recovery_preserves_b_then_a_observations(rig_factory):
         assert r.host.window is None
         assert r.host.run_until(lambda s: not s.awaiting, timeout=10)
         _assert_saved(r, saved)
-        observations = sorted(_records(r, Observed), key=lambda o: o.at.seq)
+        observations = sorted(_records(r, Observed, OUTCOME), key=lambda o: o.at.seq)
         assert [o.body.caused_by for o in observations] == [e.attempt for e in posted]
         assert len(observations) == 2
         assert _counts(r, "look1") == [1, 0, 0] and _counts(r, "look2") == [0, 1, 0]
@@ -1351,17 +1391,18 @@ def test_r8_failed_accept_retains_b_done_ahead_of_a_done(rig_factory):
         with pytest.raises(RuntimeError, match="injected ID failure"):
             r.host.run_until(lambda s: not s.awaiting, timeout=10)
         assert r.host.window is None
-        assert r.ids.calls.count(K.OBSERVATION) == 1
-        assert not _records(r, Observed)
+        assert r.ids.calls.count(K.OBSERVATION) == 2  # 起動と一度の失敗。
+        assert len(_records(r, Observed, BOOT)) == 1
+        assert not _records(r, Observed, OUTCOME)
         assert not r.host.pledges.items and not r.host.pledges.notices
 
         # 追加の post なし。失敗した B の封筒を、後ろの A より先に渡し直す。
         assert r.host.run_until(lambda s: not s.awaiting, timeout=10)
-        observations = _records(r, Observed)
+        observations = _records(r, Observed, OUTCOME)
         assert len(observations) == 2
         assert [o.body.caused_by for o in observations] == [event.attempt for event in posted]
         assert [o.body.content.as_json() for o in observations] == [{"outcome": "o1"}, {"outcome": "o0"}]
-        assert r.ids.calls.count(K.OBSERVATION) == 3  # 一度の失敗と二度の成功。
+        assert r.ids.calls.count(K.OBSERVATION) == 4  # 起動・一度の失敗・二度の成功。
         assert len(_successes(r, Done)) == 2
         assert _counts(r, "look1") == [1, 0, 0] and _counts(r, "look2") == [0, 1, 0]
     finally:
@@ -1387,15 +1428,15 @@ def test_window_requires_a_belief_without_writing(rig_factory):
     assert r.ledger.entries() == before
 
 
-def test_accept_stages_without_writing_and_deduplicates_unsettled_results(rig_factory):
+def test_accept_stages_every_result_but_deduplicates_unsettled_thought(rig_factory):
     r = rig_factory()
     think = _kick(r)
     thought = r.host.finish(think)
     r.host.queue.clear()
     before = r.ledger.entries()
     window = r.host.window
-    window.accept(Envelope(number=50, event=thought))
-    window.accept(Envelope(number=51, event=thought))
+    window.accept(Envelope(number=50, event=thought, received_ns=0))
+    window.accept(Envelope(number=51, event=thought, received_ns=0))
     assert r.ledger.entries() == before
     assert len(r.host.pledges.items) == len(r.host.pledges.notices) == 1
     window.settle()
@@ -1404,12 +1445,13 @@ def test_accept_stages_without_writing_and_deduplicates_unsettled_results(rig_fa
     done = r.host.finish(act)
     r.host.queue.clear()
     before = r.ledger.entries()
-    window.accept(Envelope(number=52, event=done))
-    window.accept(Envelope(number=53, event=Failed(attempt=act.attempt, error="Error")))
+    window.accept(Envelope(number=52, event=done, received_ns=0))
+    window.accept(Envelope(number=53, event=Failed(attempt=act.attempt, error="Error"), received_ns=0))
     assert r.ledger.entries() == before
-    assert len(r.host.pledges.items) == len(r.host.pledges.notices) == 1
+    assert len(r.host.pledges.items) == len(r.host.pledges.notices) == 2
     window.settle()
-    assert len(_records(r, Observed)) == 1
+    assert len(_records(r, Observed)) == 3  # 起動・Done・Failed。
+    assert len(_records(r, Observed, OUTCOME)) == len(_records(r, Observed, ENDED)) == 1
 
 
 def test_thread_host_timeout_and_numbering(rig_factory):
@@ -1422,7 +1464,7 @@ def test_thread_host_timeout_and_numbering(rig_factory):
         worker.join(timeout=2)
         assert not worker.is_alive()
     envelopes = [r.host._queue.get_nowait() for _ in workers]
-    assert [e.number for e in envelopes] == list(range(1, 9))
+    assert [e.number for e in envelopes] == list(range(2, 10))
 
 
 def test_k9_thread_start_failure_resumes_only_the_unstarted_work(rig_factory, monkeypatch):
@@ -1470,9 +1512,9 @@ def test_k14_thread_host_keeps_start_failure_as_context(rig_factory, monkeypatch
     monkeypatch.setattr(Thread, "start", start)
     r.host.post(Tick(mono_ns=1))
     with pytest.raises(DriveFailure) as error:
-        r.host.run_until(lambda s: bool(_records(r, Observed)), timeout=10)
+        r.host.run_until(lambda s: bool(_records(r, Observed, OUTCOME)), timeout=10)
     assert isinstance(error.value.__context__, OSError)
     assert r.host.window is None and len(r.host._unstarted) == 1
-    assert r.host.run_until(lambda s: bool(_records(r, Observed)), timeout=10)
+    assert r.host.run_until(lambda s: bool(_records(r, Observed, OUTCOME)), timeout=10)
     assert len(r.windows) == 2 and len(r.hand.calls) == 1
     assert len(_successes(r, Thought)) == 1

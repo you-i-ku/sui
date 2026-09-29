@@ -325,7 +325,7 @@ def test_p7_header_reader_schema_and_shape():
     ledger = Ledger(salts=SequentialSalts())
     entry = ledger.accept(_record())
     assert entry_from_header(entry.cid, entry.header) == entry
-    for data, error in [(dict(json.loads(entry.header), schema=3), SchemaMismatch),
+    for data, error in [(dict(json.loads(entry.header), schema=4), SchemaMismatch),
                         (dict(json.loads(entry.header), parents="bad"), CorruptEntry)]:
         header = Payload.json(data).data
         with pytest.raises(error):

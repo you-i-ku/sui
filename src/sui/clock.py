@@ -77,6 +77,8 @@ class Clock(_Protocol):
 
     def now(self) -> Instant: ...
 
+    def mono_ns(self) -> int: ...
+
 
 class SystemClock:
     """連番の更新と時刻の取得をロック内で行う時計。"""
@@ -96,6 +98,10 @@ class SystemClock:
     @property
     def run_index(self) -> int:
         return self._run_index
+
+    def mono_ns(self) -> int:
+        """連番を進めず単調時計だけを読む (J1)。"""
+        return _time.monotonic_ns()
 
     def now(self) -> Instant:
         """連番を進め、単調時計と実時刻を読む。"""
@@ -127,6 +133,10 @@ class FakeClock:
     @property
     def run_index(self) -> int:
         return self._run_index
+
+    def mono_ns(self) -> int:
+        """連番も時間も進めず単調時計だけを読む (J1)。"""
+        return self._mono_ns
 
     def now(self) -> Instant:
         """時間を進めず、連番だけを増やして時刻を返す。"""

@@ -1,4 +1,4 @@
-"""単一の窓口と、窓口の外で考え・作用を実行するホスト (S3)。"""
+"""単一の窓口と、受信時刻を押し外で仕事を実行するホスト (S3・S4a)。"""
 
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -16,6 +16,7 @@ from .ledger import Ledger
 from .records import AttemptStarted, Decided, Observed, Payload, Producer, Record, Role
 from .s1_contracts import ATTEMPT, OUTCOME
 from .s3_contracts import ABANDON, ENDED
+from .s4_contracts import BOOT as _BOOT, LISTEN as _LISTEN
 
 
 class Hand(Protocol):
@@ -79,9 +80,21 @@ class Failed:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class Boot:
+    pass
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class Listen:
+    route: str
+    open: bool
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Envelope:
     number: int
     event: object
+    received_ns: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -90,6 +103,7 @@ class Think:
     view: View
     candidates: tuple[str, ...]
     u: float
+    now_ns: int | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -146,6 +160,7 @@ class Pledges:
 
     記録は書く前に預け、効き目が済んでから外す。預かった記録は再作成しない。
     信念の葉は預けず、プロセスをまたぐ永続化もしない (K1〜K14)。
+    latest_nsは最後に成功した受け付け。Thinkのnowも作り直しで保つ (J2・J3・J5)。
     """
 
     items: list[Item] = field(default_factory=list)
@@ -155,6 +170,7 @@ class Pledges:
     notices: list[object] = field(default_factory=list)
     abandons: dict[Ref, Record] = field(default_factory=dict)
     issued: int = 0
+    latest_ns: tuple[Ref, int] | None = None
 
 
 class Window:
@@ -218,48 +234,55 @@ class Window:
                       thinking=len(self.pledges.thinking), waiting=len(self.pledges.waiting),
                       used=used, capacity=self.capacity)
 
-    def _observation(self, *, route, content, contract, caused_by=None, source_id=None):
+    def _observation(self, *, route, content, contract, received_ns,
+                     caused_by=None, source_id=None):
         return Record(id=self.ids.new(RefKind.OBSERVATION), at=self.clock.now(),
                       writer=Role.MEMBRANE, producer=self.membrane,
                       body=Observed(route=route, content=content, contract=contract,
-                                    caused_by=caused_by, source_id=source_id))
+                                    caused_by=caused_by, source_id=source_id,
+                                    received_ns=received_ns))
 
     def accept(self, envelope: Envelope) -> None:
         """全部作ってから預け、書かない。例外なら同じ封筒で再試行 (K11)。
 
-        二度目の Thought・結果は知らせも預けない (W8)。Arrived は受け取りごと
-        別の事実で、試みへ対応づけない (W9・K8・K8b)。Tick は知らせだけ。
+        二度目のThoughtだけは知らせない。結果は毎回別の名札で残す (R10〜R13)。
+        ホストの受信時刻を使い、成功時だけlatest_nsを確定する (J2・J3・J5)。
+        起動・開閉はモデルによらず残し、駆動の依頼は受け付けない (P11)。
         """
         event, p = envelope.event, self.pledges
         item = None
         if isinstance(event, Tick):
             pass
+        elif isinstance(event, (Boot, Listen)):
+            item = Observe(record=self._observation(
+                route="membrane", content=Payload.json({} if isinstance(event, Boot)
+                    else {"route": event.route, "open": event.open}),
+                contract=_BOOT if isinstance(event, Boot) else _LISTEN,
+                received_ns=envelope.received_ns))
         elif isinstance(event, Arrived):
             item = Observe(record=self._observation(
                 route=event.route, content=event.content, contract=event.contract,
-                source_id=event.source_id))
+                source_id=event.source_id, received_ns=envelope.received_ns))
         elif isinstance(event, Thought):
             if event.work not in p.thinking or any(
                     isinstance(i, (Commit, Released)) and i.work == event.work for i in p.items):
+                p.latest_ns = (self.clock.run, envelope.received_ns)
                 return
             item = (Commit(work=event.work, commit=self.agent.prepare(
                 event.draft, clock=self.clock, ids=self.ids)) if event.draft is not None
                 else Released(work=event.work))
         elif isinstance(event, (Done, Failed)):
-            if event.attempt not in self.status().awaiting or any(
-                    isinstance(i, Observe) and i.record.body.caused_by == event.attempt
-                    for i in p.items):
-                return
             content, contract = (({"outcome": event.outcome}, OUTCOME) if isinstance(event, Done)
                                  else ({"error": event.error}, ENDED))
             item = Observe(record=self._observation(
                 route=self.route, content=Payload.json(content), contract=contract,
-                caused_by=event.attempt))
+                caused_by=event.attempt, received_ns=envelope.received_ns))
         else:
             raise TypeError("accept: expected a host or worker event")
         if item is not None:
             p.items.append(item)
         p.notices.append(event)
+        p.latest_ns = (self.clock.run, envelope.received_ns)
 
     def _write_items(self):
         p = self.pledges
@@ -341,8 +364,15 @@ class Window:
             while p.waiting and self.status().used["think"] < self.capacity["think"]:
                 request = p.waiting[0]
                 self._adopt()
-                work = Think(work=f"think:{p.issued + 1}", view=self.agent.view(),
-                             candidates=request.candidates, u=request.u)
+                now = None
+                if self.agent._model.Q is not None:
+                    axis = self.agent._reading.timeline
+                    if (axis is None or self.clock.run not in axis.runs
+                            or p.latest_ns is None or p.latest_ns[0] != self.clock.run):
+                        raise ValueError("Think: current run boot and received time are required")
+                    now = axis.to_axis(*p.latest_ns)
+                work = Think(work=f"think:{p.issued + 1}", view=self.agent.view(now_ns=now),
+                             candidates=request.candidates, u=request.u, now_ns=now)
                 p.thinking[work.work] = work
                 self._outbox.append(work)
                 p.issued += 1
@@ -374,20 +404,24 @@ def _perform(work: Think | Act, hand: Hand) -> Thought | Done | Failed:
 class ThreadHost:
     """SQLite の接続を開いたスレッドが run_until を呼ぶ。書く接続は一つ。"""
 
-    def __init__(self, make_window: Callable[[Pledges], Window]) -> None:
+    def __init__(self, make_window: Callable[[Pledges], Window], *, clock: Clock) -> None:
         self._make_window = make_window
         self.pledges = Pledges()
         self.window: Window | None = None
         self._queue: Queue[Envelope] = Queue()
         self._current: Envelope | None = None
         self._unstarted: list[tuple[Think | Act, Hand]] = []
-        self._number = 0
+        self._number = 1
         self._lock = Lock()
+        self._clock = clock
+        self._boot_pending = True
+        self._current = Envelope(number=1, event=Boot(), received_ns=clock.mono_ns())
 
     def post(self, event) -> None:
         with self._lock:
             self._number += 1
-            self._queue.put(Envelope(number=self._number, event=event))
+            self._queue.put(Envelope(number=self._number, event=event,
+                                     received_ns=self._clock.mono_ns()))
 
     def _collect(self):
         if self.window is not None:
@@ -405,6 +439,8 @@ class ThreadHost:
     def _window_failed(self, original):
         self._collect()
         self.window = None
+        if self._boot_pending:
+            return
         try:
             self._start()
         except Exception as start_error:
@@ -413,6 +449,8 @@ class ThreadHost:
 
     def run_until(self, done: Callable[[Status], bool], *, timeout: float) -> bool:
         """作り直し→回収→開始→終了判定→受信待ちの順。
+
+        最初のBootはこの順序より先に受け付けて片づける。完了まで仕事は始めない (T9)。
 
         本体の直接検証は R2・R4〜R8 と本体版 K9/K14
         (test_k9_thread…・test_k14_thread…)。R3 は SQLite の接続スレッド制約。
@@ -425,6 +463,18 @@ class ThreadHost:
         """
         deadline = monotonic() + timeout
         while True:
+            if self._boot_pending:
+                try:
+                    if self.window is None:
+                        self.window = self._make_window(self.pledges)
+                    if self._current is not None:
+                        self.window.accept(self._current)
+                        self._current = None
+                    self.window.settle()
+                    self._boot_pending = False
+                except Exception as exc:
+                    self._window_failed(exc)
+                    raise
             if self.window is None:
                 try:
                     self.window = self._make_window(self.pledges)

@@ -101,6 +101,28 @@ def _model(**changes):
     return _GenerativeModel(**values)
 
 
+def _time_model(world="W2", *, changing=True, **changes):
+    """S4a §6のW2・W3・WP。固定値の材料は試験の中だけ。"""
+    if world == "W3":
+        D = _np.array([.6, .3, .1])
+        look = _np.array([[.7, .2, .5], [.3, .8, .5], [0., 0., 0.]])
+        Q = _np.array([[-.4, .2, .05], [.3, -.2, .4], [.1, 0., -.45]])
+    else:
+        D = _np.array([.5, .5])
+        look = _np.array([[.9, .2], [.1, .8], [0., 0.]])
+        if world == "WP":
+            look = _np.array([[1., 0.], [0., 1.], [0., 0.]])
+        Q = _np.array([[-.5, .5], [.5, -.5]])
+    wait = _np.zeros_like(look)
+    wait[-1] = 1.0
+    values = dict(states=tuple(f"s{i}" for i in range(len(D))),
+        outcomes=("o0", "o1", "none"), actions=("look", "wait"),
+        a={"look": look, "wait": wait}, D=D, Q=Q if changing else None,
+        log_C=_np.full(3, -_math.log(3)), gamma=4.0, learnable=frozenset())
+    values.update(changes)
+    return _GenerativeModel(**values)
+
+
 def _close(actual, expected, atol=1e-12):
     _np.testing.assert_allclose(actual, expected, atol=atol, rtol=0)
 
@@ -352,7 +374,7 @@ class FlakyContents(_FlakyStore):
 class ManualHost:
     """§3-6 の手順を一回ずつ運ぶ試験用ホスト。finish だけが係を動かす。"""
 
-    def __init__(self, make_window):
+    def __init__(self, make_window, *, clock):
         from collections import deque
         from sui.runtime import Pledges
         self.make_window = make_window
@@ -366,11 +388,16 @@ class ManualHost:
         self.number = 0
         self.mono_ns = 0
         self.start = self._start_work
+        from sui.runtime import Boot, Envelope
+        self.clock = clock
+        self._boot_pending = True
+        self.number = 1
+        self.current = Envelope(number=1, event=Boot(), received_ns=self.clock.mono_ns())
 
     def post(self, event):
         from sui.runtime import Envelope
         self.number += 1
-        self.queue.append(Envelope(number=self.number, event=event))
+        self.queue.append(Envelope(number=self.number, event=event, received_ns=self.clock.mono_ns()))
 
     def advance(self, ns):
         from sui.runtime import Tick
@@ -393,6 +420,8 @@ class ManualHost:
     def _failed(self, original):
         self._collect()
         self.window = None
+        if self._boot_pending:
+            return
         try:
             self._start()
         except Exception as start_error:
@@ -400,6 +429,18 @@ class ManualHost:
             original.__context__ = start_error
 
     def step(self):
+        if self._boot_pending:
+            try:
+                if self.window is None:
+                    self.window = self.make_window(self.pledges)
+                if self.current is not None:
+                    self.window.accept(self.current)
+                    self.current = None
+                self.window.settle()
+                self._boot_pending = False
+            except Exception as exc:
+                self._failed(exc)
+                raise
         if self.window is None:
             try:
                 self.window = self.make_window(self.pledges)

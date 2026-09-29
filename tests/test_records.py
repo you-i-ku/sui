@@ -1,4 +1,5 @@
 from dataclasses import FrozenInstanceError, fields, replace
+from itertools import permutations
 
 import pytest
 
@@ -179,7 +180,7 @@ def test_r6_record_id_matches_body(make_record):
 def test_r7_record_schema(make_record):
     with pytest.raises(r.SchemaMismatch) as error:
         make_record(r.Observed, schema=1)
-    assert str(error.value) == "schema: expected 2, got 1"
+    assert str(error.value) == "schema: expected 2 or 3, got 1"
 
 
 def test_r8_payload_encoding_and_media_type():
@@ -211,12 +212,16 @@ def test_r9_record_is_immutable(make_record, make_body, clk):
         rec.at = clk.now()
 
 
-def test_r10_redelivery_ignores_receipt_metadata(make_record, clk):
+def test_r10_redelivery_checks_receipt_metadata(make_record, clk):
     obs1 = make_record(r.Observed)
     obs2 = replace(obs1, at=clk.now(), producer=r.Producer(component="receiver", code_version="0.2"))
     original_at, original_producer = obs1.at, obs1.producer
     assert r.admit(None, obs1) is r.Admission.NEW
-    assert r.admit(obs1, obs2) is r.Admission.DUPLICATE
+    with pytest.raises(r.IdConflict) as error:
+        r.admit(obs1, obs2)
+    assert error.value.fields == ("at", "producer")
+    assert r.admit(obs1, replace(obs1)) is r.Admission.DUPLICATE
+    assert r.admit(replace(obs1, schema=2), replace(obs2, schema=2)) is r.Admission.DUPLICATE
     assert obs1.at is original_at and obs1.producer is original_producer
 
 
@@ -283,7 +288,7 @@ def test_r12_schema_fields_are_fixed():
     # 欄を変える時は仕様書を先に直す。これは欄の変更の検知で、
     # route や content に固定の分類を埋め込む誤りは落とせない。
     assert {field.name for field in fields(r.Observed)} == {
-        "route", "content", "contract", "caused_by", "source_id", "source_time_ns",
+        "route", "content", "contract", "caused_by", "source_id", "source_time_ns", "received_ns",
     }
     assert {field.name for field in fields(r.Record)} == {"id", "at", "writer", "producer", "body", "schema"}
 
@@ -403,3 +408,26 @@ def test_r19_state_lineage_distinguishes_producers(make_record):
     with pytest.raises(r.IdConflict) as error:
         r.admit(old, replace(old, producer=second))
     assert error.value.fields == ("producer",)
+
+
+def test_t10_representative_returns_distinct_ids_in_fixed_order(make_record):
+    first = replace(make_record(r.Observed), id=Ref(K.OBSERVATION, "z"), schema=2)
+    later = replace(first, at=replace(first.at, seq=first.at.seq + 1))
+    second = replace(make_record(r.Observed), id=Ref(K.OBSERVATION, "a"))
+    assert r.representative(()) == ()
+    for values in permutations((first, later, second, replace(second))):
+        assert r.representative(iter(values)) == (second, first)
+
+
+@pytest.mark.parametrize("change,field", [
+    ("schema", "schema"), ("at", "at"), ("body", "body.route"),
+])
+def test_t10_representative_checks_conflicts_in_both_orders(make_record, change, field):
+    record = make_record(r.Observed)
+    other = (replace(record, schema=2) if change == "schema" else
+             replace(record, at=replace(record.at, seq=record.at.seq + 1)) if change == "at" else
+             replace(record, body=replace(record.body, route="other")))
+    for values in ((record, other), (other, record)):
+        with pytest.raises(r.IdConflict) as error:
+            r.representative(values)
+        assert error.value.fields == (field,)

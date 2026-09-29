@@ -102,7 +102,10 @@ def test_s6_duplicate_ids_and_wrong_types_are_rejected(records):
 
 def test_s8_find_preserves_causal_order_and_applies_filter(records):
     first, second, third = records(), records(route="channel:other"), records()
+    first, second, third = [replace(record, id=Ref(K.OBSERVATION, name))
+                            for record, name in zip((first, second, third), ("z", "a", "m"))]
     snapshot = snapshot_of(first, second, third)
+    assert snapshot.records == (first, second, third)
     assert snapshot.find(Observed) == Found(records=(first, second, third))
     assert snapshot.find(Observed, lambda r: r.body.route == "channel:letter") == Found(records=(first, third))
     with pytest.raises(ValueError):
@@ -117,3 +120,40 @@ def test_s9_unknown_reason_and_derived_frontier(records):
     expected = Unknown(reason="derived records are not part of a snapshot; rebuild them from the model and the facts")
     assert ledger.snapshot(()).find(Prediction) == expected
     assert ledger.snapshot(()).resolve(leaf.id) == expected
+
+
+def test_t10b_representative_stays_inside_the_snapshot_frontier(records):
+    early = replace(records(), schema=2)
+    late = replace(early, at=replace(early.at, seq=early.at.seq + 1, mono_ns=20))
+    left, right = Ledger(salts=SequentialSalts()), Ledger(salts=SequentialSalts())
+    late_entry = left.accept(late)
+    early_entry = right.accept(early)
+    leaf = records(Prediction)
+    leaf = replace(leaf, at=replace(late.at, seq=late.at.seq + 1))
+    left.append(leaf, {late_entry.cid})
+    left.merge(right)
+    left.verify()
+    assert left.snapshot({late_entry.cid}).records == (late,)
+    assert left.snapshot({early_entry.cid}).records == (early,)
+    assert left.snapshot(left.heads()).records == (early,)
+    assert len(left.entries_of(early.id)) == 2
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_t10b_snapshot_orders_the_chosen_record_at_its_own_position(records, reverse):
+    middle = replace(records(), id=Ref(K.OBSERVATION, "m"))
+    early = replace(records(), id=Ref(K.OBSERVATION, "z"), schema=2)
+    late = replace(early, at=replace(early.at, seq=early.at.seq + 1, mono_ns=20))
+    left, right = Ledger(salts=SequentialSalts()), Ledger(salts=SequentialSalts())
+    left.accept(late)
+    parent = right.accept(middle)
+    right.append(early, {parent.cid})
+    merged, other = (right, left) if reverse else (left, right)
+    merged.merge(other)
+    merged.verify()
+    # 選ばれない late の位置へ early を繰り上げてはいけない。
+    assert tuple(merged.record(entry.cid) for entry in merged.between((), merged.heads())) == (
+        late, middle, early)
+    snapshot = merged.snapshot(merged.heads())
+    assert snapshot.records == (middle, early)
+    assert snapshot.find(Observed) == Found(records=(middle, early))

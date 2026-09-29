@@ -1,18 +1,143 @@
-"""回数からの信念・帳面と、評価・選択の純粋な計算。"""
+"""回数・時間つきの観測からの信念と、評価・選択の純粋な計算。"""
 
 from collections.abc import Iterable as _Iterable
+import math as _math
 
 import numpy as _np
 from scipy.special import betaln as _betaln
 from scipy.special import digamma as _digamma
+from scipy.special import logsumexp as _scipy_logsumexp
+from scipy.linalg import expm as _expm
 
 from .model import (
     _array, _counts, _log_preferences, _logsumexp, _positive_float, _probability,
+    _generator,
 )
 
 
 class ModelViolation(ValueError):
     """モデル上で確率 0 の観測。"""
+
+
+def _duration(value, name):
+    if not isinstance(value, float):
+        raise TypeError(f"{name}: expected float")
+    if not _math.isfinite(value) or value < 0:
+        raise ValueError(f"{name}: expected finite nonnegative float")
+
+
+def transition(Q: _np.ndarray, dt: float) -> _np.ndarray:
+    """列から行への遷移。dt=0は厳密な単位行列 (Q1・Q4b)。
+
+    expmの微小な負値だけ0にし列を正規化。-1e-12未満は数値の失敗。
+    """
+    Q = _generator(Q)
+    _duration(dt, "dt")
+    if dt == 0:
+        return _np.eye(len(Q))
+    with _np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        B = _expm(Q * dt)
+    if not _np.all(_np.isfinite(B)) or _np.any(B < -1e-12):
+        raise FloatingPointError("transition: invalid exponential")
+    B = _np.maximum(B, 0.0)
+    totals = B.sum(axis=0)
+    if _np.any(totals <= 0) or not _np.all(_np.isfinite(totals)):
+        raise FloatingPointError("transition: invalid column sums")
+    return B / totals
+
+
+def reachable(D: _np.ndarray, Q: _np.ndarray) -> _np.ndarray:
+    """Dの正の支持から正の辺を何段でもたどる (Q9・Q13)。"""
+    D, Q = _probability(D, "D"), _generator(Q)
+    if Q.shape != (len(D), len(D)):
+        raise ValueError("Q: shape must match D")
+    support = D > 0
+    while True:
+        extended = support | _np.any(Q[:, support] > 0, axis=1)
+        if _np.array_equal(extended, support):
+            return support
+        support = extended
+
+
+def _log_A(a):
+    a = _counts(a)
+    logs = _np.full_like(a, -_np.inf)
+    positive = a > 0
+    logs[positive] = _np.log(a[positive])
+    return logs - _scipy_logsumexp(logs, axis=0)
+
+
+def _log_predict(log_q, Q, dt):
+    if dt == 0:
+        return log_q.copy()
+    B = transition(Q, dt)
+    logs = _np.full_like(B, -_np.inf)
+    positive = B > 0
+    logs[positive] = _np.log(B[positive])
+    return _scipy_logsumexp(logs + log_q[None, :], axis=1)
+
+
+def _log_update(log_q, likelihood):
+    positive = _np.isfinite(likelihood)
+    if not _np.any(positive):
+        return _np.full_like(log_q, -_np.inf)
+    result = log_q + (likelihood - likelihood[positive].max())
+    if _np.any(_np.isfinite(result)):
+        result -= result.max()
+    return result
+
+
+def _log_probability(log_q):
+    if not _np.any(_np.isfinite(log_q)):
+        raise ModelViolation("observations: zero probability under every state")
+    with _np.errstate(under="ignore"):
+        weights = _np.exp(log_q - log_q.max())
+    return weights / weights.sum()
+
+
+def filter_log(D: _np.ndarray, Q: _np.ndarray,
+               sequence: _Iterable[tuple[int, _np.ndarray]]) -> _np.ndarray:
+    """(軸のns, 対数尤度)を前向きに濾過し、対数のまま返す (Q2〜Q4・Q10〜Q13)。
+
+    途中で確率に戻さない。全状態が不可能なら全成分-inf。入力は変えない。
+    """
+    D, Q = _probability(D, "D"), _generator(Q)
+    if Q.shape != (len(D), len(D)):
+        raise ValueError("Q: shape must match D")
+    logs = _np.full_like(D, -_np.inf)
+    logs[D > 0] = _np.log(D[D > 0])
+    previous = 0
+    for ns, likelihood in sequence:
+        if type(ns) is not int:
+            raise TypeError("sequence: expected integer nanoseconds")
+        if ns < previous:
+            raise ValueError("sequence: times must not go backwards")
+        if not isinstance(likelihood, _np.ndarray) or likelihood.dtype.kind not in "iuf":
+            raise TypeError("sequence: expected numeric log likelihood")
+        if (likelihood.shape != D.shape
+                or not _np.all(_np.isfinite(likelihood) | _np.isneginf(likelihood))):
+            raise ValueError("sequence: invalid log likelihood")
+        logs = _log_update(_log_predict(logs, Q, (ns - previous) / 1e9), likelihood)
+        previous = ns
+    return logs
+
+
+def arrival_posterior(prior, stats) -> tuple[float, float]:
+    """Gammaの形にN、率のパラメータに見た秒数を足す (H1〜H8)。"""
+    return prior.alpha + stats.N, prior.beta_s + stats.T_ns / 1e9
+
+
+def arrival_within(alpha: float, beta_s: float, horizon_s: float) -> float:
+    """次のh秒に1回以上届く確率。h=0は0 (H11)。
+
+    極小hの桁落ちとh/βのあふれを避ける (H11・H11b)。
+    """
+    _positive_float(alpha, "alpha")
+    _positive_float(beta_s, "beta_s")
+    _duration(horizon_s, "horizon_s")
+    log_ratio = (_math.log1p(horizon_s / beta_s) if horizon_s <= beta_s else
+                 _math.log(horizon_s) - _math.log(beta_s) + _math.log1p(beta_s / horizon_s))
+    return -_math.expm1(-alpha * log_ratio)
 
 
 def _likelihood(value: _np.ndarray, states: int) -> _np.ndarray:
@@ -217,4 +342,3 @@ def select(probabilities: _np.ndarray, u: float) -> int:
         if u < cumulative:
             return index
     return int(_np.flatnonzero(probabilities > 0)[-1])
-
