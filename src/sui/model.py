@@ -10,7 +10,7 @@ import math as _math
 import numpy as _np
 
 
-Duration = tuple[tuple[float, float], ...]
+Duration = tuple[tuple[float | None, float], ...]
 
 
 def _duration_ns(seconds: float) -> int:
@@ -115,7 +115,7 @@ class GenerativeModel:
 
     Q が無ければ回数から厳密に学ぶ (S1c)。Q は列から行への率で、
     Q と学習の同時は S4b。時間モデルのDは最初の起動時、arrivalsは状態と独立 (M10〜M12)。
-    所要は全行動の有限な点の分布、測る時刻はstartかreport (M13・M14)。
+    所要は全行動の有限な点と届かないNoneの分布、測る時刻はstartかreport (M13・N1)。
     """
 
     states: tuple[str, ...]
@@ -195,7 +195,7 @@ class GenerativeModel:
                 if not isinstance(point, tuple) or len(point) != 2:
                     raise ValueError("durations: expected (seconds, probability) points")
                 seconds, probability = point
-                ns = _duration_ns(seconds)
+                ns = None if seconds is None else _duration_ns(seconds)
                 if ns in seen:
                     raise ValueError("durations: duplicate nanoseconds")
                 seen.add(ns)
@@ -207,12 +207,16 @@ class GenerativeModel:
                 raise ValueError("durations: probabilities must sum to one")
             if self.measures[action] not in ("start", "report"):
                 raise ValueError("measures: expected start or report")
-            durations[action] = tuple(sorted(points))
+            durations[action] = tuple(sorted(points, key=lambda point: (point[0] is None, point[0])))
         object.__setattr__(self, "durations", _MappingProxyType(durations))
         object.__setattr__(self, "measures", _MappingProxyType(dict(self.measures)))
         object.__setattr__(self, "a", _MappingProxyType(counts))
         object.__setattr__(self, "D", _readonly(prior))
         object.__setattr__(self, "log_C", _readonly(preferences))
+
+
+def _has_unreachable(model: GenerativeModel) -> bool:
+    return any(seconds is None for points in model.durations.values() for seconds, _ in points)
 
 
 def model_json(model: GenerativeModel) -> bytes:
@@ -229,7 +233,8 @@ def model_json(model: GenerativeModel) -> bytes:
                         arrivals={route: {"alpha": prior.alpha, "beta_s": prior.beta_s}
                                   for route, prior in model.arrivals.items()})
     if model.durations:
-        material.update(scheme="sui.model.3", durations=dict(model.durations),
+        material.update(scheme="sui.model.4" if _has_unreachable(model) else "sui.model.3",
+                        durations=dict(model.durations),
                         measures=dict(model.measures))
     return _json.dumps(material, ensure_ascii=False, sort_keys=True,
                           separators=(",", ":"), allow_nan=False).encode("utf-8")
@@ -243,13 +248,13 @@ def model_from_json(data: bytes) -> GenerativeModel:
         value = _json.loads(data)
         keys = {"scheme", "states", "outcomes", "actions", "a", "learnable",
                 "D", "log_C", "gamma"}
-        if isinstance(value, dict) and value.get("scheme") in ("sui.model.2", "sui.model.3"):
+        if isinstance(value, dict) and value.get("scheme") in ("sui.model.2", "sui.model.3", "sui.model.4"):
             keys |= {"Q", "arrivals"}
-        if isinstance(value, dict) and value.get("scheme") == "sui.model.3":
+        if isinstance(value, dict) and value.get("scheme") in ("sui.model.3", "sui.model.4"):
             keys |= {"durations", "measures"}
         if not isinstance(value, dict) or set(value) != keys:
             raise ValueError("model: unexpected keys")
-        if value["scheme"] not in ("sui.model.1", "sui.model.2", "sui.model.3"):
+        if value["scheme"] not in ("sui.model.1", "sui.model.2", "sui.model.3", "sui.model.4"):
             raise ValueError("model: unsupported scheme")
         model = GenerativeModel(
             states=tuple(value["states"]), outcomes=tuple(value["outcomes"]),

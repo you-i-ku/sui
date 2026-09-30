@@ -25,7 +25,7 @@ WRITERS = {
     r.Observed: frozenset({r.Role.MEMBRANE}), r.AttemptStarted: frozenset({r.Role.MEMBRANE}),
     r.Decided: frozenset({r.Role.MODEL}), r.JobOpened: frozenset({r.Role.MODEL}),
     r.Intention: frozenset({r.Role.MODEL}), r.Prediction: frozenset({r.Role.MODEL}),
-    r.Interpretation: frozenset({r.Role.MODEL, r.Role.INTERPRETER}), r.Preference: None,
+    r.Interpretation: frozenset({r.Role.MODEL, r.Role.INTERPRETER}), r.Preference: frozenset({r.Role.MODEL}),
 }
 
 
@@ -396,7 +396,7 @@ def test_r18_record_validation_priority(make_record):
         make_record(r.Preference, schema=1, id=Ref(K.JOB, "j1"))
     with pytest.raises(WrongKind):
         make_record(r.Preference, id=Ref(K.JOB, "j1"))
-    with pytest.raises(r.Undecided):
+    with pytest.raises(r.WriterNotAllowed):
         make_record(r.Preference, writer=r.Role.INTERPRETER)
 
 

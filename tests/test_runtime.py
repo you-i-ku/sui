@@ -19,7 +19,7 @@ from threading import Event, Thread, get_ident
 import numpy as np
 import pytest
 
-from sui.agent import Agent, Reading, View, plan, read
+from sui.agent import Agent, Reading, View, plan_s4c as plan, read, replay_decision
 from sui.clock import FakeClock
 from sui.contracts import ContractRef
 from sui.ids import Ref, RefKind as K, SequentialIds
@@ -30,11 +30,13 @@ from sui.runtime import (
     Abandon, Act, Arrived, Commit, Done, Envelope, Failed, Observe, Pledges,
     Reconsider, Start, Think, Thought, ThreadHost, Tick, Window,
 )
-from sui.s1_contracts import ACTION, ATTEMPT, DECISION, OUTCOME
+from sui.s1_contracts import ACTION, ATTEMPT, DECISION as LEGACY_DECISION, OUTCOME
+from sui.s4d_contracts import DECISION
 from sui.s3_contracts import ABANDON, ENDED
 from sui.s4_contracts import BOOT
 from sui.store import StorageFull
 from worlds import (
+    _write_preferences,
     CountingContents, CountingEntries, FlakyContents, FlakyEntries, GatedHand,
     ManualHost, ScriptDrive, ScriptedWorld, WriteCounts, _close, _model,
     _naive_conditional_G, _storage, _stored_rig,
@@ -82,11 +84,9 @@ def _p8(rig):
     for record in _records(rig, Decided):
         entry = _entry(rig, record)
         facts = rig.ledger.snapshot(entry.parents).records
-        if record.body.contract == DECISION:
-            data = record.body.content.as_json()
-            view = View(model=rig.model, frontier=entry.parents, belief=record.body.inputs[0],
-                        reading=read(rig.model, facts))
-            assert plan(view, data["candidates"], u=data["u"]).content == record.body.content
+        if record.body.contract in (LEGACY_DECISION, DECISION):
+            assert replay_decision(model=rig.model, ledger=rig.ledger,
+                                   decision=entry.cid).content == record.body.content
         elif record.body.contract == ABANDON:
             assert record.body.content.as_json() == {"job": str(record.body.inputs[0])}
             assert any(r.id == record.body.inputs[0] and isinstance(r.body, JobOpened) for r in facts)
@@ -105,6 +105,7 @@ def rig_factory(tmp_path):
             entries = FlakyEntries(CountingEntries(store.entries, counts))
             ledger = Ledger(salts=SequentialSalts(), contents=contents, entries=entries)
             rig = _stored_rig(store, ledger=ledger, model=model)
+            _write_preferences(rig.model, rig.ledger, rig.clock, rig.ids)
             rig.contents, rig.entries, rig.writes = contents, entries, counts
             names = {"look1": {"eye" if shared else "eye1"},
                      "look2": {"eye" if shared else "eye2"}, "wait": set()}
@@ -320,7 +321,7 @@ def test_p4_no_pending_decision_content_matches_s2b_exactly(learnable, prior_act
     for action in prior_actions:
         run_step(subject, world, [action], u=.5, clock=clock, ids=ids,
                  ledger=ledger, membrane=membrane)
-    decided, _ = subject.decide(["wait", "look2", "look1"], u=expected["u"],
+    decided, _ = subject.decide_s4c(["wait", "look2", "look1"], u=expected["u"],
                                 clock=clock, ids=ids, ledger=ledger)
     content = decided.body.content.as_json()
     assert content.pop("pending") == []
@@ -413,8 +414,8 @@ def test_w1_a_waits_while_b_completes_a_whole_cycle(rig_factory):
     assert set(_status(r).awaiting) == {a.attempt, b.attempt}
     decisions = _records(r, Decided, DECISION)
     first, second = decisions
-    assert first.body.content.as_json()["pending"] == []
-    assert second.body.content.as_json()["pending"] == [{"job": str(_job(r, a)), "action": "look1"}]
+    assert read(r.model, r.ledger.snapshot(_entry(r, first).parents).records).pending == {}
+    assert read(r.model, r.ledger.snapshot(_entry(r, second).parents).records).pending == {_job(r, a): "look1"}
     assert r.ledger.entries_of(a.attempt)[0].cid in r.ledger.ancestors(_entry(r, second).parents)
     _finish(r, b)
     assert _counts(r, "look2") == [0, 1, 0]
@@ -540,10 +541,10 @@ def test_w5_queued_pending_and_late_thought_keep_original_decisions(rig_factory)
                      if d.id == r.ledger.record(r.ledger.entries_of(bjob)[0].cid).body.decision)
     assert _entry(r, observation).cid not in r.ledger.ancestors(_entry(r, bdecision).parents)
     _finish(r, c)
-    decision = next(d for d in _records(r, Decided, DECISION) if d.body.inputs == (c.view.belief,))
+    decision = next(d for d in _records(r, Decided, DECISION) if d.body.inputs[0] == c.view.belief)
     assert _entry(r, decision).parents == c.view.frontier
-    assert len(decision.body.content.as_json()["pending"]) == 2
-    _close(decision.body.content.as_json()["G"], TABLE1[-1][1])
+    assert len(read(r.model, r.ledger.snapshot(_entry(r, decision).parents).records).pending) == 2
+    _close(decision.body.content.as_json()["J"], TABLE1[-1][1])
 
 
 def test_w6_abandon_releases_prediction_but_not_the_hand(rig_factory):
@@ -558,7 +559,7 @@ def test_w6_abandon_releases_prediction_but_not_the_hand(rig_factory):
     assert thinking.view.reading.pending == {}
     _finish(r, thinking)
     second = _records(r, Decided, DECISION)[-1]
-    _close(second.body.content.as_json()["G"], TABLE1[0][1])
+    _close(second.body.content.as_json()["J"], TABLE1[0][1])
     assert _status(r).queued and len(_work(r, Act)) == 1
     _finish(r, a)
     assert _counts(r, "look1") == [0, 1, 0]
@@ -692,7 +693,7 @@ def test_w12_late_commit_parents_are_the_think_frontier(rig_factory):
     observed = _records(r, Observed, OUTCOME)[0]
     assert _entry(r, observed).cid in r.ledger.ancestors(r.agent.frontier)
     _finish(r, b)
-    decision = next(d for d in _records(r, Decided, DECISION) if d.body.inputs == (b.view.belief,))
+    decision = next(d for d in _records(r, Decided, DECISION) if d.body.inputs[0] == b.view.belief)
     assert _entry(r, decision).parents == b.view.frontier
     assert _entry(r, observed).cid not in r.ledger.ancestors(_entry(r, decision).parents)
 
@@ -1151,7 +1152,7 @@ def test_r1_three_nonoverlapping_cycles_match_run_step_cids(rig_factory):
     for _ in range(3):
         _finish(async_rig, _work(async_rig, Think)[0])
         _finish(async_rig, _work(async_rig, Act)[0])
-    assert len(sync.ledger.entries()) == len(async_rig.ledger.entries()) == 18
+    assert len(sync.ledger.entries()) == len(async_rig.ledger.entries()) == 20
     assert len(_records(async_rig, Observed, BOOT)) == 1
     assert [e.cid for e in async_rig.ledger.entries()] == [e.cid for e in sync.ledger.entries()]
     assert world.calls == async_rig.hand.calls
@@ -1168,7 +1169,7 @@ def test_r1_rebuilt_window_clears_adoption_without_an_extra_belief(rig_factory):
     thinking = [_kick(r) for r in (continuous, rebuilt)]
     assert rebuilt.agent.frontier == rebuilt.ledger.heads()
     before = rebuilt.ledger.entries()
-    assert len(before) == 3  # 最初の信念・起動・起動を採用した信念。
+    assert len(before) == 5  # 最初の信念・付箋・紙・起動・起動を採用した信念。
     assert [e.cid for e in before] == [e.cid for e in continuous.ledger.entries()]
     rebuilt.host.window = rebuilt.make_window(rebuilt.host.pledges)
     rebuilt.host.window.settle()
@@ -1176,12 +1177,12 @@ def test_r1_rebuilt_window_clears_adoption_without_an_extra_belief(rig_factory):
     assert rebuilt.host.pledges.thinking[thinking[1].work] is thinking[1]
     for r, think in zip((continuous, rebuilt), thinking):
         _finish(r, think)
-    # 決定・仕事・試みの3点だけ。印が残ると決定の後に余分な信念が入り7点になる。
-    assert len(continuous.ledger.entries()) == len(rebuilt.ledger.entries()) == 6
+    # 決定・仕事・試みの3点だけ。印が残ると決定の後に余分な信念が入り9点になる。
+    assert len(continuous.ledger.entries()) == len(rebuilt.ledger.entries()) == 8
     assert [e.cid for e in rebuilt.ledger.entries()] == [e.cid for e in continuous.ledger.entries()]
     for r in (continuous, rebuilt):
         _finish(r, _work(r, Act)[0])
-    assert len(continuous.ledger.entries()) == len(rebuilt.ledger.entries()) == 8
+    assert len(continuous.ledger.entries()) == len(rebuilt.ledger.entries()) == 10
     assert [e.cid for e in rebuilt.ledger.entries()] == [e.cid for e in continuous.ledger.entries()]
 
 

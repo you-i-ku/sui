@@ -48,6 +48,25 @@ def _stored_step(rig):
                     ids=rig.ids, ledger=rig.ledger, membrane=rig.membrane)
 
 
+def _write_preferences(model, ledger, clock, ids):
+    """旧C・γの固定値を、新しい入口へ本人の付箋と紙として渡す (§6-6a)。"""
+    from sui.ids import RefKind
+    from sui.records import Preference, Record, Payload, Producer, Role
+    from sui.s4d_contracts import PREFERENCE
+    data = ({"kind": "item", "rule": {"name": "table", "version": "1"}, "args": {
+                "feature": {"name": "candidate_outcome", "version": "1"},
+                "log_probs": [[name, float(value)] for name, value in zip(model.outcomes, model.log_C)]}},
+            {"kind": "style", "H_ns": None, "gamma": float(model.gamma)})
+    records = []
+    for content in data:
+        record = Record(id=ids.new(RefKind.PREFERENCE), at=clock.now(), writer=Role.MODEL,
+            producer=Producer(component="test.preference", code_version="1"),
+            body=Preference(basis=(), contract=PREFERENCE, content=Payload.json(content)))
+        ledger.append(record, ledger.heads())
+        records.append(record)
+    return tuple(records)
+
+
 class ScriptedWorld:
     """行動ごとの台本を先頭から返す世界。"""
 
@@ -138,6 +157,20 @@ def _hand_model(*, measure="report", duration=((1., .5), (4., .5)), world="W2", 
     values = dict(actions=tuple(a), a=a, durations=durations, measures=measures)
     values.update(changes)
     return replace(model, **values)
+
+
+def _lookahead_model(**changes):
+    """S4dのWS。log_C・gammaは新しい入口では使わない。"""
+    values = dict(states=("s0", "s1"), outcomes=("o0", "o1", "none"),
+        actions=("look", "peek", "wait"), D=_np.array([.5, .5]),
+        a={"look": _np.array([[.9, .2], [.1, .8], [0., 0.]]),
+           "peek": _np.array([[1., 0.], [0., 1.], [0., 0.]]),
+           "wait": _np.array([[0., 0.], [0., 0.], [1., 1.]])},
+        log_C=_np.log(_np.ones(3) / 3), gamma=1., learnable=frozenset(),
+        durations={"look": ((1., .5), (3., .5)), "peek": ((2., 1.),), "wait": ((None, 1.),)},
+        measures={a: "report" for a in ("look", "peek", "wait")})
+    values.update(changes)
+    return _GenerativeModel(**values)
 
 
 class HandHistory:

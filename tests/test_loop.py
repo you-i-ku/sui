@@ -4,17 +4,18 @@ import random
 import numpy as np
 import pytest
 
-from sui.agent import ACTION, BELIEF, DECISION, Agent
+from sui.agent import ACTION, BELIEF, Agent, plan_s4c
+from sui.s4d_contracts import DECISION
 from sui.clock import FakeClock
 from sui.contracts import ContractRef
 from sui.ids import Ref, RefKind as K, SequentialIds
 from sui.ledger import Ledger, SequentialSalts
 from sui.loop import ATTEMPT, OUTCOME, StepRecords, run_step
 from sui.records import (
-    AttemptStarted, Decided, JobOpened, Observed, Prediction, Producer, Role,
+    AttemptStarted, Decided, JobOpened, Observed, Prediction, Preference, Producer, Role,
 )
 from worlds import SampledWorld, ScriptedWorld, _close, _model, _true_A
-from worlds import _storage, _stored_rig, _stored_step
+from worlds import _storage, _stored_rig, _stored_step, _write_preferences
 
 
 @pytest.mark.parametrize("backend", ["memory", "sqlite"])
@@ -39,13 +40,17 @@ def _setup(*, learnable=frozenset(), **model_changes):
     ids = SequentialIds()
     ledger = Ledger(salts=SequentialSalts())
     agent.belief_record(clock=clock, ids=ids, ledger=ledger)
+    _write_preferences(agent._model, ledger, clock, ids)
+    agent.adopt(ledger, clock=clock, ids=ids)
     kwargs = dict(clock=clock, ids=ids, ledger=ledger,
                   membrane=Producer(component="test.executor", code_version="1"))
     return agent, kwargs
 
 
 def _assert_step_links(step, previous_belief, revision, through, kwargs):
-    assert step.decided.body.inputs == (previous_belief.id,)
+    preferences = tuple(e.id for e in kwargs["ledger"].entries() if e.body_type is Preference)
+    assert step.decided.body.inputs == (previous_belief.id, *preferences)
+    revision += 1  # 好みを採用した信念。
     assert step.belief.body.basis == ()
     assert step.observed.body.caused_by == step.attempt.id
     assert step.attempt.body.job == step.job.id
@@ -99,16 +104,16 @@ def test_l1_closed_loop_changes_executed_action_and_preserves_evidence_chain():
         previous = agent._belief
         step = run_step(agent, world, ["look1", "look2", "wait"], u=.5, **kwargs)
         data = step.decided.body.content.as_json()
-        _close(data["G"], expected_G[index])
+        _close(data["J"], expected_G[index])
         _close(data["q_pi"], expected_pi[index], atol=1e-9)
         assert data["chosen"] == actions[index]
         _close(agent.q[0], expected_q[index + 1])
         _close(step.belief.body.content.as_json()["q"], agent.q)
         _assert_step_links(step, previous, index, through, kwargs)
     assert world.calls == actions
-    assert len(kwargs["ledger"].entries()) == 16
-    assert len({record.id for record in kwargs["ledger"].entries()}) == 16
-    assert agent.revision == 3
+    assert len(kwargs["ledger"].entries()) == 19
+    assert len({record.id for record in kwargs["ledger"].entries()}) == 19
+    assert agent.revision == 4
     for action, A in _true_A().items():
         _close(agent.counts(action), 10 * A)
 
@@ -136,9 +141,9 @@ def test_l2_learning_and_novelty_reach_fixed_decision_values():
         previous, through = agent._belief, agent.frontier
         step = run_step(agent, world, ["look1", "look2", "wait"], u=.5, **kwargs)
         data = step.decided.body.content.as_json()
-        _close(data["G"], expected_G[index])
+        _close(data["J"], expected_G[index])
         _close(data["q_pi"], expected_pi[index], atol=1e-9)
-        _close(data["G"], np.array(data["risk"]) + data["ambiguity"] - data["novelty"])
+        _close(data["J"], np.array(data["expected_cost"]) - data["information"])
         assert data["chosen"] == actions[index]
         _close(agent.q[0], expected_q[index + 1])
         _assert_step_links(step, previous, index, through, kwargs)
@@ -146,7 +151,7 @@ def test_l2_learning_and_novelty_reach_fixed_decision_values():
         for action in ("look2", "wait"):
             _close(agent.counts(action), 10 * _true_A()[action])
     assert world.calls == actions
-    assert agent.revision == 3
+    assert agent.revision == 4
 
 
 def test_l3_sampled_world_runs_twenty_steps():
@@ -157,10 +162,10 @@ def test_l3_sampled_world_runs_twenty_steps():
         previous, through = agent._belief, agent.frontier
         step = run_step(agent, world, ["look1", "look2", "wait"], u=draws.random(), **kwargs)
         _assert_step_links(step, previous, index, through, kwargs)
-    assert len(kwargs["ledger"].entries()) == 1 + 5 * 20
-    assert len({record.id for record in kwargs["ledger"].entries()}) == 101
+    assert len(kwargs["ledger"].entries()) == 4 + 5 * 20
+    assert len({record.id for record in kwargs["ledger"].entries()}) == 104
     assert agent.q[1] > .5
-    assert agent.revision == 20
+    assert agent.revision == 21
 
 
 @pytest.mark.parametrize("u,action,outcome", [(0.0, "look1", "o0"), (.7, "look2", "o1"), (.99, "wait", "none")])
@@ -210,7 +215,7 @@ def test_l4_failed_step_keeps_accepted_facts(failure, retained):
     with pytest.raises(RuntimeError):
         run_step(agent, world, ["look1", "look2", "wait"], u=.5, **kwargs)
     events = [e for e in kwargs["ledger"].entries() if e.is_event]
-    assert [e.body_type for e in events] == [Decided, JobOpened, AttemptStarted, Observed][:retained]
+    assert [e.body_type for e in events] == [Preference, Preference] + [Decided, JobOpened, AttemptStarted, Observed][:retained]
     assert (agent.frontier, agent.revision, agent._belief, agent.unread,
             agent.q.tolist(), {k: agent.counts(k).tolist() for k in ("look1", "look2", "wait")}) == before
     if failure == "belief_id":
@@ -236,10 +241,10 @@ def test_l4b_failed_synchronous_step_is_pending_only_after_adoption():
     failed_job = next(kwargs["ledger"].record(e.cid) for e in kwargs["ledger"].entries()
                       if e.body_type is JobOpened)
     decision_args = {name: kwargs[name] for name in ("clock", "ids", "ledger")}
-    before, extra_job = agent.decide(["look2"], u=.4, **decision_args)
+    before, extra_job = agent.decide_s4c(["look2"], u=.4, **decision_args)
     assert before.body.content.as_json()["pending"] == []
     agent.adopt(kwargs["ledger"], clock=kwargs["clock"], ids=kwargs["ids"])
-    after, _ = agent.decide(["look2"], u=.4, **decision_args)
+    after, _ = agent.decide_s4c(["look2"], u=.4, **decision_args)
     assert after.body.contract == ContractRef("sui.s1.decision", "3")
     assert after.body.content.as_json()["pending"] == sorted([
         {"job": str(failed_job.id), "action": "look1"},
@@ -271,16 +276,18 @@ def test_l5_learning_reduces_novelty_and_switches_executed_action():
     for index in range(6):
         _close(agent.q, [.5, .5] if index < 4 else [1 / 6, 5 / 6])
         previous, through = agent._belief, agent.frontier
+        legacy = plan_s4c(agent.view(), ["look1", "look2", "wait"], u=.5).content.as_json()
         step = run_step(agent, world, ["look1", "look2", "wait"], u=.5, **kwargs)
         data = step.decided.body.content.as_json()
         assert data["candidates"] == ["look1", "look2", "wait"]
         assert data["chosen"] == actions[index]
-        assert data["novelty"][0] == data["novelty"][2] == 0.0
-        novelties.append(data["novelty"][1])
+        assert legacy["novelty"][0] == legacy["novelty"][2] == 0.0
+        novelties.append(legacy["novelty"][1])
         _close(novelties[-1], expected_novelty[index])
-        _close(data["G"], np.array(data["risk"]) + data["ambiguity"] - data["novelty"])
+        _close(data["J"], np.array(data["expected_cost"]) - data["information"])
+        _close(data["J"], legacy["G"])
         if index in expected_G:
-            _close(data["G"], expected_G[index])
+            _close(data["J"], expected_G[index])
         if index in expected_pi:
             _close(data["q_pi"], expected_pi[index], atol=1e-9)
         k = actions[:index + 1].count("look2")
@@ -298,5 +305,5 @@ def test_l5_learning_reduces_novelty_and_switches_executed_action():
         else:
             _close(after, before, atol=1e-14)
     assert world.calls == actions
-    assert agent.revision == 6
-    assert len(kwargs["ledger"].entries()) == len({record.id for record in kwargs["ledger"].entries()}) == 31
+    assert agent.revision == 7
+    assert len(kwargs["ledger"].entries()) == len({record.id for record in kwargs["ledger"].entries()}) == 34

@@ -43,7 +43,7 @@ def snapshot_of(*records):
 
 
 @pytest.mark.parametrize("body_type,kind", [(Prediction, K.PREDICTION),
-    (Interpretation, K.INTERPRETATION), (Preference, K.PREFERENCE)])
+    (Interpretation, K.INTERPRETATION)])
 def test_s1_derived_types_are_always_unknown(records, body_type, kind):
     obs, prediction = records(), records(Prediction)
     snapshot = snapshot_of(obs, prediction)

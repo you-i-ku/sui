@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from sui.agent import (ACTION, BELIEF, CODE_VERSION, DECISION, Agent, plan, read,
+from sui.agent import (ACTION, BELIEF, CODE_VERSION, DECISION, Agent, plan_s4c as plan, read,
                        ModelMismatch, RebuildMismatch, ModelFalsified)
 from sui.ledger import Ledger, SequentialSalts, DerivedParent
 from sui.clock import FakeClock
@@ -56,7 +56,7 @@ def _setup(model=None, *, record=True):
 
 
 def _decide(rig, candidates=("look1", "look2", "wait"), u=.5):
-    return rig.agent.decide(
+    return rig.agent.decide_s4c(
         candidates, u=u, clock=rig.clock, ids=rig.ids,
         ledger=rig.ledger,
     )
@@ -561,7 +561,7 @@ def test_a10_decision_builds_both_records_before_appending(fail_on):
     rig = _setup()
     before, entries = _full_state(rig.agent), rig.ledger.entries()
     with pytest.raises(RuntimeError):
-        rig.agent.decide(["look1"], u=.5, clock=rig.clock,
+        rig.agent.decide_s4c(["look1"], u=.5, clock=rig.clock,
                          ids=_FailingIds(rig.ids, fail_on), ledger=rig.ledger)
     assert _full_state(rig.agent) == before
     assert rig.ledger.entries() == entries
@@ -998,7 +998,7 @@ def test_a18_other_lineages_jobs_are_read():
     rig = _setup(_model(learnable=frozenset({"look1"})))
     other = Agent(model=rig.model, lineage="someone_else")
     other.belief_record(clock=rig.clock, ids=rig.ids, ledger=rig.ledger)
-    _, job = other.decide(["look1"], u=.5, clock=rig.clock, ids=rig.ids, ledger=rig.ledger)
+    _, job = other.decide_s4c(["look1"], u=.5, clock=rig.clock, ids=rig.ids, ledger=rig.ledger)
     attempt = Record(id=rig.ids.new(K.ATTEMPT), at=rig.clock.now(), writer=Role.MEMBRANE,
                      producer=rig.membrane, body=AttemptStarted(job=job.id, content=Payload.json({}), contract=ATTEMPT))
     rig.ledger.accept(attempt)

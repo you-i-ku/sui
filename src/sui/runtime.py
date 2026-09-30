@@ -207,7 +207,8 @@ class Window:
         return resources
 
     def _reading(self):
-        records = self.ledger.snapshot(self.ledger.heads()).records
+        snapshot = self.ledger.snapshot(self.ledger.heads())
+        records = snapshot.records
         jobs = _read_jobs(self.agent._model, records)
         attempted = {r.body.job for r in records if isinstance(r.body, AttemptStarted)}
         arrived = {r.body.caused_by for r in records if isinstance(r.body, Observed)}
@@ -224,7 +225,8 @@ class Window:
                 used[name] += 1
         if any(used[name] > self.capacity[name] for name in used):
             raise ValueError("capacity: outstanding work exceeds capacity")
-        return jobs, queued, awaiting, used, read(self.agent._model, records)
+        return jobs, queued, awaiting, used, read(
+            self.agent._model, records, unread_preferences=snapshot.unread_preferences)
 
     def status(self) -> Status:
         """時計に触れず、台帳から数えた読み取り専用の写し (W2・W4・W6・R1)。"""

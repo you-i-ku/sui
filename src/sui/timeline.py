@@ -7,6 +7,7 @@ from types import MappingProxyType as _MappingProxyType
 from .ids import Ref as _Ref
 from .records import Record as _Record, Observed as _Observed, representative as _representative
 from .s4_contracts import BOOT as _BOOT, LISTEN as _LISTEN
+from .snapshot import UnreadPreference as _UnreadPreference
 
 
 def _facts(records):
@@ -65,18 +66,26 @@ class Timeline:
         return self._offsets[run] + mono_ns
 
 
-def timeline(records: _Iterable[_Record]) -> Timeline:
+def timeline(records: _Iterable[_Record], *,
+             unread_preferences: _Iterable[_UnreadPreference] = ()) -> Timeline:
     """出来事だけからrun内は単調時計、run間は実時刻でつなぐ (T1〜T10・J6)。
 
     入力は出来事の集合。信念などの葉は採用側で除く (J6)。
     負の間隔は0と印、最初の起動受信が原点。終端は観測の受信だけ (H4)。
     同じ名札は一度。起動の重複は最小seqを使い印を残す。
+    本文の無い好みも時刻をつなぐ。受信とrun_endは増やさない (C2b)。
     """
     records = _facts(records)
     grouped, indexes = {}, {}
     for record in records:
         grouped.setdefault(record.at.run, []).append(record)
         indexes.setdefault(record.at.run_index, set()).add(record.at.run)
+    event_times = {run: list(items) for run, items in grouped.items()}
+    for point in unread_preferences:
+        if not isinstance(point, _UnreadPreference):
+            raise TypeError("unread_preferences: expected UnreadPreference")
+        event_times.setdefault(point.at.run, []).append(point)
+        indexes.setdefault(point.at.run_index, set()).add(point.at.run)
     issues = [{"kind": "concurrent_runs", "run_index": index,
                "runs": tuple(sorted(map(str, runs)))}
               for index, runs in sorted(indexes.items()) if len(runs) > 1]
@@ -100,7 +109,7 @@ def timeline(records: _Iterable[_Record]) -> Timeline:
         if previous is None:
             base = delay
         else:
-            last = max(grouped[previous], key=lambda r: (r.at.seq, str(r.id)))
+            last = max(event_times[previous], key=lambda r: (r.at.seq, str(r.id)))
             gap = boot.at.wall_ns - delay - last.at.wall_ns
             if gap < 0:
                 issues.append({"kind": "negative_wall_gap", "run": str(run), "gap_ns": gap})

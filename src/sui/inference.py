@@ -20,10 +20,296 @@ class ModelViolation(ValueError):
     """モデル上で確率 0 の観測。"""
 
 
-def remaining(duration_ns: tuple[tuple[int, float], ...],
-              unseen_ns: int) -> tuple[tuple[int, float], ...]:
-    """未到着を確かめた所までで絞り、総所要と正規化した重みを返す (E1・E3・E4)。"""
-    points = tuple((ns, p) for ns, p in duration_ns if ns >= unseen_ns)
+class NumericalRange(FloatingPointError):
+    """新しい評価の数値を表せない。近似した決定を残さない (N7)。"""
+
+
+def _s4d_finite(value, reason):
+    if not _np.all(_np.isfinite(value)):
+        raise NumericalRange(reason)
+    return value
+
+
+def _s4d_fsum(values, reason):
+    """有限値の期待値を足す。集計のあふれは意味の禁止にしない (N10)。"""
+    try:
+        result = _math.fsum(values)
+    except (ValueError, OverflowError) as exc:
+        raise NumericalRange(reason) from exc
+    return float(_s4d_finite(result, reason))
+
+
+def _s4d_weighted_cost(probability, cost):
+    """禁止だけ+∞を伝播。有限の費用の積は数値範囲を検査する (N10)。"""
+    if cost == _math.inf:
+        return _math.inf
+    return float(_s4d_finite(float(probability) * float(cost), "weighted cost exceeds numerical range"))
+
+
+def _s4d_cost_sum(values):
+    """枝の禁止は保ち、有限の期待費用の和のあふれは拒む (N10)。"""
+    values = tuple(values)
+    if any(value == _math.inf for value in values):
+        return _math.inf
+    return _s4d_fsum(values, "expected cost sum exceeds numerical range")
+
+
+def _s4d_log_product(*values):
+    """対数で積を作る。正の支え上のあふれを構造的0にしない (N5〜7)。"""
+    result = _np.asarray(values[0], dtype=float)
+    for value in values[1:]:
+        value = _np.asarray(value, dtype=float)
+        supported = _np.isfinite(result) & _np.isfinite(value)
+        with _np.errstate(over="ignore", invalid="ignore"):
+            result = result + value
+        _s4d_finite(result[supported], "log product exceeds numerical range")
+    if _np.any(_np.isnan(result) | _np.isposinf(result)):
+        raise NumericalRange("invalid log product")
+    return result
+
+
+def _s4d_normalize(logs):
+    """最大を先に引いて正規化。空の支えだけ説明不能、あふれはNumericalRange (N6〜8)。"""
+    logs = _np.asarray(logs, dtype=float)
+    if _np.any(_np.isnan(logs) | _np.isposinf(logs)):
+        raise NumericalRange("invalid log distribution")
+    support = _np.isfinite(logs)
+    if not _np.any(support):
+        raise ModelViolation("observations: zero probability under every state")
+    maximum = float(logs.max())
+    with _np.errstate(over="ignore", invalid="ignore"):
+        shifted = logs - maximum
+        offset = float(_scipy_logsumexp(shifted))
+        result = shifted - offset
+    _s4d_finite(result[support], "normalized log probability exceeds numerical range")
+    total = float(_s4d_finite(maximum + offset, "log normalizer exceeds numerical range"))
+    return result, total
+
+
+def _s4d_log_prior(D):
+    result = _np.full_like(D, -_np.inf)
+    result[D > 0] = _np.log(D[D > 0])
+    return result
+
+
+def _s4d_likelihood(a, n, *, learnable):
+    try:
+        return log_likelihood(a, n, learnable=learnable)
+    except FloatingPointError as exc:
+        raise NumericalRange(str(exc)) from exc
+
+
+def _s4d_novelty(log_q, a):
+    """対数の状態×結果の重みで、最後にだけ情報利得を平均する (N5)。"""
+    result = 0.0
+    log_A = _log_A(a)
+    for state in range(len(log_q)):
+        support = a[:, state] > 0
+        column = a[support, state]
+        if len(column) == 1 or not _np.isfinite(log_q[state]):
+            continue
+        log_column = _np.log(column)
+        log_total = _scipy_logsumexp(log_column)
+        g = _np.empty_like(column)
+        small = column < 1000
+        g[small] = _digamma(column[small] + 1) - log_column[small]
+        g[~small] = _g_series(1 / column[~small])
+        g_total = (_digamma(_np.exp(log_total) + 1) - log_total if log_total < _np.log(1000)
+                   else _g_series(_np.exp(-log_total)))
+        kl = _np.maximum(g - g_total, 0.0)
+        result += float(_np.exp(_s4d_log_product(log_q[state], log_A[support, state])) @ kl)
+    return result
+
+
+def _s4d_log_belief(D, likelihoods):
+    """根の回数から対数の信念を作る。共通の大きな項は先に除く (N5・N6)。"""
+    likelihoods = tuple(likelihoods)
+    support = D > 0
+    for value in likelihoods:
+        support &= _np.isfinite(value)
+    if not _np.any(support):
+        raise ModelViolation("observations: zero probability under every state")
+    total = _np.zeros(int(support.sum()))
+    for value in likelihoods:
+        part = value[support]
+        with _np.errstate(over="ignore"):
+            centered = part - part.max()
+        _s4d_finite(centered, "log likelihood difference exceeds numerical range")
+        total = _s4d_log_product(total, centered)
+    result = _np.full_like(D, -_np.inf)
+    result[support] = _s4d_log_product(total - total.max(), _np.log(D[support]))
+    return _s4d_normalize(result)[0]
+
+
+def _s4d_log_matmul(left, right):
+    return _scipy_logsumexp(_s4d_log_product(left[:, :, None], right[None, :, :]), axis=1)
+
+
+def _s4d_poisson_log(k, mean, log_mean):
+    """大きなkはStirling補正とlog1p。丸めたmeanからlog_meanを取り直さない (N8・N9)。"""
+    try:
+        if k < 16:
+            value = _math.fsum((-mean, k * log_mean, -_math.lgamma(k + 1)))
+        else:
+            inverse = 1.0 / k
+            square = inverse * inverse
+            # log(k!)の補正。次の項は1/(1188*k**9)、k>=16で1.3e-14未満。
+            correction = inverse * (1 / 12 - square * (1 / 360 - square * (1 / 1260 - square / 1680)))
+            difference = mean - k
+            ratio = (_math.log1p(difference / k) if abs(difference) <= k / 2 else
+                     log_mean - _math.log(k))
+            value = _math.fsum((-difference, k * ratio,
+                               -.5 * (_math.log(2 * _math.pi) + _math.log(k)), -correction))
+    except (ValueError, OverflowError) as exc:
+        raise NumericalRange("Poisson term exceeds numerical range") from exc
+    return float(_s4d_finite(value, "Poisson term exceeds numerical range"))
+
+
+def _s4d_poisson_tail(K, mean, log_mean):
+    # Chernoff: Pr(N >= K+1) <= exp(-mean + t*(1+log(mean)-log(t))), t>mean。
+    try:
+        t = float(K + 1)
+        if t <= mean:
+            return 0.0
+        value = -mean + t * (1.0 + log_mean - _math.log(t))
+    except (ValueError, OverflowError) as exc:
+        raise NumericalRange("Poisson tail bound exceeds numerical range") from exc
+    return float(_s4d_finite(value, "Poisson tail bound exceeds numerical range"))
+
+
+def _s4d_uniform_terms(mean, log_mean, lower):
+    """相対1e-12の尾の上限からKを先に求める。項数の予算は置かない (N6・N7)。"""
+    target = float(_s4d_finite(lower + _math.log(1e-12), "relative tail bound exceeds numerical range"))
+    low, high = -1, max(0, _math.ceil(mean))
+    while _s4d_poisson_tail(high, mean, log_mean) > target:
+        low, high = high, 2 * high + 1
+    while high - low > 1:
+        mid = (low + high) // 2
+        if _s4d_poisson_tail(mid, mean, log_mean) <= target:
+            high = mid
+        else:
+            low = mid
+    return high
+
+
+def _s4d_log_transition(Q, dt):
+    """Qを対数の一様化で進める。到達しない成分とdt=0だけが構造的0 (N6・N7)。
+
+    最短段数の項を各成分の下限にし、尾がその1e-12以下となるKまで足す。
+    途中の数が表せない時はNumericalRange。旧transitionは使わない。
+    """
+    Q = _array(Q, "Q", 2)
+    if Q.shape[0] != Q.shape[1]:
+        raise ValueError("Q: expected square matrix")
+    _duration(dt, "dt")
+    identity = _np.full_like(Q, -_np.inf)
+    _np.fill_diagonal(identity, 0.0)
+    if not _np.any(Q):
+        return identity
+    Q = _generator(Q)
+    if dt == 0:
+        return identity
+    rate = float(-_np.diag(Q).min())
+    if rate <= 0:
+        raise NumericalRange("uniformization rate is not positive")
+    mean = float(_s4d_finite(rate * dt, "uniformization mean exceeds numerical range"))
+    log_rate = _math.log(rate)
+    log_mean = float(_s4d_finite(log_rate + _math.log(dt), "log uniformization mean exceeds numerical range"))
+    log_P = _np.full_like(Q, -_np.inf)
+    positive = Q > 0
+    log_P[positive] = _np.log(Q[positive]) - log_rate
+    for i in range(len(Q)):
+        diagonal = rate + Q[i, i]
+        if diagonal > 0:
+            log_P[i, i] = _math.log(diagonal) - log_rate
+    reachable = positive | _np.eye(len(Q), dtype=bool)
+    for i in range(len(Q)):
+        reachable |= reachable[:, i, None] & reachable[None, i, :]
+    lower, power = _np.full_like(Q, -_np.inf), identity
+    for k in range(len(Q)):
+        first = reachable & ~_np.isfinite(lower) & _np.isfinite(power)
+        term = _s4d_log_product(power, _s4d_poisson_log(k, mean, log_mean))
+        lower[first] = term[first]
+        power = _s4d_log_matmul(log_P, power)
+    _s4d_finite(lower[reachable], "no finite shortest-path lower bound")
+    K = _s4d_uniform_terms(mean, log_mean, float(lower[reachable].min()))
+    partials, power = [], identity
+    for k in range(K + 1):
+        term = _s4d_log_product(power, _s4d_poisson_log(k, mean, log_mean))
+        # 同じ個数の項の和を組にする。長い逐次加算を避け、保持量はO(log K)。
+        level = 0
+        while level < len(partials) and partials[level] is not None:
+            term = _np.logaddexp(partials[level], term)
+            partials[level] = None
+            level += 1
+        if level == len(partials):
+            partials.append(term)
+        else:
+            partials[level] = term
+        if k < K:
+            power = _s4d_log_matmul(log_P, power)
+    result = _np.full_like(Q, -_np.inf)
+    for term in reversed(partials):
+        if term is not None:
+            result = _np.logaddexp(result, term)
+    _s4d_finite(result[reachable], "uniformization lost a reachable component")
+    return result
+
+
+def _s4d_log_predict(log_q, Q, dt):
+    return _scipy_logsumexp(_s4d_log_product(_s4d_log_transition(Q, dt), log_q[None, :]), axis=1)
+
+
+def _s4d_filter_log(D, Q, sequence):
+    logs, previous = _s4d_log_prior(D), 0
+    for ns, likelihood in sequence:
+        if type(ns) is not int or ns < previous:
+            raise ValueError("sequence: expected nondecreasing integer times")
+        logs = _s4d_normalize(_s4d_log_product(
+            _s4d_log_predict(logs, Q, (ns - previous) / 1e9), likelihood))[0]
+        previous = ns
+    return logs
+
+
+def _s4d_hand_joint_log(D, Q, history, pending, candidate_ns):
+    """新入口の測定時刻の結合。過去の証拠も対数一様化で運ぶ (N6)。"""
+    events = {}
+    for ns, likelihood in history:
+        events.setdefault(ns, []).append(("history", likelihood))
+    for ns, a in pending:
+        events.setdefault(ns, []).append(("pending", _log_A(a)))
+    events.setdefault(candidate_ns, []).append(("candidate", None))
+    table, previous = _s4d_log_prior(D)[None, None, :], 0
+    for ns in sorted(events):
+        if type(ns) is not int or ns < previous:
+            raise ValueError("hand: expected nonnegative integer measurement times")
+        if ns > previous:
+            table = _scipy_logsumexp(_s4d_log_product(table[:, :, None, :],
+                _s4d_log_transition(Q, (ns - previous) / 1e9)[None, None, :, :]), axis=-1)
+        for kind, value in events[ns]:
+            if kind == "history":
+                table = _s4d_log_product(table, value[None, None, :])
+            elif kind == "pending":
+                table = _s4d_log_product(table[:, None, :, :], value[None, :, None, :]).reshape(
+                    -1, table.shape[1], len(D))
+            else:
+                captured = _np.full((len(table), len(D), len(D)), -_np.inf)
+                states = _np.arange(len(D))
+                captured[:, states, states] = table[:, 0, :]
+                table = captured
+            table = _s4d_normalize(table)[0]
+        previous = ns
+    return _s4d_normalize(_scipy_logsumexp(table, axis=-1))[0]
+
+
+def remaining(duration_ns: tuple[tuple[int | None, float], ...],
+              unseen_ns: int, *, strict: bool = False) -> tuple[tuple[int | None, float], ...]:
+    """総所要を根では≥、strict=Trueの木では>で絞り、正規化する (N2)。
+
+    Noneは必ず残す。点が残らない時だけModelViolation。既定はS4cの根の境界。
+    """
+    points = tuple((ns, p) for ns, p in duration_ns
+                   if ns is None or (ns > unseen_ns if strict else ns >= unseen_ns))
     if not points:
         raise ModelViolation("the hand's time model cannot explain the facts")
     total = _math.fsum(p for _, p in points)

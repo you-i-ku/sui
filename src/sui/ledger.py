@@ -21,7 +21,7 @@ from .records import (
     StateRef as _StateRef, Undecided as _Undecided, admit as _admit,
     representative as _representative,
 )
-from .snapshot import Snapshot as _Snapshot
+from .snapshot import Snapshot as _Snapshot, UnreadPreference as _UnreadPreference
 from .store import EntryStore as _EntryStore, MemoryEntries as _MemoryEntries, ReadOnlyStore
 
 
@@ -140,7 +140,7 @@ class Entry:
 
     @property
     def is_event(self) -> bool:
-        return self.category in (_Category.FACT, _Category.INTENTION)
+        return self.category in (_Category.FACT, _Category.INTENTION, _Category.PREFERENCE)
 
 
 def _encode(value):
@@ -418,20 +418,40 @@ class Ledger:
             return Relation.AFTER
         return Relation.CONCURRENT
 
+    def _preference_record(self, entry: Entry) -> _Record | _UnreadPreference:
+        """好みだけは、読めない本文を名札と時刻で運ぶ (C2・C2b)。"""
+        if entry.category is not _Category.PREFERENCE:
+            raise ValueError("entry: expected Preference")
+        try:
+            return self.record(entry.cid)
+        except KeyError:
+            return _UnreadPreference(id=entry.id, at=entry.at, reason="missing content")
+        except (ValueError, TypeError, UnicodeError):
+            return _UnreadPreference(id=entry.id, at=entry.at, reason="corrupt content")
+
     def snapshot(self, frontier: _Iterable[str]) -> _Snapshot:
         """代表が最初に現れる因果の順で出来事を返す (S8・T10b)。"""
         frontier = frozenset(frontier)
         for cid in frontier:
             if not self.entry(cid).is_event:
                 raise DerivedParent(cid)
-        candidates = tuple(self.record(entry.cid)
-                           for entry in self.between((), frontier) if entry.is_event)
+        candidates, unread = [], []
+        for entry in self.between((), frontier):
+            if not entry.is_event:
+                continue
+            record = (self._preference_record(entry) if entry.category is _Category.PREFERENCE
+                      else self.record(entry.cid))
+            if isinstance(record, _UnreadPreference):
+                unread.append(record)
+            else:
+                candidates.append(record)
         selected = {record.id: record for record in _representative(candidates)}
         records = []
         for record in candidates:
             if selected.get(record.id) == record:
                 records.append(selected.pop(record.id))
-        return _Snapshot(records=tuple(records), frontier=frontier)
+        return _Snapshot(records=tuple(records), frontier=frontier,
+                         unread_preferences=tuple(unread))
 
     def merge(self, other: "Ledger", *, events_only: bool = False) -> None:
         # 衝突の全検査を、本文の put を含むすべての書き込みより前に行う。

@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from sui.agent import Agent, ModelFalsified, View, plan, read, _derive_reading, _filtered
+from sui.agent import Agent, ModelFalsified, View, plan_s4c as plan, read, _derive_reading, _filtered, replay_decision
 from sui.contracts import ContractBook, ContractRef
 from sui.ids import Ref, RefKind as K, SequentialIds
 from sui.inference import (ModelViolation, remaining, _hand_efe, _hand_joint_log,
@@ -22,6 +22,7 @@ from sui.model import model_json, model_from_json, model_ref, _duration_ns
 from sui.records import AttemptStarted, JobOpened, Payload, Producer, Role
 from sui.runtime import Think, Tick, Done, Reconsider, Window, _perform
 from sui.s1_contracts import ACTION
+from sui.s4d_contracts import DECISION as S4D_DECISION, DECLARATIONS as S4D_DECLARATIONS
 from sui.s4_contracts import (BELIEF, DECISION, DECLARATIONS, HAND_BELIEF, HAND_DECISION,
                              HAND_DECLARATIONS)
 from worlds import (_hand_model, _time_model, _close, _hand_path_efe, HandHistory,
@@ -91,7 +92,7 @@ def _check_table(data, name, atol=1e-12):
 
 
 @pytest.mark.parametrize("duration", [(), ((-1., 1.),), ((math.nan, 1.),),
-    ((math.inf, 1.),), ((None, 1.),), ((1e308, 1.),), ((0., .5), (1e-10, .5)),
+    ((math.inf, 1.),), ((1e308, 1.),), ((0., .5), (1e-10, .5)),
     ((1., 0.),), ((1., -1.),), ((1., math.nan),), ((1., math.inf),), ((1., .8),),
     ((1., .6), (2., .6)), ((True, 1.),), ((1.,),), None])
 def test_m13_invalid_duration(duration):
@@ -447,7 +448,7 @@ def test_j8_static_duration_model_also_requires_boot_and_time(changing):
     model = _hand_model(Q=_time_model().Q if changing else None)
     r = _rig(model)
     with pytest.raises(ValueError, match="boot"):
-        r.agent.decide(model.actions, u=.5, clock=r.clock, ids=r.ids, ledger=r.ledger, now_mono_ns=0)
+        r.agent.decide_s4c(model.actions, u=.5, clock=r.clock, ids=r.ids, ledger=r.ledger, now_mono_ns=0)
     r.host.step()
     work = _request(r)
     assert work.now_ns == work.observed_ns == 0
@@ -463,20 +464,20 @@ def test_j11_synchronous_default_observed_and_validation(requested_now, expected
     r = _rig(model, h)
     r.agent.adopt(r.ledger, clock=r.clock, ids=r.ids)
     r.clock.advance(500_000_000)
-    decided, _ = r.agent.decide(("look", "wait"), u=.5, clock=r.clock, ids=r.ids,
+    decided, _ = r.agent.decide_s4c(("look", "wait"), u=.5, clock=r.clock, ids=r.ids,
                                 ledger=r.ledger, now_mono_ns=requested_now)
     time = decided.body.content.as_json()["time"]
     assert time["observed_ns"] == NS and time["now_ns"] == expected_now
     assert decided.body.contract == HAND_DECISION
     before = r.ledger.entries()
     with pytest.raises(ValueError, match="observed"):
-        r.agent.decide(("look", "wait"), u=.5, clock=r.clock, ids=r.ids,
+        r.agent.decide_s4c(("look", "wait"), u=.5, clock=r.clock, ids=r.ids,
             ledger=r.ledger, now_mono_ns=2 * NS, observed_mono_ns=3 * NS)
     assert r.ledger.entries() == before
     fresh = _rig(_hand_model())
     boot(fresh.agent, clock=fresh.clock, ids=fresh.ids, ledger=fresh.ledger, membrane=fresh.membrane)
     fresh.clock.advance(2 * NS)
-    decided, _ = fresh.agent.decide(("look",), u=.5, clock=fresh.clock, ids=fresh.ids,
+    decided, _ = fresh.agent.decide_s4c(("look",), u=.5, clock=fresh.clock, ids=fresh.ids,
         ledger=fresh.ledger, now_mono_ns=2 * NS)
     assert decided.body.content.as_json()["time"]["observed_ns"] == 0
 
@@ -601,22 +602,18 @@ def test_p3_belief_restore_and_decision_replay_preserve_content_and_cid(timed):
     assert restored._belief.body.content == step.belief.body.content
     assert restored._belief.body.contract == (HAND_BELIEF if timed else BELIEF)
     decision_entry = r.ledger.entries_of(step.decided.id)[0]
-    old_belief, = step.decided.body.inputs
-    before = Agent.restore(model=model, lineage="hand_time", ledger=r.ledger,
-                           belief=r.ledger.entries_of(old_belief)[0].cid)
     data = step.decided.body.content.as_json()
-    draft = plan(before.view(now_ns=data["time"]["now_ns"],
-        observed_ns=data["time"].get("observed_ns")), data["candidates"], u=data["u"])
+    draft = replay_decision(model=model, ledger=r.ledger, decision=decision_entry.cid)
     assert draft.content == step.decided.body.content
     rebuilt = replace(step.decided, body=replace(step.decided.body, content=draft.content))
     assert r.ledger.append(rebuilt, decision_entry.parents).cid == decision_entry.cid
     if not timed:
-        assert step.decided.body.contract == DECISION
+        assert step.decided.body.contract == S4D_DECISION
         assert set(data["time"]) == {"anchor", "anchor_ns", "now_ns", "dt_s", "pending_measures"}
     else:
-        assert step.decided.body.contract == HAND_DECISION
+        assert step.decided.body.contract == S4D_DECISION
         book = ContractBook()
-        for declaration in DECLARATIONS + HAND_DECLARATIONS:
+        for declaration in DECLARATIONS + HAND_DECLARATIONS + S4D_DECLARATIONS:
             book.register(declaration)
         for record in (step.belief, step.decided):
             meaning = book.get(record.body.contract).meaning

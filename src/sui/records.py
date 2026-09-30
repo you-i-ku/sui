@@ -269,7 +269,7 @@ WRITERS: dict[type, frozenset[Role] | str] = {
     Intention: frozenset({Role.MODEL}),
     Prediction: frozenset({Role.MODEL}),
     Interpretation: frozenset({Role.MODEL, Role.INTERPRETER}),
-    Preference: UNDECIDED,
+    Preference: frozenset({Role.MODEL}),
 }
 
 SCHEMA_VERSION = 3

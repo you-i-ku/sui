@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from sui.agent import Agent, ModelFalsified, RebuildMismatch, View, plan, read, _derive_reading
+from sui.agent import Agent, ModelFalsified, RebuildMismatch, View, plan_s4c as plan, read, _derive_reading
 from sui.clock import FakeClock, Instant, SystemClock
 from sui.contracts import ContractBook, ContractRef
 from sui.ids import Ref, RefKind as K, SequentialIds
@@ -1047,12 +1047,12 @@ def test_t5_sync_decision_requires_current_run_boot_and_advances_birth_prior():
     r = _rig(_time_model(D=np.array([.9, .1])))
     args = dict(clock=r.clock, ids=r.ids, ledger=r.ledger)
     with pytest.raises(ValueError, match="current run boot"):
-        r.agent.decide(r.model.actions, u=.5, now_mono_ns=0, **args)
+        r.agent.decide_s4c(r.model.actions, u=.5, now_mono_ns=0, **args)
     born = boot(r.agent, membrane=r.membrane, **args)
     r.clock.advance(NS)
     with pytest.raises(ValueError, match="now_mono_ns"):
-        r.agent.decide(r.model.actions, u=.5, **args)
-    decided, _ = r.agent.decide(r.model.actions, u=.5, now_mono_ns=NS, **args)
+        r.agent.decide_s4c(r.model.actions, u=.5, **args)
+    decided, _ = r.agent.decide_s4c(r.model.actions, u=.5, now_mono_ns=NS, **args)
     data = decided.body.content.as_json()
     assert decided.body.contract == DECISION
     assert r.agent._belief.body.contract == BELIEF
@@ -1062,7 +1062,7 @@ def test_t5_sync_decision_requires_current_run_boot_and_advances_birth_prior():
     _close(data["q_o"][0], [.2 + .7 * prior0, .8 - .7 * prior0, 0.])
     next_clock = FakeClock(run=Ref(K.RUN, "r2"), run_index=1)
     with pytest.raises(ValueError, match="current run boot"):
-        r.agent.decide(r.model.actions, u=.5, now_mono_ns=0,
+        r.agent.decide_s4c(r.model.actions, u=.5, now_mono_ns=0,
                        clock=next_clock, ids=r.ids, ledger=r.ledger)
 
 
@@ -1179,7 +1179,7 @@ def test_t7b_arrivals_do_not_require_time_for_static_learning_or_decisions():
     for record in h.records:
         r.ledger.append(record, r.ledger.heads())
     r.agent.adopt(r.ledger, clock=r.clock, ids=r.ids)
-    decided, _ = r.agent.decide(model.actions, u=.5, clock=r.clock, ids=r.ids, ledger=r.ledger)
+    decided, _ = r.agent.decide_s4c(model.actions, u=.5, clock=r.clock, ids=r.ids, ledger=r.ledger)
     assert decided.body.contract == STATIC_DECISION
     assert decided.body.content == expected.content
     assert r.agent._belief.body.contract == BELIEF

@@ -4,6 +4,7 @@ from collections.abc import Iterable as _Iterable, Mapping as _Mapping
 from dataclasses import dataclass as _dataclass, field as _field
 from types import MappingProxyType as _MappingProxyType
 import math as _math
+from itertools import product as _product
 
 import numpy as _np
 
@@ -16,21 +17,34 @@ from .inference import (
     reachable as _reachable, filter_log as _filter_log, arrival_posterior as _arrival_posterior,
     _log_A, _log_predict, _log_probability, _log_update,
     remaining as _remaining, _hand_efe,
+    _hand_joint_log,
+    NumericalRange, _s4d_log_product, _s4d_normalize, _s4d_log_belief,
+    _s4d_log_predict, _s4d_filter_log, _s4d_hand_joint_log, _s4d_novelty, _s4d_likelihood,
+    _s4d_finite, _s4d_weighted_cost, _s4d_cost_sum,
 )
 from .s1_contracts import ACTION, BELIEF, DECISION, ATTEMPT as _ATTEMPT, OUTCOME as _OUTCOME
 from .s3_contracts import ABANDON as _ABANDON
 from .s4_contracts import BOOT as _BOOT, LISTEN as _LISTEN, BELIEF as _TIME_BELIEF, DECISION as _TIME_DECISION
 from .s4_contracts import HAND_BELIEF as _HAND_BELIEF, HAND_DECISION as _HAND_DECISION
+from .s4d_contracts import BELIEF as _S4D_BELIEF, DECISION as _S4D_DECISION
+from .preference import (PreferenceView as _PreferenceView, from_ledger as _preference_view,
+                         current as _current_preference, resolve as _resolve_preference,
+                         cost, EvaluationInput as _EvaluationInput)
+from .lookahead import OutsideEvaluationType, _policy as _s4d_policy
+from .contracts import ContractRef as _ContractRef
+from .snapshot import UnreadPreference as _UnreadPreference
 from .timeline import (Timeline as _Timeline, TimelineError as _TimelineError,
                        ArrivalStats as _ArrivalStats, timeline as _timeline,
                        _facts, _membrane, _listen, _arrivals)
-from .model import GenerativeModel as _GenerativeModel, model_ref as _model_ref, _readonly, _duration_ns
+from .model import (GenerativeModel as _GenerativeModel, model_ref as _model_ref,
+                    _readonly, _duration_ns, _has_unreachable)
 from .ledger import Ledger as _Ledger, DerivedParent as _DerivedParent, UnknownEntry as _UnknownEntry
 from .records import (
     AttemptStarted as _AttemptStarted, Decided as _Decided,
     JobOpened as _JobOpened, Observed as _Observed, Payload as _Payload,
     Prediction as _Prediction, Producer as _Producer, Record as _Record,
     Role as _Role, StateRef as _StateRef, Category as _Category,
+    Preference as _Preference,
 )
 
 
@@ -63,6 +77,8 @@ class Reading:
     started: _Mapping[_Ref, tuple[int, ...]] = _field(default_factory=dict)
     _started_runs: _Mapping[_Ref, tuple[_Ref, ...]] = _field(default_factory=dict)
     _event_ns: _Mapping[_Ref, int] = _field(default_factory=dict)
+    preferences: tuple[_Record, ...] = ()
+    unread_preferences: tuple[_UnreadPreference, ...] = ()
 
     def __post_init__(self) -> None:
         counts = {}
@@ -78,6 +94,8 @@ class Reading:
             object.__setattr__(self, name, _MappingProxyType(
                 {key: tuple(value) for key, value in getattr(self, name).items()}))
         object.__setattr__(self, "_event_ns", _MappingProxyType(dict(self._event_ns)))
+        object.__setattr__(self, "preferences", tuple(self.preferences))
+        object.__setattr__(self, "unread_preferences", tuple(self.unread_preferences))
         object.__setattr__(self, "_clock_issues", tuple(
             _MappingProxyType(dict(issue)) for issue in self._clock_issues))
 
@@ -106,7 +124,8 @@ def _read_jobs(model: _GenerativeModel, records: _Iterable[_Record]) -> dict[_Re
     return jobs
 
 
-def read(model: _GenerativeModel, records: _Iterable[_Record]) -> Reading:
+def read(model: _GenerativeModel, records: _Iterable[_Record], *,
+         unread_preferences: _Iterable[_UnreadPreference] = ()) -> Reading:
     """事実の集合から読む。順番待ちも pending、観測は約束を問わず終端。
 
     ABANDON は対応する仕事だけを pending から外す。
@@ -114,15 +133,18 @@ def read(model: _GenerativeModel, records: _Iterable[_Record]) -> Reading:
     作り直す。時刻不明を補わず、Qなしの結果は回数として読む。
     到着の本文は問わない (T7・T7b・Q9〜Q13・H1〜H10)。
     所要ありは測定時刻順と試みの時刻の組を事実から作る (F1〜F3・J9・J15)。
+    好みは別に持ち、本文が無い時も時刻だけは軸につなぐ (C2・C2b)。
     """
     records = _facts(records)
+    unread_preferences = tuple(unread_preferences)
     if model.durations:
-        records = tuple(r for r in records if r.category in (_Category.FACT, _Category.INTENTION))
+        records = tuple(r for r in records if r.category in (
+            _Category.FACT, _Category.INTENTION, _Category.PREFERENCE))
     timed = _timed(model)
     axis, issues, arrivals, counted = None, (), {}, set()
     if timed:
         try:
-            axis = _timeline(records)
+            axis = _timeline(records, unread_preferences=unread_preferences)
             arrivals, counted = _arrivals(records, axis, model.arrivals)
         except _TimelineError as exc:
             issues = exc.clock_issues
@@ -228,11 +250,17 @@ def read(model: _GenerativeModel, records: _Iterable[_Record]) -> Reading:
                     started[job].append(ns)
         started = {job: tuple(sorted(times)) for job, times in started.items()}
         started_runs = {job: tuple(sorted(runs, key=str)) for job, runs in started_runs.items()}
+        for point in unread_preferences:
+            if axis is not None and point.at.run in axis.runs:
+                ns = axis.to_axis(point.at.run, point.at.mono_ns)
+                event_ns[point.at.run] = max(event_ns.get(point.at.run, ns), ns)
     return Reading(n=n, unread=unread, pending=pending,
                    timeline=axis, sequence=tuple(sorted(sequence, key=lambda item:
                        (item[0], item[1], item[2], str(item[3])))),
                    arrivals=arrivals, _clock_issues=issues, started=started,
-                   _started_runs=started_runs, _event_ns=event_ns)
+                   _started_runs=started_runs, _event_ns=event_ns,
+                   preferences=tuple(r for r in records if isinstance(r.body, _Preference)),
+                   unread_preferences=unread_preferences)
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -243,6 +271,7 @@ class View:
     reading: Reading
     now_ns: int | None = None
     observed_ns: int | None = None
+    preferences: _PreferenceView = _field(default_factory=_PreferenceView)
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -250,6 +279,8 @@ class Draft:
     parents: frozenset[str]
     belief: _Ref
     content: _Payload
+    contract: _ContractRef | None = None
+    preference_inputs: tuple[_Ref, ...] = ()
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -278,6 +309,8 @@ def _timed(model):
 
 
 def _belief_contract(model):
+    if _has_unreachable(model):
+        return _S4D_BELIEF
     return _HAND_BELIEF if model.durations else (_TIME_BELIEF if _timed(model) else BELIEF)
 
 
@@ -326,11 +359,13 @@ def _hand_times(view, pending):
             earlier.append(str(job))
         unseen = max(0, observed - start) if starts else 0
         try:
-            points = _remaining(tuple((_duration_ns(d), p) for d, p in model.durations[action]), unseen)
+            points = _remaining(tuple((None if d is None else _duration_ns(d), p)
+                                      for d, p in model.durations[action]), unseen)
         except _ModelViolation as exc:
             raise ModelFalsified("the hand's time model cannot explain the facts") from exc
         branches.append((model.a[action], tuple(
-            (start if model.measures[action] == "start" else start + d, p) for d, p in points)))
+            (None if d is None else start if model.measures[action] == "start" else start + d, p)
+            for d, p in points)))
     return tuple(branches), earlier
 
 
@@ -355,7 +390,14 @@ def _derive_reading(model, reading):
     return q, a
 
 
-def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
+def plan_s4c(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
+    """model.1〜3だけを旧の計算に渡す。contentはS4cと同じ (C5・P5)。"""
+    if _has_unreachable(view.model):
+        raise ValueError("plan_s4c: sui.model.4 is not supported")
+    return _plan_s4c(view, candidates, u=u)
+
+
+def _plan_s4c(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
     """予測の枝で成分ごとに平均し、その G から一度だけ選ぶ純粋な計算。
 
     仮の回数を事実にせず、到着はモデルどおり必ず起こると仮定する。
@@ -488,6 +530,235 @@ def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
     return Draft(parents=view.frontier, belief=view.belief, content=_Payload.json(content))
 
 
+def _candidate_names(model, candidates):
+    unique = set()
+    for action in candidates:
+        if not isinstance(action, str):
+            raise TypeError("candidate: expected str")
+        if action not in model.actions:
+            raise ValueError("candidate: unknown or empty action")
+        unique.add(action)
+    if not unique:
+        raise ValueError("candidates: expected at least one action")
+    return tuple(sorted(unique))
+
+
+def _one_step_time(view):
+    model = view.model
+    if model.Q is None and not model.durations:
+        return None
+    anchor, anchor_ns = _model_anchor(model, view.reading)
+    if anchor is None:
+        raise ValueError("plan: an adopted boot is required")
+    if type(view.now_ns) is not int:
+        raise ValueError("plan: now_ns is required in integer nanoseconds")
+    if view.now_ns < anchor_ns:
+        raise ValueError("plan: now_ns precedes anchor")
+    time = {"anchor": str(anchor), "anchor_ns": anchor_ns,
+            "now_ns": view.now_ns, "dt_s": (view.now_ns - anchor_ns) / 1e9,
+            "pending_measures": "now"}
+    if model.durations:
+        if type(view.observed_ns) is not int or view.observed_ns > view.now_ns:
+            raise ValueError("plan: integer observed_ns must not follow now_ns")
+        time.pop("pending_measures")
+        time.update(observed_ns=view.observed_ns, measures="model", start_is="attempt_record",
+                    candidate_start="now", queued_start="now")
+    return time
+
+
+def _one_step_components(log_q, a, learnable, costs):
+    from scipy.special import logsumexp as _logsumexp
+    log_q = _s4d_normalize(log_q)[0]
+    log_A = _log_A(a)
+    joint = _s4d_log_product(log_A, log_q[None, :])
+    predicted = _logsumexp(joint, axis=1)
+    supported = _np.isfinite(predicted)
+    if _np.any(supported & _np.isposinf(costs)):
+        expected = _math.inf
+    else:
+        with _np.errstate(over="ignore", invalid="ignore"):
+            weighted = _np.exp(predicted[supported]) * costs[supported]
+            _s4d_finite(weighted, "weighted cost exceeds numerical range")
+            expected = float(_s4d_finite(_np.sum(weighted), "expected cost sum exceeds numerical range"))
+    positive = _np.isfinite(joint)
+    ambiguity = -float(_np.sum(_np.exp(joint[positive]) * log_A[positive]))
+    entropy = -float(_np.sum(_np.exp(predicted[supported]) * predicted[supported]))
+    information = entropy - ambiguity + (_s4d_novelty(log_q, a) if learnable else 0.0)
+    return expected, information
+
+
+def _average_components(branches):
+    expected, information = 0.0, 0.0
+    for log_probability, (branch_cost, branch_information) in branches:
+        probability = _math.exp(log_probability)
+        # 正の枝の重みが0に丸まっても禁止は取り消さない。
+        expected = _s4d_cost_sum((expected, _s4d_weighted_cost(probability, branch_cost)))
+        information = float(_s4d_finite(information + probability * branch_information,
+                                       "expected information exceeds numerical range"))
+    return expected, information
+
+
+def _one_step(view, actions, resolved):
+    """外の費用と条件つき情報を分ける。Noneの報告を仮の観測にしない (N3・C4・C5)。"""
+    from scipy.special import logsumexp as _logsumexp
+    model, reading = view.model, view.reading
+    time = _one_step_time(view)
+    pending = sorted(reading.pending.items(), key=lambda item: str(item[0]))
+    hand_pending = None
+    if model.durations:
+        hand_pending, time["earlier_run_pending"] = _hand_times(view, pending)
+    if reading._clock_issues:
+        raise ModelFalsified("the timeline cannot explain the facts")
+    costs = _np.array([cost(resolved, _EvaluationInput(evaluation="one_step",
+        candidate_outcome=outcome)) for outcome in model.outcomes])
+
+    def static(n, index, action):
+        log_q = _s4d_log_belief(model.D, [_s4d_likelihood(model.a[name], n[name],
+            learnable=name in model.learnable) for name in model.actions])
+        a = {name: _ledger(model.a[name], n[name]) if name in model.learnable else model.a[name]
+             for name in model.actions}
+        if index == len(pending):
+            return _one_step_components(log_q, a[action], action in model.learnable, costs)
+        waiting = pending[index][1]
+        present, absent = 0.0, -_math.inf
+        if hand_pending is not None:
+            points = hand_pending[index][1]
+            present = float(_logsumexp([_math.log(p) for ns, p in points if ns is not None]))
+            absent = float(_logsumexp([_math.log(p) for ns, p in points if ns is None]))
+        branches = []
+        if _math.isfinite(absent):
+            branches.append((absent, static(n, index + 1, action)))
+        if _math.isfinite(present):
+            predicted = _logsumexp(_s4d_log_product(_log_A(a[waiting]), log_q[None, :]), axis=1)
+            for outcome, probability in enumerate(predicted):
+                if _np.isfinite(probability):
+                    branch = dict(n)
+                    branch[waiting] = n[waiting].copy()
+                    branch[waiting][outcome] += 1
+                    branches.append((float(_s4d_log_product(present, probability)),
+                                     static(branch, index + 1, action)))
+        return _average_components(branches)
+
+    def changing(log_q, index, action):
+        log_q = _s4d_normalize(log_q)[0]
+        if index == len(pending):
+            return _one_step_components(log_q, model.a[action], False, costs)
+        waiting = pending[index][1]
+        likelihoods = _log_A(model.a[waiting])
+        predicted = _logsumexp(_s4d_log_product(likelihoods, log_q[None, :]), axis=1)
+        return _average_components((probability, changing(
+            _s4d_log_product(log_q, likelihoods[outcome]), index + 1, action))
+            for outcome, probability in enumerate(predicted) if _np.isfinite(probability))
+
+    def hand(action):
+        from scipy.special import logsumexp as _branch_logsumexp
+        logs = {name: _log_A(model.a[name]) for name in model.actions}
+        history = tuple((ns, logs[name][model.outcomes.index(outcome)])
+                        for ns, _, _, _, name, outcome in reading.sequence)
+        times = tuple((view.now_ns if model.measures[action] == "start" else
+                       view.now_ns + _duration_ns(d), p) for d, p in model.durations[action])
+        branches = []
+        for combination in _product(*(points for _, points in hand_pending), times):
+            weight = _math.fsum(_math.log(p) for _, p in combination)
+            measured = tuple((ns, a) for (a, _), (ns, _) in zip(hand_pending, combination[:-1])
+                             if ns is not None)
+            joint = _s4d_hand_joint_log(model.D, model.Q, history, measured, combination[-1][0])
+            for log_q, mass in zip(joint, _branch_logsumexp(joint, axis=1)):
+                if _np.isfinite(mass):
+                    branches.append((float(_s4d_log_product(weight, mass)),
+                        _one_step_components(log_q, model.a[action], False, costs)))
+        return _average_components(branches)
+
+    try:
+        logs = {name: _log_A(model.a[name]) for name in model.actions}
+        now_log = (_s4d_log_predict(_s4d_filter_log(model.D, model.Q,
+            ((ns, logs[name][model.outcomes.index(outcome)])
+             for ns, _, _, _, name, outcome in reading.sequence)), model.Q, time["dt_s"])
+                   if model.Q is not None and not model.durations else None)
+        components = [hand(action) if model.Q is not None and model.durations else
+                      static(reading.n, 0, action) if model.Q is None else
+                      changing(now_log, 0, action) for action in actions]
+    except _ModelViolation as exc:
+        raise ModelFalsified("the model cannot explain the facts") from exc
+    return components, time
+
+
+def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
+    """採用した好みだけで決める。白紙は知る価値だけ、モデルのC・γは読まない (C4)。"""
+    resolved = _resolve_preference(_current_preference(view.preferences), view)
+    actions = _candidate_names(view.model, candidates)
+    one_step = resolved.H_ns is None
+    for item in resolved.items:
+        if ("one_step" if one_step else "lookahead") not in item.feature.evaluations:
+            raise OutsideEvaluationType("the feature is outside this evaluation type")
+    if not one_step:
+        from .lookahead import evaluate as _evaluate_lookahead
+        return _evaluate_lookahead(view, actions, resolved, u=u)
+    if any(d is None for action in actions for d, _ in view.model.durations.get(action, ())):
+        raise OutsideEvaluationType("one_step requires every candidate to return a result")
+    components, time = _one_step(view, actions, resolved)
+    expected, information = zip(*components)
+    values = [c - i for c, i in components]
+    probabilities = _s4d_policy(values, resolved.gamma)
+    chosen = actions[_select(probabilities, u)]
+    encode = lambda value: "+inf" if value == _math.inf else float(value)
+    content = {"evaluation": "one_step", "items": [
+        {"id": str(item.id), "rule": {"name": item.rule.name, "version": item.rule.version}}
+        for item in resolved.items], "style": None if resolved.style is None else str(resolved.style),
+        "H_ns": None, "gamma": resolved.gamma, "candidates": list(actions), "u": float(u),
+        "chosen": chosen, "J": list(map(encode, values)), "q_pi": probabilities.tolist(),
+        "expected_cost": list(map(encode, expected)), "information": list(map(float, information))}
+    if time is not None:
+        content["time"] = time
+    inputs = tuple(item.id for item in resolved.items) + (() if resolved.style is None else (resolved.style,))
+    return Draft(parents=view.frontier, belief=view.belief, content=_Payload.json(content),
+                 contract=_S4D_DECISION, preference_inputs=inputs)
+
+
+def replay_decision(*, model: _GenerativeModel, ledger: _Ledger, decision: str) -> Draft:
+    """約束とモデルの方式を確かめ、親から全欄とinputsを完全照合する (C8・P5)。"""
+    entry, record = ledger.entry(decision), ledger.record(decision)
+    if not isinstance(record.body, _Decided):
+        raise ValueError("decision: expected Decided")
+    contract = record.body.contract
+    if contract not in (_S4D_DECISION, DECISION, _TIME_DECISION, _HAND_DECISION):
+        raise ValueError("decision: incompatible contract")
+    legacy_contract = (_HAND_DECISION if model.durations else
+                       _TIME_DECISION if model.Q is not None else DECISION)
+    if contract != _S4D_DECISION and contract != legacy_contract:
+        raise RebuildMismatch(fields=("contract",))
+    if not record.body.inputs:
+        raise RebuildMismatch(fields=("inputs",))
+    beliefs = [e for e in ledger.entries_of(record.body.inputs[0])
+               if e.parents == entry.parents and e.body_type is _Prediction]
+    if not beliefs:
+        raise RebuildMismatch(fields=("inputs",))
+    subject = Agent.restore(model=model, lineage="replay", ledger=ledger,
+                            belief=min(beliefs, key=lambda e: e.cid).cid)
+    data = _json_content(record.body.content)
+    if not isinstance(data, dict):
+        raise RebuildMismatch(fields=("content",))
+    try:
+        time = data.get("time", {})
+        view = subject.view(now_ns=time.get("now_ns"), observed_ns=time.get("observed_ns"))
+        draft = (plan if contract == _S4D_DECISION else plan_s4c)(
+            view, data["candidates"], u=data["u"])
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        raise RebuildMismatch(fields=("content",)) from exc
+    differences = []
+    if (draft.belief, *draft.preference_inputs) != record.body.inputs:
+        differences.append("inputs")
+    rebuilt = draft.content.as_json()
+    if draft.content != record.body.content:
+        differences.extend(sorted(key for key in set(data) | set(rebuilt)
+                                  if data.get(key) != rebuilt.get(key)))
+        if not differences:
+            differences.append("content")
+    if differences:
+        raise RebuildMismatch(fields=tuple(differences))
+    return draft
+
+
 _REASONS = frozenset({"no_attempt", "unknown_attempt", "unreadable_attempt", "contract",
                       "content", "unknown_outcome", "impossible", "ambiguous_attempt",
                       "no_clock", "no_receipt_time"})
@@ -579,6 +850,7 @@ class Agent:
         self._frontier: frozenset[str] = frozenset()
         self._model_ref = _model_ref(model)
         self._reading = read(model, ())
+        self._preferences = _PreferenceView()
         self._q, self._a = _derive_reading(model, self._reading)
         self._revision = 0
         self._belief: _Record | None = None
@@ -663,21 +935,21 @@ class Agent:
         return record
 
     def view(self, *, now_ns: int | None = None, observed_ns: int | None = None) -> View:
-        """今の先端の変わらない入力。信念が無い・説明不能なら例外 (P9・W10)。"""
-        if self._q is None:
-            raise ModelFalsified("the model cannot explain the facts")
+        """今の先端を固定する。保存qがNoneでも説明の可否は各評価入口で決める (N6)。"""
         if self._belief is None:
             raise ValueError("view: a belief record is required")
         return View(model=self._model, frontier=self.frontier,
-                    belief=self._belief.id, reading=self._reading, now_ns=now_ns, observed_ns=observed_ns)
+                    belief=self._belief.id, reading=self._reading, now_ns=now_ns,
+                    observed_ns=observed_ns, preferences=self._preferences)
 
     def prepare(self, draft: Draft, *, clock: _Clock, ids: _IdSource) -> Commit:
         """両記録を作るだけ。見た親を保ち、台帳・主体を変えない (P10・K4・W12)。"""
         decided = _Record(
             id=ids.new(_RefKind.DECISION), at=clock.now(), writer=_Role.MODEL,
             producer=self.producer,
-            body=_Decided(inputs=(draft.belief,),
-                          contract=(_HAND_DECISION if self._model.durations else
+            body=_Decided(inputs=(draft.belief, *draft.preference_inputs),
+                          contract=(draft.contract if draft.contract is not None else
+                                    _HAND_DECISION if self._model.durations else
                                     _TIME_DECISION if self._model.Q is not None else DECISION),
                           content=draft.content),
         )
@@ -702,8 +974,19 @@ class Agent:
             if not parent.is_event:
                 raise ValueError("commit: parents must be events")
         inputs = prepared.decided.body.inputs
-        if len(inputs) != 1:
+        if not inputs or (prepared.decided.body.contract != _S4D_DECISION and len(inputs) != 1):
             raise ValueError("commit: one belief is required")
+        if prepared.decided.body.contract == _S4D_DECISION:
+            data = prepared.decided.body.content.as_json()
+            expected = [item["id"] for item in data["items"]]
+            if data["style"] is not None:
+                expected.append(data["style"])
+            if list(map(str, inputs[1:])) != expected:
+                raise ValueError("commit: preference inputs differ")
+            ancestors = ledger.ancestors(prepared.parents)
+            if any(not any(entry.cid in ancestors and entry.body_type is _Preference
+                           for entry in ledger.entries_of(ref)) for ref in inputs[1:]):
+                raise ValueError("commit: preference inputs must belong to the draft's parents")
         beliefs = ledger.entries_of(inputs[0])
         if not beliefs or not any(
                 isinstance(ledger.record(entry.cid).body, _Prediction)
@@ -719,6 +1002,20 @@ class Agent:
                ids: _IdSource, ledger: _Ledger,
                now_mono_ns: int | None = None,
                observed_mono_ns: int | None = None) -> tuple[_Record, _Record]:
+        """同期も新しい入口を通す。好みは取り込み済みのviewで固定 (C3・C4)。"""
+        return self._decide(candidates, planner=plan, u=u, clock=clock, ids=ids, ledger=ledger,
+                            now_mono_ns=now_mono_ns, observed_mono_ns=observed_mono_ns)
+
+    def decide_s4c(self, candidates: _Iterable[str], *, u: float, clock: _Clock,
+                   ids: _IdSource, ledger: _Ledger,
+                   now_mono_ns: int | None = None,
+                   observed_mono_ns: int | None = None) -> tuple[_Record, _Record]:
+        """互換の入口で旧の約束とcontentを作る (C5・P5)。"""
+        return self._decide(candidates, planner=plan_s4c, u=u, clock=clock, ids=ids, ledger=ledger,
+                            now_mono_ns=now_mono_ns, observed_mono_ns=observed_mono_ns)
+
+    def _decide(self, candidates, *, planner, u, clock, ids, ledger,
+                now_mono_ns=None, observed_mono_ns=None):
         """同期も同じ計算。所要ありの既定observedは取り込み済みの受信まで (J11)。
 
         既定は同じ受信の道を順番どおり抜けなく取り込む場合に使う。
@@ -736,7 +1033,7 @@ class Agent:
                     raise ValueError("decide: observed_mono_ns must be integer nanoseconds")
                 observed = (axis.run_end_ns[clock.run] if observed_mono_ns is None else
                             axis.to_axis(clock.run, observed_mono_ns))
-        prepared = self.prepare(plan(self.view(now_ns=now, observed_ns=observed), candidates, u=u),
+        prepared = self.prepare(planner(self.view(now_ns=now, observed_ns=observed), candidates, u=u),
                                 clock=clock, ids=ids)
         self.commit(prepared, ledger=ledger)
         return prepared.decided, prepared.job
@@ -753,13 +1050,16 @@ class Agent:
             raise ValueError("adopt: cannot move behind the current frontier")
         if new == old:
             return None
-        reading = read(self._model, ledger.snapshot(target).records)
+        snapshot = ledger.snapshot(target)
+        reading = read(self._model, snapshot.records,
+                       unread_preferences=snapshot.unread_preferences)
+        preferences = _preference_view(ledger, target)
         q, a = _derive_reading(self._model, reading)
         revision = self.revision + 1
         record = self._belief_record(reading, q, a, revision, clock=clock, ids=ids)
         ledger.append(record, target)
-        self._frontier, self._reading, self._q, self._a, self._revision, self._belief = (
-            target, reading, q, a, revision, record)
+        self._frontier, self._reading, self._q, self._a, self._revision, self._belief, self._preferences = (
+            target, reading, q, a, revision, record, preferences)
         return record
 
     @classmethod
@@ -779,7 +1079,9 @@ class Agent:
         subject = cls(model=model, lineage=lineage, component=component)
         if data["model"] != subject.model_ref:
             raise ModelMismatch("belief: model reference differs")
-        reading = read(model, ledger.snapshot(entry.parents).records)
+        snapshot = ledger.snapshot(entry.parents)
+        reading = read(model, snapshot.records, unread_preferences=snapshot.unread_preferences)
+        preferences = _preference_view(ledger, entry.parents)
         q, a = _derive_reading(model, reading)
         rebuilt = subject._content(reading, q, a)
         differences = tuple(sorted(key for key in rebuilt if rebuilt[key] != data[key]
@@ -789,4 +1091,5 @@ class Agent:
             raise RebuildMismatch(fields=differences)
         subject._frontier, subject._reading, subject._q, subject._a = entry.parents, reading, q, a
         subject._revision, subject._belief = record.producer.state.revision, record
+        subject._preferences = preferences
         return subject

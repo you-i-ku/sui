@@ -7,7 +7,7 @@ import tomllib
 
 import pytest
 
-from sui import agent, loop, s1_contracts, s3_contracts, s4_contracts
+from sui import agent, loop, s1_contracts, s3_contracts, s4_contracts, s4d_contracts
 from sui.clock import FakeClock
 from sui.contracts import ContractBook, ContractRef, UnknownContract
 from sui.ids import Ref, RefKind, SequentialIds
@@ -73,7 +73,8 @@ def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
     assert {(c.ref.name, c.ref.version) for c in s3_contracts.DECLARATIONS} == {
         ("sui.s3.ended", "1"), ("sui.s3.abandon", "1")}
     assert isinstance(s3_contracts.DECLARATIONS, tuple) and len(s3_contracts.DECLARATIONS) == 2
-    declarations = s1_contracts.DECLARATIONS + s3_contracts.DECLARATIONS + (s4_contracts.DECLARATIONS[0],)
+    declarations = tuple(c for c in s1_contracts.DECLARATIONS if c.ref != s1_contracts.DECISION)
+    declarations += s3_contracts.DECLARATIONS + (s4_contracts.DECLARATIONS[0], s4d_contracts.DECLARATIONS[0])
     book = ContractBook()
     for declaration in declarations:
         book.register(declaration)
@@ -83,7 +84,7 @@ def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
     assert book.get(RECORD_SCHEMA.ref) is RECORD_SCHEMA
     records = _actual_records()
     assert len(records) == 6
-    assert {(r.body.contract.name, r.body.contract.version) for r in records} == expected
+    assert {(r.body.contract.name, r.body.contract.version) for r in records} == expected - {("sui.s1.decision", "3")} | {("sui.s4d.decision", "1")}
     records += _actual_s3_records()
     assert {r.body.contract for r in records} == {c.ref for c in declarations}
     for record in records:
