@@ -10,6 +10,20 @@ from scipy.special import digamma as _digamma
 from sui.model import GenerativeModel as _GenerativeModel
 
 
+def _lattice_model(**changes):
+    """S4b-1aの独立の固定値の世界。配列は観測×状態 (§3-3の例A・B)。"""
+    rate = _math.log(2) / 2
+    values = dict(states=("s0", "s1"), outcomes=("x", "y"), actions=("a", "b", "f"),
+        a={"a": _np.array([[2., 1.], [1., 3.]]),
+           "b": _np.array([[1., 3.], [2., 1.]]),
+           "f": _np.array([[.75, .25], [.25, .75]])},
+        learnable=frozenset({"a", "b"}), D=_np.array([.4, .6]),
+        log_C=_np.log(_np.array([.5, .5])), gamma=1.,
+        Q=_np.array([[-rate, rate], [rate, -rate]]))
+    values.update(changes)
+    return _GenerativeModel(**values)
+
+
 @_contextmanager
 def _storage(path, backend="sqlite"):
     from sui.ledger import MemoryContents

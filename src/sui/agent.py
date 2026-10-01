@@ -27,6 +27,9 @@ from .s3_contracts import ABANDON as _ABANDON
 from .s4_contracts import BOOT as _BOOT, LISTEN as _LISTEN, BELIEF as _TIME_BELIEF, DECISION as _TIME_DECISION
 from .s4_contracts import HAND_BELIEF as _HAND_BELIEF, HAND_DECISION as _HAND_DECISION
 from .s4d_contracts import BELIEF as _S4D_BELIEF, DECISION as _S4D_DECISION
+from .s4b_contracts import BELIEF as _S4B_BELIEF
+from .lattice import (learn as _learn, hand_table as _lattice_hand_table,
+                      one_step_components as _lattice_components)
 from .preference import (PreferenceView as _PreferenceView, from_ledger as _preference_view,
                          current as _current_preference, resolve as _resolve_preference,
                          cost, EvaluationInput as _EvaluationInput)
@@ -309,6 +312,8 @@ def _timed(model):
 
 
 def _belief_contract(model):
+    if _learning_changing(model):
+        return _S4B_BELIEF
     if _has_unreachable(model):
         return _S4D_BELIEF
     return _HAND_BELIEF if model.durations else (_TIME_BELIEF if _timed(model) else BELIEF)
@@ -377,6 +382,9 @@ def _filtered(model, reading):
 
 
 def _derive_reading(model, reading):
+    if _learning_changing(model):
+        q, a, _ = _derive_state(model, reading)
+        return q, a
     if model.Q is None:
         q, a = _derive(model, reading.n)
     else:
@@ -390,8 +398,38 @@ def _derive_reading(model, reading):
     return q, a
 
 
+def _learning_changing(model):
+    return model.Q is not None and bool(model.learnable)
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class _LatticeSummary:
+    """記録の説明用。次の計算は平均からではなく事実から作り直す。"""
+    theta_mean: _Mapping[str, _np.ndarray] | None
+    components: int | None
+
+
+def _derive_state(model, reading):
+    """保存に渡す要約も同じ読みから作る。主体は書き換えない。"""
+    if not _learning_changing(model):
+        q, a = _derive_reading(model, reading)
+        return q, a, None
+    if reading._clock_issues:
+        return None, dict(model.a), _LatticeSummary(theta_mean=None, components=None)
+    _, anchor_ns = _anchor(reading)
+    try:
+        lattice = _learn(model, reading.sequence, until_ns=anchor_ns)
+        q = _log_probability(lattice.marginal_state())
+        summary = _LatticeSummary(theta_mean=lattice.theta_mean(), components=lattice.components())
+    except _ModelViolation:
+        q, summary = None, _LatticeSummary(theta_mean=None, components=0)
+    return q, dict(model.a), summary
+
+
 def plan_s4c(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
     """model.1〜3だけを旧の計算に渡す。contentはS4cと同じ (C5・P5)。"""
+    if _learning_changing(view.model):
+        raise ValueError("plan_s4c: learning under a changing state is not supported")
     if _has_unreachable(view.model):
         raise ValueError("plan_s4c: sui.model.4 is not supported")
     return _plan_s4c(view, candidates, u=u)
@@ -611,6 +649,8 @@ def _one_step(view, actions, resolved):
         raise ModelFalsified("the timeline cannot explain the facts")
     costs = _np.array([cost(resolved, _EvaluationInput(evaluation="one_step",
         candidate_outcome=outcome)) for outcome in model.outcomes])
+    if _learning_changing(model):
+        return _lattice_one_step(view, actions, pending, hand_pending, costs), time
 
     def static(n, index, action):
         log_q = _s4d_log_belief(model.D, [_s4d_likelihood(model.a[name], n[name],
@@ -683,11 +723,36 @@ def _one_step(view, actions, resolved):
     return components, time
 
 
+def _lattice_one_step(view, actions, pending, hand_pending, costs):
+    """所要の枝ごとに格子の情報を求めてから平均する。"""
+    model = view.model
+    history = tuple((ns, action, outcome) for ns, _, _, _, action, outcome in view.reading.sequence)
+    points = (tuple(times for _, times in hand_pending) if hand_pending is not None else
+              tuple(((view.now_ns, 1.),) for _ in pending))
+
+    def components(action):
+        times = (tuple((view.now_ns if model.measures[action] == "start" else
+                        view.now_ns + _duration_ns(d), p) for d, p in model.durations[action])
+                 if model.durations else ((view.now_ns, 1.),))
+        for combination in _product(*points, times):
+            weight = _math.fsum(_math.log(p) for _, p in combination)
+            measured = tuple((job, name, ns) for (job, name), (ns, _) in zip(pending, combination[:-1]))
+            table = _lattice_hand_table(model, history, measured, action, capture_ns=combination[-1][0])
+            yield weight, _lattice_components(model, table, action, costs)
+
+    try:
+        return [_average_components(components(action)) for action in actions]
+    except _ModelViolation as exc:
+        raise ModelFalsified("the model cannot explain the facts") from exc
+
+
 def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
     """採用した好みだけで決める。白紙は知る価値だけ、モデルのC・γは読まない (C4)。"""
     resolved = _resolve_preference(_current_preference(view.preferences), view)
     actions = _candidate_names(view.model, candidates)
     one_step = resolved.H_ns is None
+    if not one_step and _learning_changing(view.model):
+        raise OutsideEvaluationType("lookahead with learning under a changing state is 1d")
     for item in resolved.items:
         if ("one_step" if one_step else "lookahead") not in item.feature.evaluations:
             raise OutsideEvaluationType("the feature is outside this evaluation type")
@@ -725,6 +790,8 @@ def replay_decision(*, model: _GenerativeModel, ledger: _Ledger, decision: str) 
         raise ValueError("decision: incompatible contract")
     legacy_contract = (_HAND_DECISION if model.durations else
                        _TIME_DECISION if model.Q is not None else DECISION)
+    if _learning_changing(model) and contract != _S4D_DECISION:
+        raise RebuildMismatch(fields=("contract",))
     if contract != _S4D_DECISION and contract != legacy_contract:
         raise RebuildMismatch(fields=("contract",))
     if not record.body.inputs:
@@ -764,7 +831,10 @@ _REASONS = frozenset({"no_attempt", "unknown_attempt", "unreadable_attempt", "co
                       "no_clock", "no_receipt_time"})
 
 
-def _check_belief_content(data, *, timed=False) -> None:
+def _check_belief_content(data, *, timed=False, lattice_model=None) -> None:
+    if lattice_model is not None:
+        _check_lattice_content(data, lattice_model)
+        return
     def numbers(values, *, integers=False):
         return isinstance(values, list) and all(
             (type(value) is int and value >= 0) if integers else
@@ -832,6 +902,28 @@ def _check_belief_content(data, *, timed=False) -> None:
             raise ValueError("belief content: invalid unread id") from exc
 
 
+def _check_lattice_content(data, model):
+    """新しい表紙では平均と固定の表を区別して検査する。"""
+    keys = {"model", "states", "outcomes", "q", "theta_mean", "fixed", "n",
+            "lattice", "unread", "time", "arrivals"}
+    if not isinstance(data, dict) or set(data) != keys:
+        raise ValueError("belief content: expected exactly the schema keys")
+    theta, fixed, summary = data["theta_mean"], data["fixed"], data["lattice"]
+    if (not isinstance(fixed, dict) or set(fixed) != set(model.actions) - model.learnable
+            or (theta is not None and (not isinstance(theta, dict) or set(theta) != model.learnable))
+            or (theta is None) != (data["q"] is None)):
+        raise ValueError("belief content: invalid theta_mean or fixed actions")
+    if (not isinstance(summary, dict) or set(summary) != {"components"}
+            or not (summary["components"] is None or
+                    type(summary["components"]) is int and summary["components"] >= 0)):
+        raise ValueError("belief content: invalid lattice components")
+    if (data["q"] is None) != (summary["components"] in (None, 0)):
+        raise ValueError("belief content: lattice support differs from q")
+    ordinary = {key: value for key, value in data.items() if key not in ("theta_mean", "fixed", "lattice")}
+    ordinary["a"] = {**fixed, **({} if theta is None else theta)}
+    _check_belief_content(ordinary, timed=True)
+
+
 class Agent:
     """一つのスレッドで信念と帳面の版を管理する。
 
@@ -851,7 +943,7 @@ class Agent:
         self._model_ref = _model_ref(model)
         self._reading = read(model, ())
         self._preferences = _PreferenceView()
-        self._q, self._a = _derive_reading(model, self._reading)
+        self._q, self._a, self._lattice = _derive_state(model, self._reading)
         self._revision = 0
         self._belief: _Record | None = None
 
@@ -876,6 +968,8 @@ class Agent:
 
     def counts(self, action: str) -> _np.ndarray:
         """行動の数え上げを読み取り専用のコピーで返す。"""
+        if _learning_changing(self._model):
+            raise ValueError("counts: no single ledger under a changing state")
         if not isinstance(action, str):
             raise TypeError("action: expected str")
         if action not in self._a:
@@ -894,7 +988,7 @@ class Agent:
         return _Producer(component=self._component, code_version=CODE_VERSION,
                          state=_StateRef(lineage=self._lineage, revision=revision))
 
-    def _content(self, reading, q, a) -> dict:
+    def _content(self, reading, q, a, *, lattice=None) -> dict:
         content = {
             "model": self.model_ref, "states": list(self._model.states),
             "outcomes": list(self._model.outcomes), "q": None if q is None else q.tolist(),
@@ -903,6 +997,13 @@ class Agent:
             "unread": [{"id": str(ref), "reason": reason}
                        for ref, reason in sorted(reading.unread.items(), key=lambda item: str(item[0]))],
         }
+        if _learning_changing(self._model):
+            content.pop("a")
+            content["theta_mean"] = (None if lattice.theta_mean is None else
+                {action: mean.tolist() for action, mean in lattice.theta_mean.items()})
+            content["fixed"] = {action: self._model.a[action].tolist()
+                                for action in self._model.actions if action not in self._model.learnable}
+            content["lattice"] = {"components": lattice.components}
         if _timed(self._model):
             anchor, ns = _model_anchor(self._model, reading)
             issues = reading._clock_issues if reading.timeline is None else reading.timeline.clock_issues
@@ -917,19 +1018,19 @@ class Agent:
                     "alpha": alpha, "beta_s": beta, "outside": list(map(str, stats.outside))}
         return content
 
-    def _belief_record(self, reading, q, a, revision, *, clock, ids) -> _Record:
+    def _belief_record(self, reading, q, a, revision, *, clock, ids, lattice=None) -> _Record:
         return _Record(
             id=ids.new(_RefKind.PREDICTION), at=clock.now(), writer=_Role.MODEL,
             producer=self._producer(revision),
             body=_Prediction(target="belief", about=(), basis=(),
                              contract=_belief_contract(self._model),
-                             content=_Payload.json(self._content(reading, q, a))),
+                             content=_Payload.json(self._content(reading, q, a, lattice=lattice))),
         )
 
     def belief_record(self, *, clock: _Clock, ids: _IdSource, ledger: _Ledger) -> _Record:
         """現在の信念を葉として書き、成功した時だけ最新の記録にする。"""
         record = self._belief_record(self._reading, self._q, self._a, self.revision,
-                                     clock=clock, ids=ids)
+                                     clock=clock, ids=ids, lattice=self._lattice)
         ledger.append(record, self.frontier)
         self._belief = record
         return record
@@ -1054,12 +1155,13 @@ class Agent:
         reading = read(self._model, snapshot.records,
                        unread_preferences=snapshot.unread_preferences)
         preferences = _preference_view(ledger, target)
-        q, a = _derive_reading(self._model, reading)
+        q, a, lattice = _derive_state(self._model, reading)
         revision = self.revision + 1
-        record = self._belief_record(reading, q, a, revision, clock=clock, ids=ids)
+        record = self._belief_record(reading, q, a, revision, clock=clock, ids=ids, lattice=lattice)
         ledger.append(record, target)
         self._frontier, self._reading, self._q, self._a, self._revision, self._belief, self._preferences = (
             target, reading, q, a, revision, record, preferences)
+        self._lattice = lattice
         return record
 
     @classmethod
@@ -1075,21 +1177,23 @@ class Agent:
         if record.producer.state is None:
             raise ValueError("belief: producer.state is required")
         data = _json_content(record.body.content)
-        _check_belief_content(data, timed=_timed(model))
+        _check_belief_content(data, timed=_timed(model), lattice_model=model if _learning_changing(model) else None)
         subject = cls(model=model, lineage=lineage, component=component)
         if data["model"] != subject.model_ref:
             raise ModelMismatch("belief: model reference differs")
         snapshot = ledger.snapshot(entry.parents)
         reading = read(model, snapshot.records, unread_preferences=snapshot.unread_preferences)
         preferences = _preference_view(ledger, entry.parents)
-        q, a = _derive_reading(model, reading)
-        rebuilt = subject._content(reading, q, a)
+        q, a, lattice = _derive_state(model, reading)
+        rebuilt = subject._content(reading, q, a, lattice=lattice)
         differences = tuple(sorted(key for key in rebuilt if rebuilt[key] != data[key]
             or (key in ("time", "arrivals")
-                and _Payload.json(rebuilt[key]) != _Payload.json(data[key]))))
+                and _Payload.json(rebuilt[key]) != _Payload.json(data[key]))
+            or (_learning_changing(model) and _Payload.json(rebuilt[key]) != _Payload.json(data[key]))))
         if differences:
             raise RebuildMismatch(fields=differences)
         subject._frontier, subject._reading, subject._q, subject._a = entry.parents, reading, q, a
         subject._revision, subject._belief = record.producer.state.revision, record
         subject._preferences = preferences
+        subject._lattice = lattice
         return subject

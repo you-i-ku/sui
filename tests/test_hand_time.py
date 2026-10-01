@@ -129,8 +129,8 @@ def test_m13_model_is_frozen_sorted_and_rounds_ties_to_even():
     source.clear()
     measures.clear()
     assert copied.durations["look"] == ((1., 1.),) and copied.measures["look"] == "start"
-    with pytest.raises(ValueError, match="S4b"):
-        _hand_model(learnable=frozenset({"look"}))
+    assert b'"scheme":"sui.model.5"' in model_json(
+        _hand_model(learnable=frozenset({"look"})))
     assert _hand_model(Q=None, learnable=frozenset({"look"})).learnable == {"look"}
 
 

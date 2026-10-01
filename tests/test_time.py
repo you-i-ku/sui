@@ -121,8 +121,8 @@ def test_m10_invalid_generators(Q):
 
 
 def test_m10_model_boundaries_and_readonly_copies():
-    with pytest.raises(ValueError, match="S4b"):
-        _time_model(learnable=frozenset({"look"}))
+    assert b'"scheme":"sui.model.5"' in model_json(
+        _time_model(learnable=frozenset({"look"})))
     with pytest.raises(ValueError):
         _time_model(arrivals={"membrane": ArrivalPrior(alpha=1., beta_s=10.)})
     with pytest.raises(ValueError):

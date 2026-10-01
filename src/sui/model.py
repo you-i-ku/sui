@@ -114,7 +114,7 @@ class GenerativeModel:
     """名前つきの軸と、初期の数え上げ・信念・好み。
 
     Q が無ければ回数から厳密に学ぶ (S1c)。Q は列から行への率で、
-    Q と学習の同時は S4b。時間モデルのDは最初の起動時、arrivalsは状態と独立 (M10〜M12)。
+    Q と学習の同時は S4b の格子。時間モデルのDは最初の起動時、arrivalsは状態と独立 (M10〜M12)。
     所要は全行動の有限な点と届かないNoneの分布、測る時刻はstartかreport (M13・N1)。
     """
 
@@ -166,8 +166,6 @@ class GenerativeModel:
             generator = _generator(self.Q)
             if generator.shape != (len(self.states), len(self.states)):
                 raise ValueError("Q: shape must match states")
-            if self.learnable:
-                raise ValueError("learning under a changing state is S4b")
             object.__setattr__(self, "Q", _readonly(generator))
         if not isinstance(self.arrivals, _Mapping):
             raise TypeError("arrivals: expected Mapping")
@@ -236,6 +234,9 @@ def model_json(model: GenerativeModel) -> bytes:
         material.update(scheme="sui.model.4" if _has_unreachable(model) else "sui.model.3",
                         durations=dict(model.durations),
                         measures=dict(model.measures))
+    if model.Q is not None and model.learnable:
+        material.update(scheme="sui.model.5", durations=dict(model.durations),
+                        measures=dict(model.measures))
     return _json.dumps(material, ensure_ascii=False, sort_keys=True,
                           separators=(",", ":"), allow_nan=False).encode("utf-8")
 
@@ -248,13 +249,13 @@ def model_from_json(data: bytes) -> GenerativeModel:
         value = _json.loads(data)
         keys = {"scheme", "states", "outcomes", "actions", "a", "learnable",
                 "D", "log_C", "gamma"}
-        if isinstance(value, dict) and value.get("scheme") in ("sui.model.2", "sui.model.3", "sui.model.4"):
+        if isinstance(value, dict) and value.get("scheme") in ("sui.model.2", "sui.model.3", "sui.model.4", "sui.model.5"):
             keys |= {"Q", "arrivals"}
-        if isinstance(value, dict) and value.get("scheme") in ("sui.model.3", "sui.model.4"):
+        if isinstance(value, dict) and value.get("scheme") in ("sui.model.3", "sui.model.4", "sui.model.5"):
             keys |= {"durations", "measures"}
         if not isinstance(value, dict) or set(value) != keys:
             raise ValueError("model: unexpected keys")
-        if value["scheme"] not in ("sui.model.1", "sui.model.2", "sui.model.3", "sui.model.4"):
+        if value["scheme"] not in ("sui.model.1", "sui.model.2", "sui.model.3", "sui.model.4", "sui.model.5"):
             raise ValueError("model: unsupported scheme")
         model = GenerativeModel(
             states=tuple(value["states"]), outcomes=tuple(value["outcomes"]),

@@ -7,13 +7,13 @@ import tomllib
 
 import pytest
 
-from sui import agent, loop, s1_contracts, s3_contracts, s4_contracts, s4d_contracts
+from sui import agent, loop, s1_contracts, s3_contracts, s4_contracts, s4d_contracts, s4b_contracts
 from sui.clock import FakeClock
 from sui.contracts import ContractBook, ContractRef, UnknownContract
 from sui.ids import Ref, RefKind, SequentialIds
 from sui.records import Producer
 from sui.ledger import Ledger, SequentialSalts, RECORD_SCHEMA
-from worlds import GatedHand, ManualHost, ScriptDrive, ScriptedWorld, _model
+from worlds import GatedHand, ManualHost, ScriptDrive, ScriptedWorld, _model, _lattice_model
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,6 +75,9 @@ def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
     assert isinstance(s3_contracts.DECLARATIONS, tuple) and len(s3_contracts.DECLARATIONS) == 2
     declarations = tuple(c for c in s1_contracts.DECLARATIONS if c.ref != s1_contracts.DECISION)
     declarations += s3_contracts.DECLARATIONS + (s4_contracts.DECLARATIONS[0], s4d_contracts.DECLARATIONS[0])
+    assert isinstance(s4b_contracts.DECLARATIONS, tuple)
+    assert [c.ref for c in s4b_contracts.DECLARATIONS] == [ContractRef("sui.s4b.belief", "1")]
+    declarations += s4b_contracts.DECLARATIONS
     book = ContractBook()
     for declaration in declarations:
         book.register(declaration)
@@ -86,6 +89,9 @@ def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
     assert len(records) == 6
     assert {(r.body.contract.name, r.body.contract.version) for r in records} == expected - {("sui.s1.decision", "3")} | {("sui.s4d.decision", "1")}
     records += _actual_s3_records()
+    subject = agent.Agent(model=_lattice_model(), lineage="portable-lattice")
+    records.append(subject.belief_record(clock=FakeClock(run=Ref(RefKind.RUN, "lattice")),
+        ids=SequentialIds(prefix="lattice"), ledger=Ledger(salts=SequentialSalts())))
     assert {r.body.contract for r in records} == {c.ref for c in declarations}
     for record in records:
         assert book.get(record.body.contract).ref == record.body.contract
