@@ -61,6 +61,22 @@ def _actual_s3_records():
     return [ledger.record(e.cid) for e in ledger.entries()]
 
 
+def _actual_quantity_records():
+    from sui.quantity import DurationPrior, BaseSpec
+    actions = _model().actions
+    model = _model(duration_priors={action: DurationPrior(1., BaseSpec("atoms", "1", {"points": [[1, 1.]]}))
+                                   for action in actions},
+        measure={"share": "all_actions", "candidates": [{"name": "exact", "version": "1", "params": {}, "weight": 1.}]})
+    subject = agent.Agent(model=model, lineage="portable-quantity")
+    clock = FakeClock(run=Ref(RefKind.RUN, "quantity"))
+    ids, ledger = SequentialIds(prefix="portable-quantity"), Ledger(salts=SequentialSalts())
+    belief = subject.belief_record(clock=clock, ids=ids, ledger=ledger)
+    loop.boot(subject, clock=clock, ids=ids, ledger=ledger,
+              membrane=Producer(component="test.executor", code_version="1"))
+    decided, _ = subject.decide((actions[0],), u=.5, clock=clock, ids=ids, ledger=ledger, now_mono_ns=0)
+    return [belief, decided]
+
+
 def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
     expected = {("sui.s1.belief", "3"), ("sui.s1.decision", "3"),
                 ("sui.s1.action", "1"), ("sui.s1.outcome", "2"), ("sui.s1.attempt", "1")}
@@ -76,7 +92,11 @@ def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
     declarations = tuple(c for c in s1_contracts.DECLARATIONS if c.ref != s1_contracts.DECISION)
     declarations += s3_contracts.DECLARATIONS + (s4_contracts.DECLARATIONS[0], s4d_contracts.DECLARATIONS[0])
     assert isinstance(s4b_contracts.DECLARATIONS, tuple)
-    assert [c.ref for c in s4b_contracts.DECLARATIONS] == [ContractRef("sui.s4b.belief", "1")]
+    assert [c.ref for c in s4b_contracts.DECLARATIONS] == [
+        ContractRef("sui.s4b.belief", "1"),
+        ContractRef("sui.s4b.quantity_belief", "1"),
+        ContractRef("sui.s4b.decision", "1"),
+    ]
     declarations += s4b_contracts.DECLARATIONS
     book = ContractBook()
     for declaration in declarations:
@@ -92,6 +112,7 @@ def test_c1_all_actual_record_contracts_are_declared_and_resolvable():
     subject = agent.Agent(model=_lattice_model(), lineage="portable-lattice")
     records.append(subject.belief_record(clock=FakeClock(run=Ref(RefKind.RUN, "lattice")),
         ids=SequentialIds(prefix="lattice"), ledger=Ledger(salts=SequentialSalts())))
+    records += _actual_quantity_records()
     assert {r.body.contract for r in records} == {c.ref for c in declarations}
     for record in records:
         assert book.get(record.body.contract).ref == record.body.contract

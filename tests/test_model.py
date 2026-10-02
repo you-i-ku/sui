@@ -35,7 +35,7 @@ def test_m1_valid_model_owns_readonly_float64_arrays():
     assert GenerativeModel.__dataclass_params__.eq is False
     assert {field.name for field in fields(model)} == {
         "states", "outcomes", "actions", "a", "learnable", "D", "log_C", "gamma", "Q", "arrivals",
-        "durations", "measures",
+        "durations", "measures", "duration_priors", "measure",
     }, ("Qだけを持つモデルはS4aの濾過、learnableとの同時はS4bの格子。"
         "所要と測る時刻は S4c")
 

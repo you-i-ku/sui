@@ -328,6 +328,8 @@ def _action_value(eta, belief, action, deadline_ns, candidates, resolved):
 
 def evaluate(view, candidates, resolved, *, u):
     """根の候補・好み・締切で木を評価し、未定義理由は候補順の配列にする (C8)。"""
+    if view.model.duration_priors:
+        raise OutsideEvaluationType("lookahead with learned durations is 1d")
     if view.model.Q is not None and view.model.learnable:
         raise OutsideEvaluationType("lookahead with learning under a changing state is 1d")
     from .agent import Draft as _Draft

@@ -173,6 +173,7 @@ class Pledges:
     abandons: dict[Ref, Record] = field(default_factory=dict)
     issued: int = 0
     latest_ns: tuple[Ref, int] | None = None
+    latest_check_events: tuple = ()
 
 
 class Window:
@@ -254,6 +255,8 @@ class Window:
         起動・開閉はモデルによらず残し、駆動の依頼は受け付けない (P11)。
         """
         event, p = envelope.event, self.pledges
+        after = (sorted(self.ledger.heads()) if self.agent._model.duration_priors
+                 and isinstance(event, (Tick, Thought)) else None)
         item = None
         if isinstance(event, Tick):
             pass
@@ -271,6 +274,9 @@ class Window:
             if event.work not in p.thinking or any(
                     isinstance(i, (Commit, Released)) and i.work == event.work for i in p.items):
                 p.latest_ns = (self.clock.run, envelope.received_ns)
+                if self.agent._model.duration_priors:
+                    p.latest_check_events = ({"unrecorded": {"kind": "thought", "reading": envelope.received_ns,
+                                                           "after": after}},)
                 return
             item = (Commit(work=event.work, commit=self.agent.prepare(
                 event.draft, clock=self.clock, ids=self.ids)) if event.draft is not None
@@ -287,6 +293,10 @@ class Window:
             p.items.append(item)
         p.notices.append(event)
         p.latest_ns = (self.clock.run, envelope.received_ns)
+        if self.agent._model.duration_priors:
+            p.latest_check_events = (({"fact": str(item.record.id)},) if isinstance(item, Observe) else
+                ({"unrecorded": {"kind": "tick" if isinstance(event, Tick) else "thought",
+                                 "reading": envelope.received_ns, "after": after}},))
 
     def _write_items(self):
         p = self.pledges
@@ -369,17 +379,25 @@ class Window:
                 request = p.waiting[0]
                 self._adopt()
                 now, observed = None, None
-                if self.agent._model.Q is not None or self.agent._model.durations:
+                if self.agent._model.Q is not None or self.agent._model.durations or self.agent._model.duration_priors:
                     axis = self.agent._reading.timeline
                     if (axis is None or self.clock.run not in axis.runs
                             or p.latest_ns is None or p.latest_ns[0] != self.clock.run):
                         raise ValueError("Think: current run boot and received time are required")
                     now = axis.to_axis(*p.latest_ns)
-                    if self.agent._model.durations:
+                    if self.agent._model.durations or self.agent._model.duration_priors:
                         observed = now
                         now = _evaluation_ns(self.agent._reading, self.clock.run, now)
+                options = {}
+                if self.agent._model.duration_priors:
+                    sources = tuple(source if "fact" in source else {"unrecorded": {
+                        "kind": source["unrecorded"]["kind"],
+                        "reading": axis.to_axis(self.clock.run, source["unrecorded"]["reading"]),
+                        "after": source["unrecorded"]["after"]}}
+                        for source in p.latest_check_events)
+                    options["check_events"] = sources
                 work = Think(work=f"think:{p.issued + 1}",
-                             view=self.agent.view(now_ns=now, observed_ns=observed),
+                             view=self.agent.view(now_ns=now, observed_ns=observed, **options),
                              candidates=request.candidates, u=request.u,
                              now_ns=now, observed_ns=observed)
                 p.thinking[work.work] = work

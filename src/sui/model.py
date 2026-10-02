@@ -130,6 +130,8 @@ class GenerativeModel:
     arrivals: _Mapping[str, ArrivalPrior] = _field(default_factory=dict)
     durations: _Mapping[str, Duration] = _field(default_factory=dict)
     measures: _Mapping[str, str] = _field(default_factory=dict)
+    duration_priors: _Mapping = _field(default_factory=dict)
+    measure: object | None = None
 
     def __post_init__(self) -> None:
         for name in ("states", "outcomes", "actions"):
@@ -208,6 +210,21 @@ class GenerativeModel:
             durations[action] = tuple(sorted(points, key=lambda point: (point[0] is None, point[0])))
         object.__setattr__(self, "durations", _MappingProxyType(durations))
         object.__setattr__(self, "measures", _MappingProxyType(dict(self.measures)))
+        if self.duration_priors:
+            if self.durations:
+                raise ValueError("duration_priors and durations cannot coexist")
+            if self.Q is not None:
+                raise ValueError("duration_priors with Q is outside model.6")
+            from .quantity import validate_model as _validate_quantity_model
+            priors, measure = _validate_quantity_model(self.duration_priors, self.measure, self.actions)
+            object.__setattr__(self, "duration_priors", priors)
+            object.__setattr__(self, "measure", measure)
+        else:
+            if not isinstance(self.duration_priors, _Mapping):
+                raise ValueError("duration_priors: expected Mapping")
+            if self.measure is not None:
+                raise ValueError("measure: duration_priors are required")
+            object.__setattr__(self, "duration_priors", _MappingProxyType({}))
         object.__setattr__(self, "a", _MappingProxyType(counts))
         object.__setattr__(self, "D", _readonly(prior))
         object.__setattr__(self, "log_C", _readonly(preferences))
@@ -237,6 +254,14 @@ def model_json(model: GenerativeModel) -> bytes:
     if model.Q is not None and model.learnable:
         material.update(scheme="sui.model.5", durations=dict(model.durations),
                         measures=dict(model.measures))
+    if model.duration_priors:
+        material.update(scheme="sui.model.6", Q=None,
+                        arrivals={route: {"alpha": prior.alpha, "beta_s": prior.beta_s}
+                                  for route, prior in model.arrivals.items()},
+                        durations={}, measures=dict(model.measures),
+                        duration_priors={action: prior.as_json()
+                                         for action, prior in model.duration_priors.items()},
+                        measure=model.measure.as_json())
     return _json.dumps(material, ensure_ascii=False, sort_keys=True,
                           separators=(",", ":"), allow_nan=False).encode("utf-8")
 
@@ -249,13 +274,15 @@ def model_from_json(data: bytes) -> GenerativeModel:
         value = _json.loads(data)
         keys = {"scheme", "states", "outcomes", "actions", "a", "learnable",
                 "D", "log_C", "gamma"}
-        if isinstance(value, dict) and value.get("scheme") in ("sui.model.2", "sui.model.3", "sui.model.4", "sui.model.5"):
+        if isinstance(value, dict) and value.get("scheme") in ("sui.model.2", "sui.model.3", "sui.model.4", "sui.model.5", "sui.model.6"):
             keys |= {"Q", "arrivals"}
-        if isinstance(value, dict) and value.get("scheme") in ("sui.model.3", "sui.model.4", "sui.model.5"):
+        if isinstance(value, dict) and value.get("scheme") in ("sui.model.3", "sui.model.4", "sui.model.5", "sui.model.6"):
             keys |= {"durations", "measures"}
+        if isinstance(value, dict) and value.get("scheme") == "sui.model.6":
+            keys |= {"duration_priors", "measure"}
         if not isinstance(value, dict) or set(value) != keys:
             raise ValueError("model: unexpected keys")
-        if value["scheme"] not in ("sui.model.1", "sui.model.2", "sui.model.3", "sui.model.4", "sui.model.5"):
+        if value["scheme"] not in ("sui.model.1", "sui.model.2", "sui.model.3", "sui.model.4", "sui.model.5", "sui.model.6"):
             raise ValueError("model: unsupported scheme")
         model = GenerativeModel(
             states=tuple(value["states"]), outcomes=tuple(value["outcomes"]),
@@ -269,6 +296,7 @@ def model_from_json(data: bytes) -> GenerativeModel:
             durations={action: tuple(tuple(point) for point in points)
                        for action, points in value.get("durations", {}).items()},
             measures=value.get("measures", {}),
+            duration_priors=value.get("duration_priors", {}), measure=value.get("measure"),
         )
         if model_json(model) != data:
             raise ValueError("model: expected canonical encoding")

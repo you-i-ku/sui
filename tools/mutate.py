@@ -65,6 +65,8 @@ def main() -> int:
         work = Path(d) / "sui"
         shutil.copytree(SUI / "src", work / "src", ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copytree(SUI / "tests", work / "tests", ignore=shutil.ignore_patterns("__pycache__"))
+        # S4b-1b の Y6 は tools/ の golden の台本を回すので、写さないと基準で落ちる
+        shutil.copytree(SUI / "tools", work / "tools", ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy(SUI / "pyproject.toml", work / "pyproject.toml")
         shutil.copy(SUI / "requirements.txt", work / "requirements.txt")
         suites = ["tests"]
