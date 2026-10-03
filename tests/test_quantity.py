@@ -3025,3 +3025,201 @@ def test_d27_u14_sequential_prefix_half_reaches_piecewise_partitions_and_replica
     for probability, expected in ((event, .5), (ConjunctionEvent((event, event)), .5),
                                   (ReplicaProduct((event, event)), .25)):
         assert math.exp(backend.expectation(probability, tolerance=1e-12).log_value) == pytest.approx(expected, abs=1e-14)
+
+
+def _y9_model3_bridge_models(*, point, alpha=1., measurement="exact"):
+    """§3-8: 有限の同じ支え、固定の名前/状態、λは1候補。秒とnsを変換する。"""
+    points = ({"a": ((12, 1.),), "b": ((4, 1.),)} if point else
+              {"a": ((4, .75), (12, .25)), "b": ((0, .5), (8, .5))})
+    shared = dict(states=("s", "t"), outcomes=("x", "y"), actions=("a", "b"),
+        a={"a": np.array([[.9, .2], [.1, .8]]), "b": np.array([[.6, .4], [.4, .6]])},
+        learnable=frozenset(), D=np.array([.6, .4]), log_C=np.log(np.array([.75, .25])), gamma=3.)
+    legacy = GenerativeModel(**shared,
+        durations={action: tuple((d / 1_000_000_000, p) for d, p in row) for action, row in points.items()},
+        measures={action: "report" for action in points})
+    spec = MeasureSpec("exact", "1", {}) if measurement == "exact" else _tick(4, "uniform")
+    learned = GenerativeModel(**shared,
+        duration_priors={action: DurationPrior(alpha, BaseSpec("atoms", "1", {"points": row}))
+                         for action, row in points.items()}, measure=_measure((spec, 1.)))
+    assert json.loads(model_json(legacy))["scheme"] == "sui.model.3"
+    assert json.loads(model_json(learned))["scheme"] == "sui.model.6"
+    return legacy, learned
+
+
+def _y9_model3_bridge_scene(legacy, *, pending):
+    """両モデルが同じ先端の事実・付箋を採用する。手製Timingは使わない。"""
+    from sui.contracts import ContractRef
+    from sui.ledger import Ledger, SequentialSalts
+    from sui.records import Observed, Payload
+    from worlds import HandHistory, _write_preferences
+    history = HandHistory(run="quantity-bridge")
+    history.boot()
+    if pending:
+        history.start("a")
+    # 8nsの実際の受け取りが、0nsに始まった試みの未着の証拠になる。
+    receipt = history.add(Observed(route="membrane", contract=ContractRef("test.y9.receipt", "1"),
+        content=Payload.json({}), received_ns=8), 8 / 1_000_000_000)
+    ledger = Ledger(salts=SequentialSalts())
+    for record in history.records:
+        ledger.append(record, ledger.heads())
+    _write_preferences(legacy, ledger, history.clock, history.ids)
+    return SimpleNamespace(ledger=ledger, clock=history.clock, ids=history.ids,
+                           frontier=ledger.heads(), receipt=receipt, pending=pending)
+
+
+def _y9_model3_bridge_plan(scene, model):
+    from sui.agent import Agent, plan
+    agent = Agent(model=model, lineage="quantity-bridge")
+    agent.adopt(scene.ledger, clock=scene.clock, ids=scene.ids, through=scene.frontier)
+    view = agent.view(now_ns=8, observed_ns=8, check_events=({"fact": str(scene.receipt.id)},))
+    assert agent.frontier == scene.frontier
+    assert len(view.reading.pending) == int(scene.pending)
+    if scene.pending:
+        assert tuple(view.reading.started.values()) == ((0,),)
+        if model.duration_priors:
+            assert scene.receipt.id in view.reading.timing.attempts[0].check_events
+    data = plan(view, ("a", "b"), u=.4).content.as_json()
+    assert data["evaluation"] == "one_step" and data["H_ns"] is None
+    assert data["candidates"] == ["a", "b"] and data["u"] == .4
+    assert data["time"]["now_ns"] == data["time"]["observed_ns"] == 8
+    return data
+
+
+def _y9_model3_bridge_encloses(bounds, reference, tolerance, *, label):
+    lo, hi = bounds
+    assert 0 <= hi - lo <= tolerance, (label, bounds, tolerance)
+    # §4-6: 表示の丸めは積分/級数の誤差の外。閉じた式の端点には別の余裕を置く。
+    rounding = 256 * math.ulp(max(1., abs(reference), abs(lo), abs(hi)))
+    assert lo - rounding <= reference <= hi + rounding, (label, bounds, reference)
+
+
+def _y9_model3_bridge_assert_point(legacy, learned):
+    for action, part in zip(learned["candidates"], learned["information_parts"]):
+        assert part["durations"] == [0., 0.], ("point duration information", action, part)
+    tolerance = learned["tolerance"]
+    for column in ("expected_cost", "information", "J", "q_pi"):
+        np.testing.assert_allclose(learned[column], legacy[column], rtol=0,
+                                   atol=(1 + learned["gamma"]) * tolerance, err_msg=column)
+    for old_i, old_j, c, bounds in zip(legacy["information"], legacy["J"],
+                                      learned["expected_cost"], learned["information_bounds"]):
+        _y9_model3_bridge_encloses(bounds, old_i, tolerance, label="point information")
+        _y9_model3_bridge_encloses((c - bounds[1], c - bounds[0]), old_j,
+                                  tolerance, label="point J")
+    assert learned["chosen"] == legacy["chosen"]
+    assert min(abs(p - legacy["u"]) for p in np.cumsum(legacy["q_pi"])[:-1]) > 1e-3
+
+
+def _y9_model3_bridge_duration_reference(model, *, pending, action):
+    """DPの1標本の閉じた式。未着でD_old=12が確定したaには一度だけ+1。"""
+    from scipy.special import digamma
+    prior = model.duration_priors[action]
+    beta = [prior.alpha * mass for _, mass in prior.base.params["points"]]
+    if pending and action == "a":
+        beta[1] += 1
+    total = math.fsum(beta)
+    mean = [b / total for b in beta]
+    return math.fsum(-p * math.log(p) + p * float(digamma(b + 1))
+                     for p, b in zip(mean, beta)) - float(digamma(total + 1))
+
+
+def _y9_model3_bridge_assert_duration_reference(data, model, *, pending):
+    for action, part in zip(data["candidates"], data["information_parts"]):
+        reference = _y9_model3_bridge_duration_reference(model, pending=pending, action=action)
+        _y9_model3_bridge_encloses(part["durations"], reference, data["tolerance"],
+                                  label=f"duration reference for {action}")
+
+
+def _y9_model3_bridge_report(data):
+    return {key: data[key] for key in ("J", "q_pi", "chosen", "expected_cost", "information",
+                                      "information_parts", "information_bounds", "tolerance") if key in data}
+
+
+@pytest.mark.parametrize("measurement", ["exact", "tick"])
+@pytest.mark.parametrize("pending", [False, True], ids=["no-pending", "elapsed-pending"])
+def test_y9_model3_bridge_point_base_matches_public_one_step_content(measurement, pending):
+    """§3-8/§4固定・極限: G₀=δ_dでFの知る価値を正にする誤りを落とす。"""
+    legacy, learned = _y9_model3_bridge_models(point=True, alpha=3., measurement=measurement)
+    scene = _y9_model3_bridge_scene(legacy, pending=pending)
+    old, new = (_y9_model3_bridge_plan(scene, model) for model in (legacy, learned))
+    print("Y9 point bridge " + json.dumps({"measurement": measurement, "pending": pending,
+        "model.3": _y9_model3_bridge_report(old), "model.6": _y9_model3_bridge_report(new)}, sort_keys=True))
+    _y9_model3_bridge_assert_point(old, new)
+
+
+@pytest.mark.parametrize("measurement", ["exact", "tick"])
+@pytest.mark.parametrize("pending", [False, True], ids=["no-pending", "elapsed-pending"])
+def test_y9_model3_bridge_multipoint_concentration_converges_with_remaining(measurement, pending):
+    """§3-8: 経過8nsで4nsが消える。未着の更新を無視する誤りも閉じた式で落とす。"""
+    legacy, _ = _y9_model3_bridge_models(point=False, measurement=measurement)
+    scene = _y9_model3_bridge_scene(legacy, pending=pending)
+    old, sequence = _y9_model3_bridge_plan(scene, legacy), []
+    for alpha in (1., 10., 100., 1e4):
+        _, model = _y9_model3_bridge_models(point=False, alpha=alpha, measurement=measurement)
+        new = _y9_model3_bridge_plan(scene, model)
+        print("Y9 concentration bridge " + json.dumps({"measurement": measurement, "pending": pending,
+            "alpha": alpha, "model.3": _y9_model3_bridge_report(old),
+            "model.6": _y9_model3_bridge_report(new)}, sort_keys=True))
+        _y9_model3_bridge_assert_duration_reference(new, model, pending=pending)
+        np.testing.assert_allclose(new["expected_cost"], old["expected_cost"], rtol=0, atol=1e-12)
+        for index, part in enumerate(new["information_parts"]):
+            assert part["names"] == pytest.approx(old["information"][index], rel=0, abs=1e-12)
+            duration = part["durations"][0] + (part["durations"][1] - part["durations"][0]) / 2
+            assert new["information"][index] == pytest.approx(part["names"] + duration, rel=0, abs=1e-12)
+            assert new["J"][index] == pytest.approx(new["expected_cost"][index] - new["information"][index],
+                                                   rel=0, abs=1e-12)
+            lo, hi = new["information_bounds"][index]
+            assert 0 <= hi - lo <= new["tolerance"]
+        sequence.append(new)
+    for column in ("information", "J", "q_pi"):
+        errors = [float(np.max(np.abs(np.array(row[column]) - old[column]))) for row in sequence]
+        assert errors[0] > 1e-6, (column, errors)
+        assert errors[-1] < errors[-2] / 50, (column, errors)
+        assert errors[-1] < errors[0] / 1000, (column, errors)
+    durations = [max(part["durations"][1] for part in row["information_parts"]) for row in sequence]
+    assert 0 < durations[-1] < 1e-4
+    assert durations[-1] < durations[-2] / 50 and durations[-1] < durations[0] / 1000
+    assert sequence[-1]["chosen"] == old["chosen"]
+    assert min(abs(p - old["u"]) for p in np.cumsum(old["q_pi"])[:-1]) > 1e-3
+
+
+def test_y9_model3_bridge_detects_ignored_pending_elapsed_check(monkeypatch):
+    """srcへの書き込みなしで未着の確かめを一時的に落とし、橋の検査の失敗を確かめる。"""
+    from dataclasses import replace
+    import sui.quantity as module
+    legacy, learned = _y9_model3_bridge_models(point=False)
+    scene = _y9_model3_bridge_scene(legacy, pending=True)
+    original = module.timing_context
+    def omit_checks(*args, **kwargs):
+        timing = original(*args, **kwargs)
+        return Timing(timing.events, tuple(replace(a, check_events=()) if a.state == "pending" else a
+                                            for a in timing.attempts), timing.positions)
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "timing_context", omit_checks)
+        data = _y9_model3_bridge_plan(scene, learned)
+        with pytest.raises(AssertionError, match="duration reference for a"):
+            _y9_model3_bridge_assert_duration_reference(data, learned, pending=True)
+    assert module.timing_context is original
+    _y9_model3_bridge_assert_duration_reference(_y9_model3_bridge_plan(scene, learned), learned, pending=True)
+
+
+def test_y9_model3_bridge_detects_positive_duration_information_for_point_base(monkeypatch):
+    """srcへの書き込みなしでδ_dの情報量を一時的に正にし、元に戻した入口も再検査する。"""
+    from dataclasses import replace
+    import sui.quantity as module
+    legacy, learned = _y9_model3_bridge_models(point=True)
+    scene = _y9_model3_bridge_scene(legacy, pending=False)
+    old, original = _y9_model3_bridge_plan(scene, legacy), module.one_step_values
+    def add_false_information(*args, **kwargs):
+        result = original(*args, **kwargs)
+        shift = 1e-3
+        return replace(result,
+            information=InformationBounds(result.information.lower + shift, result.information.upper + shift),
+            durations_information=InformationBounds(result.durations_information.lower + shift,
+                                                   result.durations_information.upper + shift))
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "one_step_values", add_false_information)
+        data = _y9_model3_bridge_plan(scene, learned)
+        with pytest.raises(AssertionError, match="point duration information"):
+            _y9_model3_bridge_assert_point(old, data)
+    assert module.one_step_values is original
+    _y9_model3_bridge_assert_point(old, _y9_model3_bridge_plan(scene, learned))
