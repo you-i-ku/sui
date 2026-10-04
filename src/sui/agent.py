@@ -29,6 +29,8 @@ from .s4_contracts import HAND_BELIEF as _HAND_BELIEF, HAND_DECISION as _HAND_DE
 from .s4d_contracts import BELIEF as _S4D_BELIEF, DECISION as _S4D_DECISION
 from .s4b_contracts import (BELIEF as _S4B_BELIEF, QUANTITY_BELIEF as _QUANTITY_BELIEF,
                             DECISION as _QUANTITY_DECISION)
+from .s4b1c_contracts import BELIEF as _JOINT_BELIEF, DECISION as _JOINT_DECISION
+from .model import _joint_model, _work_timed
 from .lattice import (learn as _learn, hand_table as _lattice_hand_table,
                       one_step_components as _lattice_components)
 from .preference import (PreferenceView as _PreferenceView, from_ledger as _preference_view,
@@ -84,6 +86,7 @@ class Reading:
     preferences: tuple[_Record, ...] = ()
     unread_preferences: tuple[_UnreadPreference, ...] = ()
     timing: object | None = None
+    _joint_timing: object | None = None
 
     def __post_init__(self) -> None:
         counts = {}
@@ -142,7 +145,7 @@ def read(model: _GenerativeModel, records: _Iterable[_Record], *,
     """
     records = _facts(records)
     unread_preferences = tuple(unread_preferences)
-    if model.durations or model.duration_priors:
+    if model.durations or _work_timed(model):
         records = tuple(r for r in records if r.category in (
             _Category.FACT, _Category.INTENTION, _Category.PREFERENCE))
     timed = _timed(model)
@@ -224,7 +227,7 @@ def read(model: _GenerativeModel, records: _Iterable[_Record], *,
         else:
             ref, action, outcome = observations[0]
             measured_ns = axis.received_ns.get(ref) if axis is not None else None
-            if model.durations and model.measures[action] == "start":
+            if (model.durations or _joint_model(model)) and model.measures.get(action) == "start":
                 attempt = by_id[by_id[ref].body.caused_by]
                 if axis is None or attempt.at.run not in axis.runs:
                     if model.Q is not None:
@@ -240,7 +243,7 @@ def read(model: _GenerativeModel, records: _Iterable[_Record], *,
                                  ref, action, outcome))
     pending = {j: action for j, action in jobs.items() if j not in finished and j not in abandoned}
     started, started_runs, event_ns = {}, {}, {}
-    if model.durations or model.duration_priors:
+    if model.durations or _work_timed(model):
         started = {job: [] for job in pending}
         started_runs = {job: [] for job in pending}
         for record in records:
@@ -260,16 +263,20 @@ def read(model: _GenerativeModel, records: _Iterable[_Record], *,
                 ns = axis.to_axis(point.at.run, point.at.mono_ns)
                 event_ns[point.at.run] = max(event_ns.get(point.at.run, ns), ns)
     timing = None
-    if model.duration_priors:
+    if _work_timed(model):
         from .quantity import read_timing as _read_timing
         timing = _read_timing(records, axis, jobs, attempts, pending)
+    joint_timing = timing
+    if model.durations and model.Q is not None and model.learnable:
+        from .quantity import read_timing as _read_timing
+        joint_timing = _read_timing(records, axis, jobs, attempts, pending)
     return Reading(n=n, unread=unread, pending=pending,
                    timeline=axis, sequence=tuple(sorted(sequence, key=lambda item:
                        (item[0], item[1], item[2], str(item[3])))),
                    arrivals=arrivals, _clock_issues=issues, started=started,
                    _started_runs=started_runs, _event_ns=event_ns,
                    preferences=tuple(r for r in records if isinstance(r.body, _Preference)),
-                   unread_preferences=unread_preferences, timing=timing)
+                   unread_preferences=unread_preferences, timing=timing, _joint_timing=joint_timing)
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -322,10 +329,12 @@ def _derive(model, n):
 
 
 def _timed(model):
-    return model.Q is not None or bool(model.arrivals) or bool(model.durations) or bool(model.duration_priors)
+    return model.Q is not None or bool(model.arrivals) or bool(model.durations) or _work_timed(model)
 
 
 def _belief_contract(model):
+    if _joint_model(model):
+        return _JOINT_BELIEF
     if model.duration_priors:
         return _QUANTITY_BELIEF
     if _learning_changing(model):
@@ -345,6 +354,12 @@ def _anchor(reading):
 
 
 def _model_anchor(model, reading):
+    if _joint_model(model):
+        events = [e for e in reading.timing.events.values() if e.reading is not None]
+        if not events:
+            return None, None
+        event = max(events, key=lambda e: (e.reading, e.run_index, e.seq, str(e.id)))
+        return event.id, event.reading
     if model.durations and model.Q is None:
         axis = reading.timeline
         if axis is None or axis.origin is None:
@@ -433,6 +448,9 @@ class _QuantitySummary:
 
 def _derive_state(model, reading):
     """保存に渡す要約も同じ読みから作る。主体は書き換えない。"""
+    if _joint_model(model):
+        from .joint_entry import derive
+        return derive(model, reading)
     if model.duration_priors:
         from .quantity import posterior, _normalized_positive
         q, a = _derive(model, reading.n)
@@ -466,6 +484,8 @@ def plan_s4c(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
     """model.1〜3だけを旧の計算に渡す。contentはS4cと同じ (C5・P5)。"""
     if view.model.duration_priors:
         raise ValueError("plan_s4c: learned durations are not supported")
+    if _joint_model(view.model):
+        raise ValueError("plan_s4c: progress models are not supported")
     if _learning_changing(view.model):
         raise ValueError("plan_s4c: learning under a changing state is not supported")
     if _has_unreachable(view.model):
@@ -621,7 +641,7 @@ def _candidate_names(model, candidates):
 
 def _one_step_time(view):
     model = view.model
-    if model.Q is None and not model.durations and not model.duration_priors:
+    if model.Q is None and not model.durations and not _work_timed(model):
         return None
     anchor, anchor_ns = _model_anchor(model, view.reading)
     if anchor is None:
@@ -633,7 +653,7 @@ def _one_step_time(view):
     time = {"anchor": str(anchor), "anchor_ns": anchor_ns,
             "now_ns": view.now_ns, "dt_s": (view.now_ns - anchor_ns) / 1e9,
             "pending_measures": "now"}
-    if model.durations or model.duration_priors:
+    if model.durations or _work_timed(model):
         if type(view.observed_ns) is not int or view.observed_ns > view.now_ns:
             raise ValueError("plan: integer observed_ns must not follow now_ns")
         time.pop("pending_measures")
@@ -789,16 +809,18 @@ def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
     resolved = _resolve_preference(_current_preference(view.preferences), view)
     actions = _candidate_names(view.model, candidates)
     one_step = resolved.H_ns is None
-    if view.model.duration_priors and not one_step:
-        raise OutsideEvaluationType("lookahead with learned durations is 1d")
-    if not one_step and _learning_changing(view.model):
-        raise OutsideEvaluationType("lookahead with learning under a changing state is 1d")
+    if not one_step and _learning_changing(view.model) and not _joint_model(view.model):
+        if not view.model.durations or any(_duration_ns(d) <= 0 for points in view.model.durations.values() for d, _ in points if d is not None):
+            raise OutsideEvaluationType("lookahead with learning under a changing state is 1d")
     for item in resolved.items:
         if ("one_step" if one_step else "lookahead") not in item.feature.evaluations:
             raise OutsideEvaluationType("the feature is outside this evaluation type")
     if not one_step:
         from .lookahead import evaluate as _evaluate_lookahead
         return _evaluate_lookahead(view, actions, resolved, u=u)
+    if _joint_model(view.model):
+        from .joint_entry import public_evaluate
+        return public_evaluate(view, actions, resolved, u=u)
     if view.model.duration_priors:
         return _quantity_one_step(view, actions, resolved, u=u)
     if any(d is None for action in actions for d, _ in view.model.durations.get(action, ())):
@@ -888,17 +910,19 @@ def replay_decision(*, model: _GenerativeModel, ledger: _Ledger, decision: str) 
     if not isinstance(record.body, _Decided):
         raise ValueError("decision: expected Decided")
     contract = record.body.contract
-    if contract not in (_S4D_DECISION, _QUANTITY_DECISION, DECISION, _TIME_DECISION, _HAND_DECISION):
+    if contract not in (_JOINT_DECISION, _S4D_DECISION, _QUANTITY_DECISION, DECISION, _TIME_DECISION, _HAND_DECISION):
         raise ValueError("decision: incompatible contract")
     legacy_contract = (_HAND_DECISION if model.durations else
                        _TIME_DECISION if model.Q is not None else DECISION)
-    if model.duration_priors and contract != _QUANTITY_DECISION:
+    if _joint_model(model) and contract != _JOINT_DECISION:
+        raise RebuildMismatch(fields=("contract",))
+    if model.duration_priors and contract not in (_JOINT_DECISION, _QUANTITY_DECISION):
         raise RebuildMismatch(fields=("contract",))
     if not model.duration_priors and contract == _QUANTITY_DECISION:
         raise RebuildMismatch(fields=("contract",))
-    if _learning_changing(model) and contract != _S4D_DECISION:
+    if _learning_changing(model) and contract not in (_JOINT_DECISION, _S4D_DECISION):
         raise RebuildMismatch(fields=("contract",))
-    if contract not in (_S4D_DECISION, _QUANTITY_DECISION) and contract != legacy_contract:
+    if contract not in (_JOINT_DECISION, _S4D_DECISION, _QUANTITY_DECISION) and contract != legacy_contract:
         raise RebuildMismatch(fields=("contract",))
     if not record.body.inputs:
         raise RebuildMismatch(fields=("inputs",))
@@ -913,9 +937,9 @@ def replay_decision(*, model: _GenerativeModel, ledger: _Ledger, decision: str) 
         raise RebuildMismatch(fields=("content",))
     try:
         time = data.get("time", {})
-        options = {"check_events": time.get("check_events", ())} if model.duration_priors else {}
+        options = {"check_events": time.get("check_events", ())} if _work_timed(model) else {}
         view = subject.view(now_ns=time.get("now_ns"), observed_ns=time.get("observed_ns"), **options)
-        draft = (plan if contract in (_S4D_DECISION, _QUANTITY_DECISION) else plan_s4c)(
+        draft = (plan if contract in (_JOINT_DECISION, _S4D_DECISION, _QUANTITY_DECISION) else plan_s4c)(
             view, data["candidates"], u=data["u"])
     except (ValueError, TypeError, KeyError, AttributeError) as exc:
         raise RebuildMismatch(fields=("content",)) from exc
@@ -938,7 +962,11 @@ _REASONS = frozenset({"no_attempt", "unknown_attempt", "unreadable_attempt", "co
                       "no_clock", "no_receipt_time"})
 
 
-def _check_belief_content(data, *, timed=False, lattice_model=None, quantity_model=None) -> None:
+def _check_belief_content(data, *, timed=False, lattice_model=None, quantity_model=None, joint_model=None) -> None:
+    if joint_model is not None:
+        from .joint_entry import check_belief_content
+        check_belief_content(data, joint_model)
+        return
     if quantity_model is not None:
         _check_quantity_content(data, quantity_model)
         return
@@ -1119,12 +1147,15 @@ class Agent:
     def q(self) -> _np.ndarray:
         """今の信念を読み取り専用のコピーで返す。"""
         if self._q is None:
+            if _joint_model(self._model) and self._lattice.status == "incomplete":
+                from .quantity import IntegrationIncomplete
+                raise IntegrationIncomplete(self._lattice.reason)
             raise ModelFalsified("the model cannot explain the facts")
         return _readonly(self._q)
 
     def counts(self, action: str) -> _np.ndarray:
         """行動の数え上げを読み取り専用のコピーで返す。"""
-        if _learning_changing(self._model):
+        if _joint_model(self._model) or _learning_changing(self._model):
             raise ValueError("counts: no single ledger under a changing state")
         if not isinstance(action, str):
             raise TypeError("action: expected str")
@@ -1153,19 +1184,23 @@ class Agent:
             "unread": [{"id": str(ref), "reason": reason}
                        for ref, reason in sorted(reading.unread.items(), key=lambda item: str(item[0]))],
         }
-        if _learning_changing(self._model):
+        if _learning_changing(self._model) and not _joint_model(self._model):
             content.pop("a")
             content["theta_mean"] = (None if lattice.theta_mean is None else
                 {action: mean.tolist() for action, mean in lattice.theta_mean.items()})
             content["fixed"] = {action: self._model.a[action].tolist()
                                 for action in self._model.actions if action not in self._model.learnable}
             content["lattice"] = {"components": lattice.components}
-        if self._model.duration_priors:
+        if self._model.duration_priors and not _joint_model(self._model):
             kinds = ("complete", "pending", "queued", "unknown", "unreadable")
             content["durations"] = {action: {kind: sum(a.action == action and a.state == kind
                 for a in reading.timing.attempts) for kind in kinds} for action in self._model.actions}
             content["measure"] = {"weights": None if lattice.weights is None else list(lattice.weights)}
             content["quantity"] = {"partitions": lattice.partitions}
+        if _joint_model(self._model):
+            from .joint_entry import belief_fields
+            content.pop("a")
+            content["joint"] = belief_fields(self._model, reading, lattice)
         if _timed(self._model):
             anchor, ns = _model_anchor(self._model, reading)
             issues = reading._clock_issues if reading.timeline is None else reading.timeline.clock_issues
@@ -1238,9 +1273,9 @@ class Agent:
             if not parent.is_event:
                 raise ValueError("commit: parents must be events")
         inputs = prepared.decided.body.inputs
-        if not inputs or (prepared.decided.body.contract not in (_S4D_DECISION, _QUANTITY_DECISION) and len(inputs) != 1):
+        if not inputs or (prepared.decided.body.contract not in (_JOINT_DECISION, _S4D_DECISION, _QUANTITY_DECISION) and len(inputs) != 1):
             raise ValueError("commit: one belief is required")
-        if prepared.decided.body.contract in (_S4D_DECISION, _QUANTITY_DECISION):
+        if prepared.decided.body.contract in (_JOINT_DECISION, _S4D_DECISION, _QUANTITY_DECISION):
             data = prepared.decided.body.content.as_json()
             expected = [item["id"] for item in data["items"]]
             if data["style"] is not None:
@@ -1277,6 +1312,8 @@ class Agent:
         """互換の入口で旧の約束とcontentを作る (C5・P5)。"""
         if self._model.duration_priors:
             raise ValueError("plan_s4c: learned durations are not supported")
+        if _joint_model(self._model):
+            raise ValueError("plan_s4c: progress models are not supported")
         return self._decide(candidates, planner=plan_s4c, u=u, clock=clock, ids=ids, ledger=ledger,
                             now_mono_ns=now_mono_ns, observed_mono_ns=observed_mono_ns)
 
@@ -1288,18 +1325,18 @@ class Agent:
         Qか所要ありは今のrunの起動とnowが要る (T5・T7b・J4・J8)。
         """
         now, observed = None, None
-        if self._model.Q is not None or self._model.durations or self._model.duration_priors:
+        if self._model.Q is not None or self._model.durations or _work_timed(self._model):
             axis = self._reading.timeline
             if axis is None or clock.run not in axis.runs or type(now_mono_ns) is not int:
                 raise ValueError("decide: current run boot and now_mono_ns are required")
             now = axis.to_axis(clock.run, now_mono_ns)
-            if self._model.durations or self._model.duration_priors:
+            if self._model.durations or _work_timed(self._model):
                 now = _evaluation_ns(self._reading, clock.run, now)
                 if observed_mono_ns is not None and type(observed_mono_ns) is not int:
                     raise ValueError("decide: observed_mono_ns must be integer nanoseconds")
                 observed = (axis.run_end_ns[clock.run] if observed_mono_ns is None else
                             axis.to_axis(clock.run, observed_mono_ns))
-                if self._model.duration_priors and observed_mono_ns is None and not check_events:
+                if _work_timed(self._model) and observed_mono_ns is None and not check_events:
                     receipts = [e for e in self._reading.timing.events.values()
                                 if e.run == clock.run and e.kind != "start" and e.reading is not None]
                     if not receipts:
@@ -1328,7 +1365,7 @@ class Agent:
                        unread_preferences=snapshot.unread_preferences)
         preferences = _preference_view(ledger, target)
         fact_ancestors = (_quantity_fact_ancestors(ledger, target, reading)
-                          if self._model.duration_priors else None)
+                          if _work_timed(self._model) else None)
         q, a, lattice = _derive_state(self._model, reading)
         revision = self.revision + 1
         record = self._belief_record(reading, q, a, revision, clock=clock, ids=ids, lattice=lattice)
@@ -1336,7 +1373,7 @@ class Agent:
         self._frontier, self._reading, self._q, self._a, self._revision, self._belief, self._preferences = (
             target, reading, q, a, revision, record, preferences)
         self._lattice = lattice
-        if self._model.duration_priors:
+        if _work_timed(self._model):
             self._fact_ancestors = fact_ancestors
         return record
 
@@ -1354,7 +1391,8 @@ class Agent:
             raise ValueError("belief: producer.state is required")
         data = _json_content(record.body.content)
         _check_belief_content(data, timed=_timed(model), lattice_model=model if _learning_changing(model) else None,
-                              quantity_model=model if model.duration_priors else None)
+                              quantity_model=model if model.duration_priors else None,
+                              joint_model=model if _joint_model(model) else None)
         subject = cls(model=model, lineage=lineage, component=component)
         if data["model"] != subject.model_ref:
             raise ModelMismatch("belief: model reference differs")
@@ -1363,10 +1401,10 @@ class Agent:
         preferences = _preference_view(ledger, entry.parents)
         q, a, lattice = _derive_state(model, reading)
         rebuilt = subject._content(reading, q, a, lattice=lattice)
-        differences = tuple(sorted(key for key in rebuilt if rebuilt[key] != data[key]
+        differences = tuple(sorted(key for key in set(rebuilt) | set(data) if rebuilt.get(key) != data.get(key)
             or (key in ("time", "arrivals")
                 and _Payload.json(rebuilt[key]) != _Payload.json(data[key]))
-            or ((_learning_changing(model) or model.duration_priors)
+            or ((_learning_changing(model) or _work_timed(model))
                 and _Payload.json(rebuilt[key]) != _Payload.json(data[key]))))
         if differences:
             raise RebuildMismatch(fields=differences)
@@ -1374,6 +1412,6 @@ class Agent:
         subject._revision, subject._belief = record.producer.state.revision, record
         subject._preferences = preferences
         subject._lattice = lattice
-        if model.duration_priors:
+        if _work_timed(model):
             subject._fact_ancestors = _quantity_fact_ancestors(ledger, entry.parents, reading)
         return subject

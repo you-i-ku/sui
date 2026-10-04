@@ -210,6 +210,14 @@ def test_y1_saved_old_model_bytes_and_references(golden):
     {"duration_priors": {"a": _prior()}},
 ])
 def test_y2_model6_incompatible_fields_refuse(change):
+    if "Q" in change:
+        model = _quantity_model(**change)
+        assert json.loads(model_json(model))["scheme"] == "sui.model.7"
+        assert model_json(model_from_json(model_json(model))) == model_json(model)
+        from sui.joint_entry import stage1_model
+        with pytest.raises(IntegrationIncomplete, match="hidden_time"):
+            stage1_model(model)
+        return
     with pytest.raises(ValueError):
         _quantity_model(**change)
 
@@ -1783,7 +1791,9 @@ def test_y3_entry_rejects_legacy_lookahead_even_zero_and_permanently_missing_can
             content=Payload.json({"kind": "style", "H_ns": horizon, "gamma": 1.})))
     rig.ledger.append(style, rig.ledger.heads())
     rig.agent.adopt(rig.ledger, clock=rig.clock, ids=rig.ids)
-    with pytest.raises(OutsideEvaluationType, match="lookahead with learned durations is 1d"):
+    # H=0 too: a positive 1ns duration can report inside the same 4ns tick.
+    # §3-8 hidden true time: uniform phase tick has no certified g_mon.
+    with pytest.raises(IntegrationIncomplete, match="hidden_time"):
         plan(_entry_view(rig, now_ns=4, observed_ns=0), ["a"], u=.5)
     other = _entry_rig(_quantity_model())
     with pytest.raises(OutsideEvaluationType, match="every candidate"):

@@ -328,10 +328,15 @@ def _action_value(eta, belief, action, deadline_ns, candidates, resolved):
 
 def evaluate(view, candidates, resolved, *, u):
     """根の候補・好み・締切で木を評価し、未定義理由は候補順の配列にする (C8)。"""
-    if view.model.duration_priors:
-        raise OutsideEvaluationType("lookahead with learned durations is 1d")
+    from .model import _joint_model
+    if view.model.duration_priors or _joint_model(view.model):
+        from .joint_entry import public_evaluate
+        return public_evaluate(view, candidates, resolved, u=u)
     if view.model.Q is not None and view.model.learnable:
-        raise OutsideEvaluationType("lookahead with learning under a changing state is 1d")
+        if not view.model.durations or any(_duration_ns(d) <= 0 for points in view.model.durations.values() for d, _ in points if d is not None):
+            raise OutsideEvaluationType("lookahead with learning under a changing state is 1d")
+        from .joint_entry import public_evaluate
+        return public_evaluate(view, candidates, resolved, u=u)
     from .agent import Draft as _Draft
     from .records import Payload as _Payload
     from .s4d_contracts import DECISION as _DECISION

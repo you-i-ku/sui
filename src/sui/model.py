@@ -184,8 +184,11 @@ class GenerativeModel:
         if self.durations:
             if set(self.durations) != set(self.actions) or set(self.measures) != set(self.actions):
                 raise ValueError("durations/measures: expected exactly the actions as keys")
-        elif self.measures:
+        elif self.measures and not (self.duration_priors or isinstance(self, ProgressModel)):
             raise ValueError("measures: durations are required")
+        if self.measures and (set(self.measures) != set(self.actions) or
+                              any(m not in ("start", "report") for m in self.measures.values())):
+            raise ValueError("measures: expected start or report for every action")
         durations = {}
         for action, points in self.durations.items():
             if not isinstance(points, tuple) or not points:
@@ -213,8 +216,6 @@ class GenerativeModel:
         if self.duration_priors:
             if self.durations:
                 raise ValueError("duration_priors and durations cannot coexist")
-            if self.Q is not None:
-                raise ValueError("duration_priors with Q is outside model.6")
             from .quantity import validate_model as _validate_quantity_model
             priors, measure = _validate_quantity_model(self.duration_priors, self.measure, self.actions)
             object.__setattr__(self, "duration_priors", priors)
@@ -222,12 +223,91 @@ class GenerativeModel:
         else:
             if not isinstance(self.duration_priors, _Mapping):
                 raise ValueError("duration_priors: expected Mapping")
-            if self.measure is not None:
+            if self.measure is not None and not isinstance(self, ProgressModel):
                 raise ValueError("measure: duration_priors are required")
             object.__setattr__(self, "duration_priors", _MappingProxyType({}))
         object.__setattr__(self, "a", _MappingProxyType(counts))
         object.__setattr__(self, "D", _readonly(prior))
         object.__setattr__(self, "log_C", _readonly(preferences))
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True, eq=False)
+class ProgressModel(GenerativeModel):
+    """model.7 world declaration, independent of the certified evaluator's scope.
+
+    work_priors use the atomic/piecewise base encoding in the explicit work unit.
+    The edges_ns/point integers are coordinates in that unit. CompletionSpec
+    declares its relation to ns. General speeds/clock laws are valid declarations
+    even when the public calculation cannot certify their hidden times.
+    """
+    completion: object
+    work_priors: _Mapping
+
+    def __post_init__(self):
+        GenerativeModel.__post_init__(self)
+        from .progress import CompletionSpec
+        from .quantity import duration_prior, measure_prior
+        if not isinstance(self.completion, CompletionSpec):
+            raise ValueError("completion: expected CompletionSpec")
+        if (self.completion.actions, self.completion.states) != (self.actions, self.states):
+            raise ValueError("completion: action/state order differs from model")
+        if self.durations or self.duration_priors:
+            raise ValueError("progress: use work_priors, not duration fields")
+        if not isinstance(self.work_priors, _Mapping) or set(self.work_priors) != set(self.actions):
+            raise ValueError("work_priors: exactly one prior per action required")
+        if set(self.measures) != set(self.actions):
+            raise ValueError("progress: explicit start/report for every action required")
+        object.__setattr__(self, "work_priors", _MappingProxyType({
+            a: duration_prior(self.work_priors[a]) for a in self.actions}))
+        object.__setattr__(self, "measure", measure_prior(self.measure))
+
+
+def _joint_model(model):
+    return isinstance(model, ProgressModel) or bool(model.duration_priors and (model.Q is not None or model.measures))
+
+
+def _work_timed(model):
+    return isinstance(model, ProgressModel) or bool(model.duration_priors)
+
+
+@_dataclass(frozen=True, slots=True)
+class EvaluationTiming:
+    """公開の照会結果。評価に必要な軸・受信境界・確かめの出どころ。"""
+    needs_axis: bool
+    needs_receipt_boundary: bool
+    needs_check_events: bool
+
+
+def evaluation_timing(model):
+    """採用したモデルの時間の条件を返す（台帳の最新を読まない）。"""
+    work_timed = _work_timed(model)
+    receipt = bool(model.durations) or work_timed
+    return EvaluationTiming(model.Q is not None or receipt, receipt, work_timed)
+
+
+def _completion_json(spec):
+    rational = lambda f: [f.numerator, f.denominator]
+    return {"name": spec.name, "version": spec.version, "actions": list(spec.actions),
+        "states": list(spec.states), "work_unit": spec.work_unit, "time_unit": spec.time_unit,
+        "speed_unit": spec.speed_unit, "candidates": [[[rational(r) for r in row] for row in c]
+            for c in spec.candidates], "weights": [rational(w) for w in spec.weights],
+        "share": spec.share, "max_speed": rational(spec.max_speed)}
+
+
+def _completion_from_json(value):
+    from fractions import Fraction
+    from .progress import CompletionSpec
+    keys = {"name", "version", "actions", "states", "work_unit", "time_unit", "speed_unit",
+            "candidates", "weights", "share", "max_speed"}
+    if not isinstance(value, dict) or set(value) != keys:
+        raise ValueError("completion: unexpected keys")
+    def rational(pair):
+        if not isinstance(pair, list) or len(pair) != 2 or any(type(v) is not int for v in pair) or pair[1] <= 0:
+            raise ValueError("completion: expected integer numerator/positive denominator")
+        return Fraction(*pair)
+    return CompletionSpec(**{**value, "actions": tuple(value["actions"]), "states": tuple(value["states"]),
+        "candidates": tuple(tuple(tuple(rational(r) for r in row) for row in c) for c in value["candidates"]),
+        "weights": tuple(rational(w) for w in value["weights"]), "max_speed": rational(value["max_speed"])})
 
 
 def _has_unreachable(model: GenerativeModel) -> bool:
@@ -255,13 +335,30 @@ def model_json(model: GenerativeModel) -> bytes:
         material.update(scheme="sui.model.5", durations=dict(model.durations),
                         measures=dict(model.measures))
     if model.duration_priors:
-        material.update(scheme="sui.model.6", Q=None,
+        material.update(scheme="sui.model.6", Q=None if model.Q is None else model.Q.tolist(),
                         arrivals={route: {"alpha": prior.alpha, "beta_s": prior.beta_s}
                                   for route, prior in model.arrivals.items()},
                         durations={}, measures=dict(model.measures),
                         duration_priors={action: prior.as_json()
                                          for action, prior in model.duration_priors.items()},
                         measure=model.measure.as_json())
+    if _joint_model(model):
+        if isinstance(model, ProgressModel):
+            completion, work = model.completion, model.work_priors
+            measures = dict(model.measures)
+        else:
+            from .progress import CompletionSpec
+            # Legacy duration semantics specify unit speed. This is an embedding
+            # of that known law, not a default for a new progress declaration.
+            completion = CompletionSpec(name="progress", version="1", actions=model.actions,
+                states=model.states, work_unit="ns", time_unit="ns", speed_unit="ns/ns",
+                candidates=(tuple(tuple(1 for _ in model.states) for _ in model.actions),),
+                weights=(1,), share="all_actions", max_speed=1)
+            work, measures = model.duration_priors, {a: model.measures.get(a, "report") for a in model.actions}
+        material.update(scheme="sui.model.7", Q=None if model.Q is None else model.Q.tolist(),
+            arrivals={r: {"alpha": p.alpha, "beta_s": p.beta_s} for r, p in model.arrivals.items()},
+            durations={}, duration_priors={}, measures=measures, measure=model.measure.as_json(),
+            completion=_completion_json(completion), work_priors={a: p.as_json() for a, p in work.items()})
     return _json.dumps(material, ensure_ascii=False, sort_keys=True,
                           separators=(",", ":"), allow_nan=False).encode("utf-8")
 
@@ -272,6 +369,26 @@ def model_from_json(data: bytes) -> GenerativeModel:
         if not isinstance(data, bytes):
             raise ValueError("model: expected bytes")
         value = _json.loads(data)
+        if isinstance(value, dict) and value.get("scheme") == "sui.model.7":
+            keys = {"scheme", "states", "outcomes", "actions", "a", "learnable", "D", "log_C", "gamma",
+                    "Q", "arrivals", "durations", "measures", "duration_priors", "measure", "completion", "work_priors"}
+            if set(value) != keys or value["durations"] != {} or value["duration_priors"] != {}:
+                raise ValueError("progress: unexpected keys or duration aliases")
+            model = ProgressModel(states=tuple(value["states"]), outcomes=tuple(value["outcomes"]),
+                actions=tuple(value["actions"]), a={k: _np.array(v, dtype=float) for k, v in value["a"].items()},
+                learnable=frozenset(value["learnable"]), D=_np.array(value["D"], dtype=float),
+                log_C=_np.array(value["log_C"], dtype=float), gamma=float(value["gamma"]),
+                Q=None if value["Q"] is None else _np.array(value["Q"], dtype=float),
+                arrivals={k: ArrivalPrior(**v) for k, v in value["arrivals"].items()},
+                measures=value["measures"], measure=value["measure"],
+                completion=_completion_from_json(value["completion"]), work_priors=value["work_priors"])
+            if model_json(model) != data:
+                raise ValueError("model: expected canonical encoding")
+            return model
+        if isinstance(value, dict) and value.get("scheme") == "sui.model.6" and value.get("Q") is not None:
+            raise ValueError("duration_priors with Q is outside model.6")
+        if isinstance(value, dict) and value.get("scheme") == "sui.model.6" and value.get("measures"):
+            raise ValueError("measures: durations are required")
         keys = {"scheme", "states", "outcomes", "actions", "a", "learnable",
                 "D", "log_C", "gamma"}
         if isinstance(value, dict) and value.get("scheme") in ("sui.model.2", "sui.model.3", "sui.model.4", "sui.model.5", "sui.model.6"):

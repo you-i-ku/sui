@@ -17,6 +17,7 @@ from .records import AttemptStarted, Decided, Observed, Payload, Producer, Recor
 from .s1_contracts import ATTEMPT, OUTCOME
 from .s3_contracts import ABANDON, ENDED
 from .s4_contracts import BOOT as _BOOT, LISTEN as _LISTEN
+from .model import evaluation_timing
 
 
 class Hand(Protocol):
@@ -255,7 +256,7 @@ class Window:
         起動・開閉はモデルによらず残し、駆動の依頼は受け付けない (P11)。
         """
         event, p = envelope.event, self.pledges
-        after = (sorted(self.ledger.heads()) if self.agent._model.duration_priors
+        after = (sorted(self.ledger.heads()) if evaluation_timing(self.agent._model).needs_check_events
                  and isinstance(event, (Tick, Thought)) else None)
         item = None
         if isinstance(event, Tick):
@@ -274,7 +275,7 @@ class Window:
             if event.work not in p.thinking or any(
                     isinstance(i, (Commit, Released)) and i.work == event.work for i in p.items):
                 p.latest_ns = (self.clock.run, envelope.received_ns)
-                if self.agent._model.duration_priors:
+                if evaluation_timing(self.agent._model).needs_check_events:
                     p.latest_check_events = ({"unrecorded": {"kind": "thought", "reading": envelope.received_ns,
                                                            "after": after}},)
                 return
@@ -293,7 +294,7 @@ class Window:
             p.items.append(item)
         p.notices.append(event)
         p.latest_ns = (self.clock.run, envelope.received_ns)
-        if self.agent._model.duration_priors:
+        if evaluation_timing(self.agent._model).needs_check_events:
             p.latest_check_events = (({"fact": str(item.record.id)},) if isinstance(item, Observe) else
                 ({"unrecorded": {"kind": "tick" if isinstance(event, Tick) else "thought",
                                  "reading": envelope.received_ns, "after": after}},))
@@ -379,17 +380,18 @@ class Window:
                 request = p.waiting[0]
                 self._adopt()
                 now, observed = None, None
-                if self.agent._model.Q is not None or self.agent._model.durations or self.agent._model.duration_priors:
+                requirements = evaluation_timing(self.agent._model)
+                if requirements.needs_axis:
                     axis = self.agent._reading.timeline
                     if (axis is None or self.clock.run not in axis.runs
                             or p.latest_ns is None or p.latest_ns[0] != self.clock.run):
                         raise ValueError("Think: current run boot and received time are required")
                     now = axis.to_axis(*p.latest_ns)
-                    if self.agent._model.durations or self.agent._model.duration_priors:
+                    if requirements.needs_receipt_boundary:
                         observed = now
                         now = _evaluation_ns(self.agent._reading, self.clock.run, now)
                 options = {}
-                if self.agent._model.duration_priors:
+                if requirements.needs_check_events:
                     sources = tuple(source if "fact" in source else {"unrecorded": {
                         "kind": source["unrecorded"]["kind"],
                         "reading": axis.to_axis(self.clock.run, source["unrecorded"]["reading"]),

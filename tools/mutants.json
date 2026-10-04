@@ -1322,8 +1322,8 @@
   "file": "src/sui/agent.py",
   "edits": [
    [
-    "differences = tuple(sorted(key for key in rebuilt if rebuilt[key]",
-    "differences = tuple(sorted(key for key in rebuilt if key != \"q\" if rebuilt[key]"
+    "differences = tuple(sorted(key for key in set(rebuilt) | set(data) if rebuilt.get(key) != data.get(key)",
+    "differences = tuple(sorted(key for key in set(rebuilt) | set(data) if key != 'q' if rebuilt.get(key) != data.get(key)"
    ]
   ],
   "expect": [
@@ -1335,8 +1335,8 @@
   "file": "src/sui/agent.py",
   "edits": [
    [
-    "differences = tuple(sorted(key for key in rebuilt if rebuilt[key]",
-    "differences = tuple(sorted(key for key in rebuilt if key != \"unread\" if rebuilt[key]"
+    "differences = tuple(sorted(key for key in set(rebuilt) | set(data) if rebuilt.get(key) != data.get(key)",
+    "differences = tuple(sorted(key for key in set(rebuilt) | set(data) if key != 'unread' if rebuilt.get(key) != data.get(key)"
    ]
   ],
   "expect": [
@@ -4465,16 +4465,12 @@
  {
   "id": "X153",
   "file": "src/sui/runtime.py",
-  "edits": [
-   [
-    "                if self.agent._model.Q is not None or self.agent._model.durations or self.agent._model.duration_priors:\n                    axis = self.agent._reading.timeline",
-    "                if self.agent._model.Q is not None or self.agent._model.durations:\n                    axis = self.agent._reading.timeline"
-   ]
-  ],
   "expect": [
    "y8",
    "d26"
-  ]
+  ],
+  "old": "                if requirements.needs_axis:\n                    axis = self.agent._reading.timeline",
+  "new": "                if requirements.needs_axis and (self.agent._model.Q is not None or self.agent._model.durations):\n                    axis = self.agent._reading.timeline"
  },
  {
   "id": "X154",
@@ -4939,6 +4935,510 @@
   ],
   "expect": [
    "u15"
+  ]
+ },
+ {
+  "id": "X189",
+  "file": "src/sui/agent.py",
+  "old": "    if not one_step:\n        from .lookahead import evaluate as _evaluate_lookahead\n        return _evaluate_lookahead(view, actions, resolved, u=u)",
+  "new": "    if not one_step:\n        if view.model.duration_priors or _joint_model(view.model) or _learning_changing(view.model):\n            raise OutsideEvaluationType(\"lookahead with learning is 1d\")\n        from .lookahead import evaluate as _evaluate_lookahead\n        return _evaluate_lookahead(view, actions, resolved, u=u)",
+  "expect": [
+   "public_bridge_b"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X190",
+  "file": "src/sui/lookahead.py",
+  "old": "    if view.model.duration_priors or _joint_model(view.model):\n        from .joint_entry import public_evaluate\n        return public_evaluate(view, candidates, resolved, u=u)",
+  "new": "    if view.model.duration_priors or _joint_model(view.model):\n        raise OutsideEvaluationType(\"lookahead with learned durations is 1d\")",
+  "expect": [
+   "direct_lookahead"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X191",
+  "file": "src/sui/model.py",
+  "old": "        if isinstance(value, dict) and value.get(\"scheme\") == \"sui.model.6\" and value.get(\"Q\") is not None:\n            raise ValueError(\"duration_priors with Q is outside model.6\")",
+  "new": "        if isinstance(value, dict) and value.get(\"scheme\") == \"sui.model.6\" and value.get(\"Q\") is not None:\n            from dataclasses import replace\n            legacy = model_from_json(_json.dumps({**value, \"Q\": None, \"measures\": {}}, ensure_ascii=False, sort_keys=True, separators=(\",\", \":\")).encode())\n            return replace(legacy, Q=_np.array(value[\"Q\"], dtype=float) if _np.any(value[\"Q\"]) else None,\n                           measures={a: \"report\" for a in legacy.actions})",
+  "expect": [
+   "old_model6_q"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X192",
+  "file": "src/sui/model.py",
+  "old": "        material.update(scheme=\"sui.model.7\", Q=None if model.Q is None else model.Q.tolist(),",
+  "new": "        material.update(scheme=\"sui.model.7\", Q=None,",
+  "expect": [
+   "model7_declared_nonzero_q"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X193",
+  "file": "src/sui/joint_entry.py",
+  "old": "        work = {a: KnownWorkLaw(tuple((INFINITE_WORK if d is None else _duration_ns(d), m)\n                    for (d, _), m in zip(points, _normalized(p for _, p in points))))\n                for a, points in model.durations.items()}",
+  "new": "        work = {a: WorkPrior(F(2), tuple((INFINITE_WORK if d is None else _duration_ns(d), m)\n                    for (d, _), m in zip(points, _normalized(p for _, p in points))))\n                for a, points in model.durations.items()}",
+  "expect": [
+   "known_duration_model5"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X194",
+  "file": "src/sui/joint_stage2.py",
+  "old": "        return MappingProxyType({key: _exp(v) for key, v in self.log_joint.items()})",
+  "new": "        joint = {key: _exp(v) for key, v in self.log_joint.items()}\n        speed = {pair: math.fsum(p for (other, _), p in joint.items() if other == pair) for pair in self.model.pairs}\n        states = {s: math.fsum(p for (_, other), p in joint.items() if other == s) for _, s in joint}\n        return MappingProxyType({(pair, s): speed[pair] * states[s] for pair, s in joint})",
+  "expect": [
+   "correlated_speed_state"
+  ],
+  "paths": [
+   "tests/test_progress.py"
+  ]
+ },
+ {
+  "id": "X195",
+  "file": "src/sui/joint.py",
+  "old": "    after = target_marginal(child, times, _grid=grid, _transition_tolerance=transition_tolerance)",
+  "new": "    after = target_marginal(child, times, _grid=grid, _transition_tolerance=transition_tolerance)\n    from scipy.special import gammaln\n    component_kl = 0.0\n    for component in after.components:\n        value = 0.0\n        for beta, prior in zip(component.parameters, before._measure.beta):\n            b, a = np.array(tuple(map(float, beta))), np.array(tuple(map(float, prior)))\n            value += float(gammaln(b.sum()) - gammaln(a.sum()) - np.sum(gammaln(b) - gammaln(a))\n                           + np.sum((b - a) * (digamma(b) - digamma(b.sum()))))\n        component_kl += float(component.weight) * value\n    return InformationBounds(component_kl, component_kl)",
+  "expect": [
+   "mixture_label_is"
+  ],
+  "paths": [
+   "tests/test_joint.py"
+  ]
+ },
+ {
+  "id": "X196",
+  "file": "src/sui/joint.py",
+  "old": "        return MappingProxyType({w: p / evidence for w, p in table.items()})",
+  "new": "        marginal = self.target_marginal(())\n        fresh = marginal.mean((\"work\", attempt.action))\n        return MappingProxyType({w: p for (w, _), p in zip(self.model.work[attempt.action].points, fresh)})",
+  "expect": [
+   "pending_keeps_the_same"
+  ],
+  "paths": [
+   "tests/test_joint.py"
+  ]
+ },
+ {
+  "id": "X197",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "    base = root.condition((), observed_ns=root.observed_ns, attempts=(own,))\n    completed = {f.label for f in root.facts if isinstance(f, Completed)}\n    active = tuple(a for a in base.attempts if a.label not in completed)",
+  "new": "    base = root.condition((), observed_ns=root.observed_ns, attempts=(own,))\n    completed = {f.label for f in root.facts if isinstance(f, Completed)}\n    own_end = max(own.start_ns+w for w, _ in base.model.work[action].points if w is not INFINITE_WORK)\n    active = tuple(a for a in base.attempts if a.label not in completed and (a.label == own.label\n                   or any(w is not INFINITE_WORK and a.start_ns+w <= own_end for w, _ in base.model.work[a.action].points)))",
+  "expect": [
+   "one_step_pending_z_includes"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X198",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "                         else self.node(child_eta, b.belief, depth+1))",
+  "new": "                         else _Evaluator(b.belief, self.candidates, self.deadline, self.gamma,\n                                         self.terminal_cost, self.cost_bound, self.tolerance,\n                                         self.series_budget, self.node_budget, self.times).node(child_eta, b.belief, depth+1))",
+  "expect": [
+   "bridge_b_root"
+  ],
+  "paths": [
+   "tests/test_joint_lookahead.py"
+  ]
+ },
+ {
+  "id": "X199",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "            child = base.condition(facts, observed_ns=end)",
+  "new": "            child = base.condition(tuple(f for f in facts if not isinstance(f, Completed)\n                                         or f.report_ns < end or f.label == own.label), observed_ns=end)",
+  "expect": [
+   "simultaneous_reports_all"
+  ],
+  "paths": [
+   "tests/test_joint_lookahead.py"
+  ]
+ },
+ {
+  "id": "X200",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "    return Attempt(label, action, eta.time_ns)",
+  "new": "    return Attempt(label, action, max(eta.now_ns, eta.time_ns-1))",
+  "expect": [
+   "next_start_is_previous"
+  ],
+  "paths": [
+   "tests/test_joint_lookahead.py"
+  ]
+ },
+ {
+  "id": "X201",
+  "file": "src/sui/joint_stage2.py",
+  "old": "                likelihood = (k.atom().log_state_mass if k.t0 == obs.time_s else (-math.inf, -math.inf)) if atom else (-math.inf, k.log_density(obs.time_s))",
+  "new": "                likelihood = (k.atom().log_state_mass if k.t0 == obs.time_s else (-math.inf, k.log_density(obs.time_s))) if atom else (-math.inf, k.log_density(obs.time_s))",
+  "expect": [
+   "atom_inside_other"
+  ],
+  "paths": [
+   "tests/test_progress.py"
+  ]
+ },
+ {
+  "id": "X202",
+  "file": "src/sui/joint_stage2.py",
+  "old": "        return PotentialParts(max(0.0, laws), max(0.0, state))",
+  "new": "        return PotentialParts(0.0 if isinstance(self.observation, NoCompletion) else max(0.0, laws), max(0.0, state))",
+  "expect": [
+   "not_arrived_law_information"
+  ],
+  "paths": [
+   "tests/test_progress.py"
+  ]
+ },
+ {
+  "id": "X203",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "        cost = self.terminal_cost(eta)",
+  "new": "        cost = 0.0",
+  "expect": [
+   "leaf_cost_is_charged"
+  ],
+  "paths": [
+   "tests/test_joint_lookahead.py"
+  ]
+ },
+ {
+  "id": "X204",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "        q = tuple(map(float, _policy([a.J for a in actions], gamma)))",
+  "new": "        winner = min(range(len(actions)), key=lambda i: actions[i].J)\n        q = tuple(float(i == winner) for i in range(len(actions)))",
+  "expect": [
+   "softmax_box_bounds"
+  ],
+  "paths": [
+   "tests/test_joint_lookahead.py"
+  ]
+ },
+ {
+  "id": "X205",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "    qb = policy_bounds(tuple(a.J_bounds for a in actions), gamma)\n    finite = [i for i, a in enumerate(actions) if a.J != math.inf]",
+  "new": "    qb = policy_bounds(tuple(a.J_bounds for a in actions), gamma)\n    q = tuple(b.midpoint for b in qb)\n    finite = [i for i, a in enumerate(actions) if a.J != math.inf]",
+  "expect": [
+   "midpoint_J_softmax"
+  ],
+  "paths": [
+   "tests/test_joint_lookahead.py"
+  ]
+ },
+ {
+  "id": "X206",
+  "file": "src/sui/joint_entry.py",
+  "old": "    time = _one_step_time(view)",
+  "new": "    if isinstance(view.model, ProgressModel):\n        from dataclasses import replace\n        model = view.model\n        keep = tuple(a for a in candidates if all(all(r == 1 for r in c[model.actions.index(a)]) for c in model.completion.candidates))\n        if keep and len(keep) != len(candidates):\n            positions = tuple(model.actions.index(a) for a in keep)\n            completion = replace(model.completion, actions=keep,\n                                 candidates=tuple(tuple(c[i] for i in positions) for c in model.completion.candidates))\n            view = replace(view, model=replace(model, actions=keep, a={a: model.a[a] for a in keep},\n                           learnable=model.learnable.intersection(keep), measures={a: model.measures[a] for a in keep},\n                           work_priors={a: model.work_priors[a] for a in keep}, completion=completion))\n            candidates = keep\n    time = _one_step_time(view)",
+  "expect": [
+   "unrecognized_candidate_is"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X207",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "                start = RulerStart(f\"R:{action}\", Fraction(0))",
+  "new": "                start = RulerStart(None, (lower+upper)/2)",
+  "expect": [
+   "continuous_starts_are"
+  ],
+  "paths": [
+   "tests/test_progress_lookahead.py"
+  ]
+ },
+ {
+  "id": "X208",
+  "file": "src/sui/joint_entry.py",
+  "old": "        return not finite or bound == 0 or min(finite) >= bound*width",
+  "new": "        return True",
+  "expect": [
+   "zero_window_positive_work"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X209",
+  "file": "src/sui/runtime.py",
+  "old": "                    options[\"check_events\"] = sources",
+  "new": "                    options[\"check_events\"] = ()",
+  "expect": [
+   "fakeclock_think_provenance"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X210",
+  "file": "src/sui/agent.py",
+  "old": "        rebuilt = subject._content(reading, q, a, lattice=lattice)",
+  "new": "        if _joint_model(model):\n            from .joint_entry import Summary\n            joint = data[\"joint\"]\n            q = None if data[\"q\"] is None else _np.array(data[\"q\"])\n            lattice = Summary(joint[\"status\"], joint[\"reason\"], joint[\"theta_mean\"], joint[\"work_mean\"],\n                              joint[\"speed_weights\"], joint[\"measure_weights\"], joint[\"components\"])\n            a = dict(model.a)\n            rebuilt = data\n        else:\n            rebuilt = subject._content(reading, q, a, lattice=lattice)",
+  "expect": [
+   "restore_compares_every"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X211",
+  "file": "src/sui/agent.py",
+  "old": "        prepared = self.prepare(planner(self.view(now_ns=now, observed_ns=observed, check_events=check_events), candidates, u=u),\n                                clock=clock, ids=ids)",
+  "new": "        from .quantity import IntegrationIncomplete\n        try:\n            draft = planner(self.view(now_ns=now, observed_ns=observed, check_events=check_events), candidates, u=u)\n        except IntegrationIncomplete:\n            failed = _Record(id=ids.new(_RefKind.DECISION), at=clock.now(), writer=_Role.MODEL, producer=self.producer,\n                             body=_Decided(inputs=(self._belief.id,), contract=_JOINT_DECISION,\n                                           content=_Payload.json({\"evaluation\": \"incomplete\"})))\n            ledger.append(failed, self.frontier)\n            raise\n        prepared = self.prepare(draft, clock=clock, ids=ids)",
+  "expect": [
+   "failed_accuracy_budget"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X212",
+  "file": "src/sui/agent.py",
+  "old": "    if draft.content != record.body.content:",
+  "new": "    if any(data.get(k) != rebuilt.get(k) for k in set(data) | set(rebuilt)\n           if k not in {\"expected_cost_bounds\", \"information_bounds\", \"J_bounds\", \"q_pi_bounds\", \"root\", \"algorithm\", \"u\"}):",
+  "expect": [
+   "replay_checks_new"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X213",
+  "file": "src/sui/joint_entry.py",
+  "old": "check_events=view.check_events, fact_ancestors=view.fact_ancestors, allow_zero_work=resolved.H_ns is None)",
+  "new": "check_events=view.check_events, fact_ancestors=view.fact_ancestors, allow_zero_work=False)",
+  "expect": [
+   "native_zero_work_is"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X214",
+  "file": "src/sui/joint_entry.py",
+  "old": "    if value and not result:\n        raise NumericalRange(\"joint summary: positive probability cannot be represented\")",
+  "new": "    if value and not result:\n        return 0.0",
+  "expect": [
+   "positive_tiny_summary"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X215",
+  "file": "src/sui/agent.py",
+  "old": "                raise IntegrationIncomplete(self._lattice.reason)",
+  "new": "                raise ModelFalsified(self._lattice.reason)",
+  "expect": [
+   "incomplete_belief_is"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X216",
+  "file": "src/sui/agent.py",
+  "old": "    if _joint_model(view.model):\n        raise ValueError(\"plan_s4c: progress models are not supported\")",
+  "new": "",
+  "expect": [
+   "progress_does_not"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X217",
+  "file": "src/sui/s4b1c_contracts.py",
+  "old": "BELIEF = ContractRef(\"sui.s4b.joint_belief\", \"1\")",
+  "new": "BELIEF = ContractRef(\"sui.s4b.belief\", \"1\")",
+  "expect": [
+   "contract_registration_adds"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X218",
+  "file": "src/sui/model.py",
+  "old": "    return isinstance(model, ProgressModel) or bool(model.duration_priors and (model.Q is not None or model.measures))",
+  "new": "    return isinstance(model, ProgressModel) or bool(model.duration_priors and model.Q is not None)",
+  "expect": [
+   "work_priors_with_explicit"
+  ],
+  "paths": [
+   "tests/test_joint_entry.py"
+  ]
+ },
+ {
+  "id": "X219",
+  "file": "src/sui/joint_entry.py",
+  "old": "facts.append(NotArrived(label, event.reading, inclusive=True))",
+  "new": "facts.append(NotArrived(label, event.reading, inclusive=False))",
+  "expect": [
+   "history_root_external"
+  ],
+  "paths": [
+   "tests/test_joint_blockers.py"
+  ]
+ },
+ {
+  "id": "X220",
+  "file": "src/sui/joint.py",
+  "old": "known_weight *= self.history_kernel(durations)",
+  "new": "known_weight *= Fraction(bool(self.history_kernel(durations)))",
+  "expect": [
+   "history_sequential_tie"
+  ],
+  "paths": [
+   "tests/test_joint_blockers.py"
+  ]
+ },
+ {
+  "id": "X221",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "terminal = work is INFINITE_WORK or own.start_ns+work > deadline_ns",
+  "new": "terminal = work is INFINITE_WORK or own.start_ns+work >= deadline_ns",
+  "expect": [
+   "deadline_choice"
+  ],
+  "paths": [
+   "tests/test_joint_blockers.py"
+  ]
+ },
+ {
+  "id": "X222",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "if atom.time_s <= self.horizon",
+  "new": "if atom.time_s < self.horizon",
+  "expect": [
+   "cost_bound_applies"
+  ],
+  "paths": [
+   "tests/test_progress_lookahead.py"
+  ]
+ },
+ {
+  "id": "X223",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "                before = end <= self.horizon",
+  "new": "                before = end < self.horizon",
+  "expect": [
+   "equal_speed_early_report"
+  ],
+  "paths": [
+   "tests/test_progress_lookahead.py"
+  ]
+ },
+ {
+  "id": "X224",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "    unread = tuple(unread)\n    by_label = {a.label: a for a in root.attempts}",
+  "new": "    unread = tuple(unread)\n    root = root.condition(tuple(Completed(e[1], root.observed_ns+e[0], e[3]) for e in unread if e[3] is not None), observed_ns=root.observed_ns)\n    by_label = {a.label: a for a in root.attempts}",
+  "expect": [
+   "unread_O0_is_information"
+  ],
+  "paths": [
+   "tests/test_joint_blockers.py"
+  ]
+ },
+ {
+  "id": "X225",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "    def potential(self, belief):\n        key = belief.attempts, belief.facts",
+  "new": "    def potential(self, belief):\n        unread_labels = {f.label for f in self.root.facts if isinstance(f, Completed) and f.outcome is None}\n        belief = replace(belief, facts=tuple(Completed(f.label, f.report_ns, None) if isinstance(f, Completed) and f.label in unread_labels else f for f in belief.facts))\n        key = belief.attempts, belief.facts",
+  "expect": [
+   "unread_O0_is_information"
+  ],
+  "paths": [
+   "tests/test_joint_blockers.py"
+  ]
+ },
+ {
+  "id": "X226",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "                if not outside:\n                    raise IntegrationIncomplete(\"stage2_continuation: candidate \"+a.action+\n                                                \" may yield another informative report\")",
+  "new": "                if not outside:\n                    continue",
+  "expect": [
+   "stage2_uncertified_member"
+  ],
+  "paths": [
+   "tests/test_joint_blockers.py"
+  ]
+ },
+ {
+  "id": "X227",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "    continuations = tuple(common)",
+  "new": "    continuations = tuple(a for a in common if isinstance(a, KnownContinuation))",
+  "expect": [
+   "stage2_common_U_numeric"
+  ],
+  "paths": [
+   "tests/test_joint_blockers.py"
+  ]
+ },
+ {
+  "id": "X228",
+  "file": "src/sui/joint_lookahead.py",
+  "old": "    completed = {f.label for f in belief.facts if isinstance(f, Completed)}",
+  "new": "    completed = {f.label for f in belief.facts if isinstance(f, Completed)} | {a.label for a in belief.attempts if a.start_ns < eta.now_ns}",
+  "expect": [
+   "public_not_ingested_report"
+  ],
+  "paths": [
+   "tests/test_joint_blockers.py"
+  ]
+ },
+ {
+  "id": "X229",
+  "file": "src/sui/joint_entry.py",
+  "old": "I = tuple(a.information for a in result.root.actions)",
+  "new": "I = tuple(InformationBounds(0., 0.) for a in result.root.actions)",
+  "expect": [
+   "released_model5_model6"
+  ],
+  "paths": [
+   "tests/test_joint_blockers.py"
+  ]
+ },
+ {
+  "id": "X230",
+  "file": "src/sui/joint_entry.py",
+  "old": "refinement_budget=5)",
+  "new": "refinement_budget=5, unread=tuple((f.report_ns-root.observed_ns, f.label, next(a.action for a in root.attempts if a.label == f.label), None) for f in root.facts if isinstance(f, Completed) and f.outcome is None))",
+  "expect": [
+   "public_ingested_unreadable_name"
+  ],
+  "paths": [
+   "tests/test_joint_blockers.py"
   ]
  }
 ]
