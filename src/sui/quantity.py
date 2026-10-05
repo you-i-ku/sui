@@ -1701,33 +1701,64 @@ class AtomComponent:
 
 
 @dataclass(frozen=True, slots=True)
-class AtomsPosterior:
-    """結合の K を保つ分割の和。有限原子の積分と重みは有理数で閉じる。
+class _AtomAllocation:
+    lam: int
+    allocation: tuple
+    counts: tuple
+    likelihood: Fraction
 
-    同じ原子に着地した別の Polya ブロックも別の項に残す。予測は
-    F と λ の結合の重みを使う。情報量・一歩の入口の接続は別の照会。
+
+@dataclass(frozen=True, slots=True)
+class AtomsPosterior:
+    """結合の K と試みごとの割り当てを保つ、有理数の厳密な事後。
+
+    同じ割り当てに着く分割は先に合算する。分割の名札を読む照会には
+    旧順序の成分を必要時に展開する。通常の予測はこの展開を使わない。
     """
 
     priors: Mapping
     measure: MeasurePrior
     timing: Timing
     attempts: tuple
-    components: tuple[AtomComponent, ...]
-    fraction_weights: tuple[Fraction, ...]
+    _allocations: tuple[_AtomAllocation, ...]
+    _weights: tuple[Fraction, ...]
     fraction_evidence: Fraction
     stats: QuantityStats
-    log_w: Mapping = field(init=False)
     log_evidence: float = field(init=False)
+    _expanded: tuple | None = field(default=None, init=False, repr=False, compare=False)
+    _log_w: Mapping | None = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self):
         object.__setattr__(self, "priors", MappingProxyType(dict(self.priors)))
-        object.__setattr__(self, "log_w", MappingProxyType({c.key: _log_fraction(w)
-            for c, w in zip(self.components, self.fraction_weights)}))
         object.__setattr__(self, "log_evidence", _log_fraction(self.fraction_evidence))
+
+    def _partition_rows(self):
+        if self._expanded is None:
+            likelihoods = {(c.lam, c.allocation): c.likelihood for c in self._allocations}
+            rows = tuple((c, w * likelihoods[c.lam, c.allocation] / self.fraction_evidence)
+                         for c, w in _atom_partition_terms(self.priors, self.measure, self.attempts)
+                         if (c.lam, c.allocation) in likelihoods)
+            object.__setattr__(self, "_expanded", (tuple(c for c, _ in rows), tuple(w for _, w in rows)))
+        return self._expanded
+
+    @property
+    def components(self):
+        return self._partition_rows()[0]
+
+    @property
+    def fraction_weights(self):
+        return self._partition_rows()[1]
+
+    @property
+    def log_w(self):
+        if self._log_w is None:
+            object.__setattr__(self, "_log_w", MappingProxyType({c.key: _log_fraction(w)
+                for c, w in zip(self.components, self.fraction_weights)}))
+        return self._log_w
 
     @property
     def fraction_measure_weights(self):
-        return tuple(sum((w for c, w in zip(self.components, self.fraction_weights) if c.lam == i), Fraction(0))
+        return tuple(sum((w for c, w in zip(self._allocations, self._weights) if c.lam == i), Fraction(0))
                      for i in range(len(self.measure.candidates)))
 
     @property
@@ -1739,7 +1770,7 @@ class AtomsPosterior:
         indexes = {a.attempt: i for i, a in enumerate(self.attempts)}
         if any(ref not in indexes for ref in requests):
             raise ValueError("allocated: unknown attempt")
-        return _log_fraction(sum((w for c, w in zip(self.components, self.fraction_weights)
+        return _log_fraction(sum((w for c, w in zip(self._allocations, self._weights)
             if all(c.allocation[indexes[ref]] == value for ref, value in requests.items())), Fraction(0)))
 
     def fraction_new_value(self, action):
@@ -1752,7 +1783,7 @@ class AtomsPosterior:
         result = {}
         for i, (point, mass) in enumerate(prior.base.params["points"]):
             result[point] = sum((w * (_fraction(prior.alpha) * _fraction(mass) + c.counts[action_index][i]) / total
-                for c, w in zip(self.components, self.fraction_weights)), Fraction(0))
+                for c, w in zip(self._allocations, self._weights)), Fraction(0))
         return MappingProxyType(result)
 
     def new_value(self, action):
@@ -1770,14 +1801,41 @@ class AtomsPosterior:
         return sum((weight * sum(((_fraction(prior.alpha) * _fraction(mass) + component.counts[index][i])
                     * isolated_record_likelihood(self.measure.candidates[component.lam].spec, point, reading)
                     for i, (point, mass) in enumerate(prior.base.params["points"])), Fraction(0)) / total
-                    for component, weight in zip(self.components, self.fraction_weights)), Fraction(0))
+                    for component, weight in zip(self._allocations, self._weights)), Fraction(0))
+
+
+def _atom_partition_terms(priors, measure, attempts):
+    """分割の名札を明示的に要求された時だけ、旧順序の事前の項を展開。"""
+    actions = tuple(priors)
+    action_indexes = tuple(tuple(i for i, a in enumerate(attempts) if a.action == action) for action in actions)
+    partitions = tuple(tuple(restricted_growth_strings(len(indexes))) for indexes in action_indexes)
+    for lam, candidate in enumerate(measure.candidates):
+        for rgs_by_action in product(*partitions):
+            weight, blocks = _fraction(candidate.weight), []
+            for action, indexes, rgs in zip(actions, action_indexes, rgs_by_action):
+                weight *= _partition_weight(priors[action].alpha, rgs)
+                for label in range(max(rgs, default=-1) + 1):
+                    blocks.append((action, tuple(indexes[j] for j, b in enumerate(rgs) if b == label)))
+            choices = tuple(tuple((i, point, _fraction(mass)) for i, (point, mass) in
+                enumerate(priors[action].base.params["points"]) if mass) for action, _ in blocks)
+            for chosen in product(*choices):
+                allocation = [None] * len(attempts)
+                counts = [[0] * len(priors[action].base.params["points"]) for action in actions]
+                block_weight = weight
+                for (action, indexes), (atom_index, point, mass) in zip(blocks, chosen):
+                    block_weight *= mass       # Once per Polya block, including infinity.
+                    counts[actions.index(action)][atom_index] += len(indexes)
+                    for i in indexes:
+                        allocation[i] = point
+                yield (AtomComponent(lam, rgs_by_action, tuple(c[0] for c in chosen),
+                       tuple(allocation), tuple(tuple(c) for c in counts)), block_weight)
 
 
 def atoms_posterior(priors, measure, timing):
-    """全ての λ・行動ごとの分割・ブロックの原子の選択を正準の順で合算。
+    """λ・試みへの原子の割り当ての和。Kは分解せずそのまま積分する。
 
-    通常の Python の計算資源の例外はそのまま伝える。計算量の停止を
-    NumericalRange に置き換えず、分割数や枝数による上限も置かない。
+    分割を先に足した重みは Π_j(αG₀{x_j})_{n_j}/(α)_n。
+    通常の資源の例外はそのまま伝え、分割数や枝数に上限を置かない。
     """
     priors = {action: duration_prior(prior) for action, prior in priors.items()}
     if any(p.base.name != "atoms" for p in priors.values()):
@@ -1787,44 +1845,47 @@ def atoms_posterior(priors, measure, timing):
     attempts = kernels[0].attempts
     if any(a.action not in priors for a in attempts):
         raise ValueError("atoms posterior: unknown action")
-    actions = tuple(priors)
-    action_indexes = tuple(tuple(i for i, a in enumerate(attempts) if a.action == action) for action in actions)
-    partitions = tuple(tuple(restricted_growth_strings(len(indexes))) for indexes in action_indexes)
-    components, raw, term_count, branch_count, piece_count = [], [], 0, 0, 0
+    atomic = AtomicPolynomialMeasure(priors)
+    indexes = tuple(atomic.actions.index(a.action) for a in attempts)
+    sizes = tuple(indexes.count(i) for i in range(len(priors)))
+    bells = [1]
+    for n in range(max(sizes, default=0)):
+        bells.append(sum(math.comb(n, k) * bells[k] for k in range(n + 1)))
+    points = tuple(p.base.params["points"] for p in priors.values())
+    choices = tuple(tuple((j, point) for j, (point, mass) in enumerate(group) if mass) for group in points)
+    # Accepted binary masses need not sum to exactly one as Fractions. Retain
+    # the old denominator (alpha)_n, rather than silently normalizing G0.
+    correction = math.prod((atomic._rising_value(sum(beta), n)
+                           / atomic._rising_value(_fraction(prior.alpha), n)
+                           for beta, prior, n in zip(atomic.beta, priors.values(), sizes)), start=Fraction(1))
+    allocations, raw, branch_count, piece_count, group_count = [], [], 0, 0, 0
     for lam, (candidate, kernel) in enumerate(zip(measure.candidates, kernels)):
-        for rgs_by_action in product(*partitions):
-            term_count += 1
-            weight, blocks = _fraction(candidate.weight), []
-            for action, indexes, rgs in zip(actions, action_indexes, rgs_by_action):
-                weight *= _partition_weight(priors[action].alpha, rgs)
-                for label in range(max(rgs, default=-1) + 1):
-                    blocks.append((action, tuple(indexes[j] for j, b in enumerate(rgs) if b == label)))
-            choices = tuple(tuple((i, point, _fraction(mass)) for i, (point, mass) in
-                enumerate(priors[action].base.params["points"]) if mass) for action, _ in blocks)
-            for chosen in product(*choices):
-                branch_count += 1
-                allocation = [None] * len(attempts)
-                counts = [[0] * len(priors[action].base.params["points"]) for action in actions]
-                block_weight = weight
-                for (action, indexes), (atom_index, point, mass) in zip(blocks, chosen):
-                    block_weight *= mass       # Once per Polya block, including infinity.
-                    counts[actions.index(action)][atom_index] += len(indexes)
-                    for i in indexes:
-                        allocation[i] = point
-                probability, pieces = kernel.integrate({a.attempt: d for a, d in zip(attempts, allocation)})
-                piece_count += pieces
-                if probability:                # Only exact structural zeros are omitted.
-                    components.append(AtomComponent(lam, rgs_by_action, tuple(c[0] for c in chosen),
-                        tuple(allocation), tuple(tuple(c) for c in counts)))
-                    raw.append(block_weight * probability)
+        for chosen in product(*(choices[i] for i in indexes)):
+            allocation = tuple(point for _, point in chosen)
+            counts = [[0] * len(group) for group in points]
+            for i, (j, _) in zip(indexes, chosen):
+                counts[i][j] += 1
+            # Each atom's assigned attempts can be partitioned independently.
+            # These are logical counts; no partitions are generated here.
+            multiplicity = math.prod(bells[n] for group in counts for n in group)
+            branch_count += multiplicity
+            probability, pieces = kernel.integrate({a.attempt: d for a, d in zip(attempts, allocation)})
+            piece_count += pieces * multiplicity
+            if probability:                    # Only exact structural zeros are omitted.
+                compact_counts = tuple(n for group, base in zip(counts, points)
+                                       for n, (_, mass) in zip(group, base) if mass)
+                weight = _fraction(candidate.weight) * atomic.moment(compact_counts) * correction
+                allocations.append(_AtomAllocation(lam, allocation, tuple(tuple(c) for c in counts), probability))
+                raw.append(weight * probability)
+                group_count += multiplicity
     evidence = sum(raw, Fraction(0))
     if not evidence:
         from .inference import ModelViolation
         raise ModelViolation("quantity: observations have zero probability")
     # Empty history has a single empty partition by the recording convention (§4-4).
-    count = term_count if attempts else 1
-    return AtomsPosterior(priors, measure, timing, attempts, tuple(components), tuple(w / evidence for w in raw),
-        evidence, QuantityStats(partitions=count, final_groups=len(components), integration_pieces=piece_count,
+    count = len(measure.candidates) * math.prod(bells[n] for n in sizes) if attempts else 1
+    return AtomsPosterior(priors, measure, timing, attempts, tuple(allocations), tuple(w / evidence for w in raw),
+        evidence, QuantityStats(partitions=count, final_groups=group_count, integration_pieces=piece_count,
                                 allocated_branches=branch_count))
 
 

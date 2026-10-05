@@ -3103,6 +3103,153 @@ def _y9_model3_bridge_encloses(bounds, reference, tolerance, *, label):
     assert lo - rounding <= reference <= hi + rounding, (label, bounds, reference)
 
 
+def _partition_atom_reference(priors, measure, timing):
+    """Independent old sum: Polya blocks, base draws, then the joint clock K."""
+    from sui.quantity import restricted_growth_strings
+    actions = tuple(priors)
+    kernels = tuple(HistoryKernel(timing, c.spec) for c in measure.candidates)
+    attempts = kernels[0].attempts
+    indexes = tuple(tuple(i for i, a in enumerate(attempts) if a.action == action) for action in actions)
+    rows, pieces, branches = [], 0, 0
+    for lam, candidate in enumerate(measure.candidates):
+        for partitions in product(*(tuple(restricted_growth_strings(len(group))) for group in indexes)):
+            weight, blocks = F(candidate.weight), []
+            for action, group, rgs in zip(actions, indexes, partitions):
+                alpha = F(priors[action].alpha)
+                block_sizes = tuple(rgs.count(b) for b in range(max(rgs, default=-1) + 1))
+                weight *= alpha ** len(block_sizes) * math.prod(math.factorial(n - 1) for n in block_sizes)
+                weight /= _rising(alpha, len(group))
+                blocks += [(action, tuple(group[i] for i, b in enumerate(rgs) if b == label))
+                           for label in range(len(block_sizes))]
+            choices = [tuple((j, point, F(mass)) for j, (point, mass) in
+                             enumerate(priors[action].base.params["points"]) if mass) for action, _ in blocks]
+            for chosen in product(*choices):
+                branches += 1
+                allocation = [None] * len(attempts)
+                counts = [[0] * len(priors[a].base.params["points"]) for a in actions]
+                prior_weight = weight
+                for (action, group), (j, point, mass) in zip(blocks, chosen):
+                    prior_weight *= mass
+                    counts[actions.index(action)][j] += len(group)
+                    for i in group:
+                        allocation[i] = point
+                probability, work = kernels[lam].integrate(dict(zip((a.attempt for a in attempts), allocation)))
+                pieces += work
+                if probability:
+                    rows.append(((lam, partitions, tuple(j for j, _, _ in chosen)), tuple(allocation),
+                                 tuple(map(tuple, counts)), prior_weight * probability))
+    return attempts, rows, sum((row[-1] for row in rows), F(0)), pieces, branches
+
+
+@pytest.mark.parametrize("alpha", [.5, 1., 3.])
+@pytest.mark.parametrize("case", ["coupled", "actions", "six", "empty"])
+def test_atoms_direct_matches_partition_fractions_labels_and_float_bytes(alpha, case):
+    from sui.quantity import _log_fraction
+    # Binary .1+.2+.7 is accepted, but its exact Fraction sum is not one.
+    # A zero-mass point also checks the compact/full count-vector mapping.
+    base = BaseSpec("atoms", "1", {"points": ([[0, 0.], [1, .1], [3, .9]] if case == "six" else
+                                            [[0, 0.], [1, .1], [3, .2], [None, .7]])})
+    priors = {a: DurationPrior(alpha, base) for a in ("x", "y")}
+    timing = (_coupled_pair_history(1, (0, None), same_action=True) if case == "coupled" else
+              _isolated_history((0, 4, 0), actions=("x", "x", "y")) if case == "actions" else
+              _isolated_history((0,) * 6) if case == "six" else _isolated_history(()))
+    measure = _measure((_tick(4, {"point_ns": 0}), .25),
+                       (_tick(8, {"point_ns": 0}) if case == "six" else _tick(4, "uniform"), .75))
+    attempts, rows, evidence, pieces, branches = _partition_atom_reference(priors, measure, timing)
+    actual = atoms_posterior(priors, measure, timing)
+    assert actual.fraction_evidence == evidence
+    assert actual.log_evidence.hex() == _log_fraction(evidence).hex()
+    assert actual.stats.integration_pieces == pieces
+    assert actual.stats.allocated_branches == branches
+    assert actual.stats.final_groups == len(rows)
+    assert actual.stats.partitions == (1 if case == "empty" else 4 if case == "actions" else
+                                       406 if case == "six" else 4)
+    raw = {}
+    for key, allocation, counts, weight in rows:
+        raw[key[0], allocation] = raw.get((key[0], allocation), F(0)) + weight
+    for (lam, allocation), weight in raw.items():
+        expected = sum((v for (l, a), v in raw.items() if a == allocation), F(0)) / evidence
+        requests = dict(zip((a.attempt for a in attempts), allocation))
+        assert actual.allocated(requests).hex() == _log_fraction(expected).hex()
+    for index, action in enumerate(priors):
+        prior = priors[action]
+        total = F(alpha) + sum(a.action == action for a in attempts)
+        expected = {point: sum((w * (F(alpha) * F(mass) + counts[index][j]) / total
+                               for _, _, counts, w in rows), F(0)) / evidence
+                    for j, (point, mass) in enumerate(base.params["points"])}
+        assert actual.fraction_new_value(action) == expected
+        assert {p: w.hex() for p, w in actual.new_value(action).items()} == {
+            p: _log_fraction(w).hex() for p, w in expected.items()}
+        for reading in (0, 4, None):
+            expected_record = sum((w * sum(((F(alpha) * F(mass) + counts[index][j])
+                * isolated_record_likelihood(measure.candidates[key[0]].spec, point, reading)
+                for j, (point, mass) in enumerate(base.params["points"])), F(0)) / total
+                for key, _, counts, w in rows), F(0)) / evidence
+            assert actual.fraction_isolated_record(action, reading) == expected_record
+    # Existing component consumers keep the exact old labels, order and weights.
+    assert [(c.key, c.allocation, c.counts, w) for c, w in
+            zip(actual.components, actual.fraction_weights)] == [
+                (key, allocation, counts, w / evidence) for key, allocation, counts, w in rows]
+    assert list(actual.log_w.items()) == [(key, _log_fraction(w / evidence)) for key, _, _, w in rows]
+
+
+def test_atoms_direct_known_atom_does_not_enumerate_and_records_bell_number(monkeypatch):
+    import sui.quantity as quantity
+    def forbidden(_):
+        raise AssertionError("normal posterior must not enumerate partitions")
+    monkeypatch.setattr(quantity, "restricted_growth_strings", forbidden)
+    integrate, calls = quantity.HistoryKernel.integrate, []
+    def counted(self, allocation):
+        calls.append(allocation)
+        return integrate(self, allocation)
+    monkeypatch.setattr(quantity.HistoryKernel, "integrate", counted)
+    belief = posterior({"x": _prior((1,), (1,))},
+                       _measure((_tick(4, {"point_ns": 0}), 1.)), _isolated_history((0,) * 15))
+    assert belief.base.fraction_evidence == 1
+    assert belief.stats.partitions == 1_382_958_545
+    assert len(calls) == 1
+    assert belief.predictive("x") == {1: 0.}
+    assert belief.measure_weights == (0.,)
+    assert belief.base.allocated({"a0": 1, "a14": 1}) == 0.
+    assert belief.base.fraction_isolated_record("x", 0) == 1
+    assert belief.base._expanded is None and belief.base._log_w is None
+
+
+def test_atoms_direct_pending_identity_survives_equal_counts_and_rising_weights(monkeypatch):
+    import sui.quantity as quantity
+    monkeypatch.setattr(quantity, "restricted_growth_strings", lambda _: (_ for _ in ()).throw(
+        AssertionError("direct assignment path enumerated partitions")))
+    timing = _history([("sA", 0, "start", "A"), ("sB", 0, "start", "B"), ("check", 2, "external", None)],
+        (AttemptTiming("A", "jA", "x", "sA", ("check",), None, "pending"),
+         AttemptTiming("B", "jB", "x", "sB", (), None, "pending")))
+    belief = posterior({"x": _prior((1, 1), (1, 3))}, _measure((MeasureSpec("exact", "1", {}), 1.)), timing)
+    result = belief.base
+    assert result.fraction_evidence == F(1, 2)
+    assert result.stats.partitions == 2
+    # (A=3,B=1) and (A=1,B=3) have identical counts; only the former survives K.
+    assert result.allocated({"A": 1, "B": 3}) == -math.inf
+    assert result.allocated({"A": 3, "B": 1}) == quantity._log_fraction(F(1, 3))
+    assert result.allocated({"A": 3, "B": 3}) == quantity._log_fraction(F(2, 3))
+    assert result.fraction_new_value("x") == {1: F(1, 3), 3: F(2, 3)}
+    pending = belief.predictive(QuantityQuery("x", 3, 4, "B"))
+    # The unchanged general query subtracts log evidence after the integral.
+    # This is the original path's exact float, independently checked before/after.
+    assert pending.log_lower == pending.log_upper
+    assert pending.log_lower.hex() == "-0x1.9f323ecbf984ep-2"
+    assert result._expanded is None
+    # Both permutations now survive with the same counts but different K.
+    # Grouping by counts and retaining a representative loses the pending identity.
+    timing = _history([("sA", 0, "start", "A"), ("sB", 0, "start", "B"), ("check", 0, "external", None)],
+        (AttemptTiming("A", "jA", "x", "sA", ("check",), None, "pending"),
+         AttemptTiming("B", "jB", "x", "sB", (), None, "pending")))
+    result = posterior({"x": _prior((1, 1), (1, 3))}, _measure((_tick(4, "uniform"), 1.)), timing).base
+    assert result.fraction_evidence == F(1, 2)
+    assert result.allocated({"A": 1, "B": 3}) == quantity._log_fraction(F(5, 96))
+    assert result.allocated({"A": 3, "B": 1}) == quantity._log_fraction(F(27, 96))
+    assert result.fraction_new_value("x") == {1: F(37, 96), 3: F(59, 96)}
+    assert result._expanded is None
+
+
 def _y9_model3_bridge_assert_point(legacy, learned):
     for action, part in zip(learned["candidates"], learned["information_parts"]):
         assert part["durations"] == [0., 0.], ("point duration information", action, part)

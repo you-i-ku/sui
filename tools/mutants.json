@@ -4270,13 +4270,28 @@
   "file": "src/sui/quantity.py",
   "edits": [
    [
-    "            for chosen in product(*choices):\n                branch_count += 1",
-    "            for chosen in product(*choices):\n                if len({(a, c[0]) for (a, _), c in zip(blocks, chosen)}) < len(blocks):\n                    continue\n                branch_count += 1"
+    "                weight = _fraction(candidate.weight) * atomic.moment(compact_counts) * correction",
+    "                weight = (_fraction(candidate.weight) * math.prod(((b * math.factorial(n - 1)) if n else Fraction(1)) for b, n in zip((b for beta in atomic.beta for b in beta), compact_counts))\n                          / math.prod((atomic._rising_value(sum(beta), n) for beta, n in zip(atomic.beta, sizes)), start=Fraction(1)) * correction)"
    ]
   ],
   "expect": [
    "o3"
-  ]
+  ],
+  "note": "2026-10-06: 1b の高速化 (割り当ての和) に合わせて書き直した。意図する誤りは同じ"
+ },
+ {
+  "id": "X139E",
+  "file": "src/sui/quantity.py",
+  "edits": [
+   [
+    "            for chosen in product(*choices):\n                allocation = [None] * len(attempts)",
+    "            for chosen in product(*choices):\n                if len({(a, c[0]) for (a, _), c in zip(blocks, chosen)}) < len(blocks):\n                    continue\n                allocation = [None] * len(attempts)"
+   ]
+  ],
+  "expect": [
+   "o3"
+  ],
+  "note": "2026-10-06: X139 の誤り (別の Polya ブロックが同じ原子を選べない) を、分割の名札を読む時だけの展開の道に"
  },
  {
   "id": "X140",
@@ -4296,13 +4311,14 @@
   "file": "src/sui/quantity.py",
   "edits": [
    [
-    "                probability, pieces = kernel.integrate({a.attempt: d for a, d in zip(attempts, allocation)})",
-    "                last = HistoryKernel(Timing(timing.events, tuple(x for x in timing.attempts if x.action == actions[-1]), timing.positions), candidate.spec)\n                probability, pieces = (last.integrate({a.attempt: d for a, d in zip(attempts, allocation) if a.action == actions[-1]}) if last.attempts\n                                       else kernel.integrate({a.attempt: d for a, d in zip(attempts, allocation)}))"
+    "            probability, pieces = kernel.integrate({a.attempt: d for a, d in zip(attempts, allocation)})",
+    "            last = HistoryKernel(Timing(timing.events, tuple(x for x in timing.attempts if x.action == atomic.actions[-1]), timing.positions), candidate.spec)\n            probability, pieces = (last.integrate({a.attempt: d for a, d in zip(attempts, allocation) if a.action == atomic.actions[-1]}) if last.attempts\n                                   else kernel.integrate({a.attempt: d for a, d in zip(attempts, allocation)}))"
    ]
   ],
   "expect": [
    "o4"
-  ]
+  ],
+  "note": "2026-10-06: 1b の高速化 (割り当ての和) に合わせて書き直した。意図する誤りは同じ"
  },
  {
   "id": "X142",
@@ -4491,14 +4507,15 @@
   "file": "src/sui/quantity.py",
   "edits": [
    [
-    "                probability, pieces = kernel.integrate({a.attempt: d for a, d in zip(attempts, allocation)})",
-    "                probability, pieces = Fraction(1), 0\n                for a, d in zip(attempts, allocation):\n                    sub = HistoryKernel(Timing(timing.events, tuple(x for x in timing.attempts if x.attempt == a.attempt), timing.positions), candidate.spec)\n                    p, k = sub.integrate({a.attempt: d})\n                    probability, pieces = probability * p, pieces + k"
+    "            probability, pieces = kernel.integrate({a.attempt: d for a, d in zip(attempts, allocation)})",
+    "            probability, pieces = Fraction(1), 0\n            for a, d in zip(attempts, allocation):\n                sub = HistoryKernel(Timing(timing.events, tuple(x for x in timing.attempts if x.attempt == a.attempt), timing.positions), candidate.spec)\n                p, k = sub.integrate({a.attempt: d})\n                probability, pieces = probability * p, pieces + k"
    ]
   ],
   "expect": [
    "d11",
    "d17"
-  ]
+  ],
+  "note": "2026-10-06: 1b の高速化 (割り当ての和) に合わせて書き直した。意図する誤りは同じ"
  },
  {
   "id": "X156",
@@ -4585,14 +4602,15 @@
   "file": "src/sui/quantity.py",
   "edits": [
    [
-    "                probability, pieces = kernel.integrate({a.attempt: d for a, d in zip(attempts, allocation)})",
-    "                probability, pieces = Fraction(1), 0\n                for act in actions:\n                    sub = HistoryKernel(Timing(timing.events, tuple(x for x in timing.attempts if x.action == act), timing.positions), candidate.spec)\n                    if sub.attempts:\n                        p, k = sub.integrate({a.attempt: d for a, d in zip(attempts, allocation) if a.action == act})\n                        probability, pieces = probability * p, pieces + k"
+    "            probability, pieces = kernel.integrate({a.attempt: d for a, d in zip(attempts, allocation)})",
+    "            probability, pieces = Fraction(1), 0\n            for act in atomic.actions:\n                sub = HistoryKernel(Timing(timing.events, tuple(x for x in timing.attempts if x.action == act), timing.positions), candidate.spec)\n                if sub.attempts:\n                    p, k = sub.integrate({a.attempt: d for a, d in zip(attempts, allocation) if a.action == act})\n                    probability, pieces = probability * p, pieces + k"
    ]
   ],
   "expect": [
    "d17",
    "d11"
-  ]
+  ],
+  "note": "2026-10-06: 1b の高速化 (割り当ての和) に合わせて書き直した。意図する誤りは同じ"
  },
  {
   "id": "X164",
@@ -6793,6 +6811,62 @@
   ],
   "paths": [
    "tests/test_s4b_action_review_regressions.py"
+  ]
+ },
+ {
+  "id": "QS01",
+  "file": "src/sui/quantity.py",
+  "edits": [
+   [
+    "                           / atomic._rising_value(_fraction(prior.alpha), n)",
+    "                           / _fraction(prior.alpha) ** n"
+   ]
+  ],
+  "expect": [
+   "atoms_direct"
+  ]
+ },
+ {
+  "id": "QS02",
+  "file": "src/sui/quantity.py",
+  "edits": [
+   [
+    "    count = len(measure.candidates) * math.prod(bells[n] for n in sizes) if attempts else 1",
+    "    count = 1"
+   ]
+  ],
+  "expect": [
+   "atoms_direct"
+  ]
+ },
+ {
+  "id": "QS03",
+  "file": "src/sui/quantity.py",
+  "edits": [
+   [
+    "    allocations, raw, branch_count, piece_count, group_count = [], [], 0, 0, 0",
+    "    allocations, raw, branch_count, piece_count, group_count = [], [], 0, 0, 0\n    seen = {}"
+   ],
+   [
+    "                allocations.append(_AtomAllocation(lam, allocation, tuple(tuple(c) for c in counts), probability))\n                raw.append(weight * probability)",
+    "                key = (lam, tuple(tuple(c) for c in counts))\n                if key in seen:\n                    raw[seen[key]] += weight * probability\n                else:\n                    seen[key] = len(raw)\n                    allocations.append(_AtomAllocation(lam, allocation, tuple(tuple(c) for c in counts), probability))\n                    raw.append(weight * probability)"
+   ]
+  ],
+  "expect": [
+   "atoms_direct"
+  ]
+ },
+ {
+  "id": "QS04",
+  "file": "src/sui/quantity.py",
+  "edits": [
+   [
+    "    correction = math.prod((atomic._rising_value(sum(beta), n)",
+    "    correction = Fraction(1) or math.prod((atomic._rising_value(sum(beta), n)"
+   ]
+  ],
+  "expect": [
+   "atoms_direct"
   ]
  }
 ]
