@@ -328,6 +328,11 @@ def _action_value(eta, belief, action, deadline_ns, candidates, resolved):
 
 def evaluate(view, candidates, resolved, *, u):
     """根の候補・好み・締切で木を評価し、未定義理由は候補順の配列にする (C8)。"""
+    from .model import _is_action_model
+    if _is_action_model(view.model):
+        from .action_entry import public_evaluate
+        from .action_types import default_budget
+        return public_evaluate(view, candidates, resolved, u=u, budget=default_budget())
     from .model import _joint_model
     if view.model.duration_priors or _joint_model(view.model):
         from .joint_entry import public_evaluate

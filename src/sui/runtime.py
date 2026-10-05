@@ -6,7 +6,12 @@ from queue import Empty, Queue
 from threading import Lock, Thread
 from time import monotonic
 from types import MappingProxyType
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .action_types import Command, DecisionReading
+    from .dispatch import WaitDispatcher
+    from .clock_contracts import ClockSource
 
 from .agent import Agent, Commit as Prepared, Draft, View, _read_jobs, _evaluation_ns, plan, read
 from .clock import Clock
@@ -17,7 +22,9 @@ from .records import AttemptStarted, Decided, Observed, Payload, Producer, Recor
 from .s1_contracts import ATTEMPT, OUTCOME
 from .s3_contracts import ABANDON, ENDED
 from .s4_contracts import BOOT as _BOOT, LISTEN as _LISTEN
-from .model import evaluation_timing
+from .model import evaluation_timing, _is_action_model
+from .action_runtime import ActionDone
+from .dispatch import DispatchNotice
 
 
 class Hand(Protocol):
@@ -62,6 +69,8 @@ class Thought:
     work: str
     draft: Draft | None = None
     error: str | None = None
+    decision_reading: "DecisionReading | None" = None
+    _command: "Command | None" = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if (self.draft is None) == (self.error is None):
@@ -112,6 +121,7 @@ class Think:
 class Act:
     attempt: Ref
     action: str
+    command: "Command | None" = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -151,6 +161,7 @@ class Start:
     job: Ref
     attempt: Record
     act: Act
+    reservation: Record | None = None
 
 
 Item = Commit | Released | Observe | Start
@@ -175,6 +186,8 @@ class Pledges:
     issued: int = 0
     latest_ns: tuple[Ref, int] | None = None
     latest_check_events: tuple = ()
+    commands: dict[Ref, tuple] = field(default_factory=dict)
+    bindings: dict[str, tuple] = field(default_factory=dict)
 
 
 class Window:
@@ -213,7 +226,12 @@ class Window:
         records = snapshot.records
         jobs = _read_jobs(self.agent._model, records)
         attempted = {r.body.job for r in records if isinstance(r.body, AttemptStarted)}
-        arrived = {r.body.caused_by for r in records if isinstance(r.body, Observed)}
+        if _is_action_model(self.agent._model):
+            from .s4b_action_contracts import REPORT
+            arrived = {r.body.caused_by for r in records if isinstance(r.body, Observed)
+                       and r.body.contract in (REPORT, ENDED)}
+        else:
+            arrived = {r.body.caused_by for r in records if isinstance(r.body, Observed)}
         awaiting = {r.id: jobs[r.body.job] for r in records
                     if isinstance(r.body, AttemptStarted) and r.body.job in jobs
                     and r.id not in arrived}
@@ -248,6 +266,20 @@ class Window:
                                     caused_by=caused_by, source_id=source_id,
                                     received_ns=received_ns))
 
+    def declare_clock_source(self, source: "ClockSource") -> None:
+        """Queue provenance after BOOT, without a world/nonarrival checkpoint.
+
+        Pledges retains the same record across a window reconstruction. This is
+        metadata, so it does not change latest_ns, check_events or drive notices.
+        """
+        from .clock_contracts import ClockSource, SOURCE
+        from .action_types import ActionInputError
+        if not isinstance(source, ClockSource) or source.run != self.clock.run:
+            raise ActionInputError(reason="schema", detail="clock source must belong to the host run")
+        self.pledges.items.append(Observe(record=self._observation(
+            route="sui.clock", contract=SOURCE, content=Payload.json(source.as_json()),
+            received_ns=None)))
+
     def accept(self, envelope: Envelope) -> None:
         """全部作ってから預け、書かない。例外なら同じ封筒で再試行 (K11)。
 
@@ -271,6 +303,11 @@ class Window:
             item = Observe(record=self._observation(
                 route=event.route, content=event.content, contract=event.contract,
                 source_id=event.source_id, received_ns=envelope.received_ns))
+            if _is_action_model(self.agent._model):
+                from .clock_contracts import SOURCE
+                if event.contract == SOURCE:
+                    p.items.append(item)
+                    return
         elif isinstance(event, Thought):
             if event.work not in p.thinking or any(
                     isinstance(i, (Commit, Released)) and i.work == event.work for i in p.items):
@@ -279,9 +316,30 @@ class Window:
                     p.latest_check_events = ({"unrecorded": {"kind": "thought", "reading": envelope.received_ns,
                                                            "after": after}},)
                 return
-            item = (Commit(work=event.work, commit=self.agent.prepare(
-                event.draft, clock=self.clock, ids=self.ids)) if event.draft is not None
-                else Released(work=event.work))
+            if event.draft is not None and _is_action_model(self.agent._model):
+                from .action_runtime import bind
+                from .action_types import ActionInputError
+                work = p.thinking[event.work]
+                if event.decision_reading is None or event.decision_reading.run != self.clock.run:
+                    raise ActionInputError(reason='schema', detail='model.8 Thought requires the worker decision reading')
+                if event.draft.parents != work.view.frontier or event.draft.belief != work.view.belief:
+                    raise ActionInputError(reason='schema', detail='Thought Draft differs from frozen Think')
+                if event.work not in p.bindings:
+                    command = event._command if event._command is not None else bind(work, event.draft, event.decision_reading)
+                    p.bindings[event.work] = (command, event.decision_reading)
+                prepared = self.agent.prepare(event.draft, clock=self.clock, ids=self.ids)
+                p.commands[prepared.job.id] = p.bindings[event.work]
+                item = Commit(work=event.work, commit=prepared)
+            else:
+                item = (Commit(work=event.work, commit=self.agent.prepare(
+                    event.draft, clock=self.clock, ids=self.ids)) if event.draft is not None
+                    else Released(work=event.work))
+        elif isinstance(event, DispatchNotice):
+            from .action_runtime import confirmation
+            item = Observe(record=confirmation(self, event, envelope.received_ns))
+        elif isinstance(event, ActionDone):
+            from .action_runtime import completion
+            item = Observe(record=completion(self, event, envelope.received_ns))
         elif isinstance(event, (Done, Failed)):
             content, contract = (({"outcome": event.outcome}, OUTCOME) if isinstance(event, Done)
                                  else ({"error": event.error}, ENDED))
@@ -313,6 +371,10 @@ class Window:
                 self._needs_adopt = True
             elif isinstance(item, Start):
                 self.ledger.accept(item.attempt)
+                if item.reservation is not None:
+                    self.ledger.accept(item.reservation)
+                if item.act.command is not None:
+                    self._needs_adopt = True
                 self._outbox.append(item.act)
             p.items.pop(0)
 
@@ -341,12 +403,16 @@ class Window:
                 action = jobs[job.id]
                 resources = self._resources(action)
                 if all(used[name] < self.capacity[name] for name in resources):
-                    attempt = Record(
-                        id=self.ids.new(RefKind.ATTEMPT), at=self.clock.now(),
-                        writer=Role.MEMBRANE, producer=self.membrane,
-                        body=AttemptStarted(job=job.id, content=Payload.json({}), contract=ATTEMPT))
-                    p.items.append(Start(job=job.id, attempt=attempt,
-                                         act=Act(attempt=attempt.id, action=action)))
+                    if _is_action_model(self.agent._model):
+                        from .action_runtime import start
+                        p.items.append(start(self, job, action))
+                    else:
+                        attempt = Record(
+                            id=self.ids.new(RefKind.ATTEMPT), at=self.clock.now(),
+                            writer=Role.MEMBRANE, producer=self.membrane,
+                            body=AttemptStarted(job=job.id, content=Payload.json({}), contract=ATTEMPT))
+                        p.items.append(Start(job=job.id, attempt=attempt,
+                                             act=Act(attempt=attempt.id, action=action)))
                     self._write_items()
                     for name in resources:
                         used[name] += 1
@@ -387,6 +453,10 @@ class Window:
                             or p.latest_ns is None or p.latest_ns[0] != self.clock.run):
                         raise ValueError("Think: current run boot and received time are required")
                     now = axis.to_axis(*p.latest_ns)
+                    if _is_action_model(self.agent._model):
+                        # Model.8 clock-process declarations and command thresholds
+                        # use run-local raw readings, not the cross-run display axis.
+                        now = p.latest_ns[1]
                     if requirements.needs_receipt_boundary:
                         observed = now
                         now = _evaluation_ns(self.agent._reading, self.clock.run, now)
@@ -394,7 +464,8 @@ class Window:
                 if requirements.needs_check_events:
                     sources = tuple(source if "fact" in source else {"unrecorded": {
                         "kind": source["unrecorded"]["kind"],
-                        "reading": axis.to_axis(self.clock.run, source["unrecorded"]["reading"]),
+                        "reading": (source["unrecorded"]["reading"] if _is_action_model(self.agent._model)
+                                    else axis.to_axis(self.clock.run, source["unrecorded"]["reading"])),
                         "after": source["unrecorded"]["after"]}}
                         for source in p.latest_check_events)
                     options["check_events"] = sources
@@ -425,6 +496,9 @@ def _perform(work: Think | Act, hand: Hand) -> Thought | Done | Failed:
         except Exception as exc:
             return Thought(work=work.work, error=type(exc).__name__)
     try:
+        if work.command is not None:
+            from .action_types import ActionIncomplete
+            raise ActionIncomplete(reason="algorithm_unavailable", detail="command execution belongs to stage 3")
         return Done(attempt=work.attempt, outcome=hand.execute(work.action))
     except Exception as exc:
         return Failed(attempt=work.attempt, error=type(exc).__name__)
@@ -433,7 +507,12 @@ def _perform(work: Think | Act, hand: Hand) -> Thought | Done | Failed:
 class ThreadHost:
     """SQLite の接続を開いたスレッドが run_until を呼ぶ。書く接続は一つ。"""
 
-    def __init__(self, make_window: Callable[[Pledges], Window], *, clock: Clock) -> None:
+    def __init__(self, make_window: Callable[[Pledges], Window], *, clock: Clock,
+                 dispatcher: "WaitDispatcher | None" = None,
+                 clock_source: "ClockSource | None" = None) -> None:
+        self._dispatcher = dispatcher
+        self._clock_source = clock_source
+        self._source_queued = False
         self._make_window = make_window
         self.pledges = Pledges()
         self.window: Window | None = None
@@ -457,7 +536,14 @@ class ThreadHost:
             self._unstarted.extend((work, self.window.hand) for work in self.window.drain())
 
     def _worker(self, work, hand):
-        self.post(_perform(work, hand))
+        if isinstance(work, Think) and _is_action_model(work.view.model):
+            from .action_runtime import think
+            self.post(think(work, self._clock, plan))
+        elif isinstance(work, Act) and work.command is not None:
+            from .action_runtime import execute
+            self.post(execute(work, hand, self._dispatcher, self.post))
+        else:
+            self.post(_perform(work, hand))
 
     def _start(self):
         while self._unstarted:
@@ -496,9 +582,17 @@ class ThreadHost:
                 try:
                     if self.window is None:
                         self.window = self._make_window(self.pledges)
+                    if self._clock_source is None and _is_action_model(self.window.agent._model):
+                        from .clock import SystemClock
+                        if isinstance(self._clock, SystemClock):
+                            from .clock_contracts import system_clock_source
+                            self._clock_source = system_clock_source(self._clock)
                     if self._current is not None:
                         self.window.accept(self._current)
                         self._current = None
+                    if self._clock_source is not None and not self._source_queued:
+                        self.window.declare_clock_source(self._clock_source)
+                        self._source_queued = True
                     self.window.settle()
                     self._boot_pending = False
                 except Exception as exc:

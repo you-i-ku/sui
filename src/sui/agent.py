@@ -30,7 +30,7 @@ from .s4d_contracts import BELIEF as _S4D_BELIEF, DECISION as _S4D_DECISION
 from .s4b_contracts import (BELIEF as _S4B_BELIEF, QUANTITY_BELIEF as _QUANTITY_BELIEF,
                             DECISION as _QUANTITY_DECISION)
 from .s4b1c_contracts import BELIEF as _JOINT_BELIEF, DECISION as _JOINT_DECISION
-from .model import _joint_model, _work_timed
+from .model import _joint_model, _work_timed, _is_action_model
 from .lattice import (learn as _learn, hand_table as _lattice_hand_table,
                       one_step_components as _lattice_components)
 from .preference import (PreferenceView as _PreferenceView, from_ledger as _preference_view,
@@ -87,6 +87,7 @@ class Reading:
     unread_preferences: tuple[_UnreadPreference, ...] = ()
     timing: object | None = None
     _joint_timing: object | None = None
+    _action_records: tuple = ()
 
     def __post_init__(self) -> None:
         counts = {}
@@ -123,6 +124,9 @@ def _named_content(content, key):
 
 
 def _read_jobs(model: _GenerativeModel, records: _Iterable[_Record]) -> dict[_Ref, str]:
+    if _is_action_model(model):
+        from .action_joint import read_jobs
+        return read_jobs(model, records)
     jobs = {}
     for record in records:
         if isinstance(record.body, _JobOpened) and record.body.contract == ACTION:
@@ -143,6 +147,9 @@ def read(model: _GenerativeModel, records: _Iterable[_Record], *,
     所要ありは測定時刻順と試みの時刻の組を事実から作る (F1〜F3・J9・J15)。
     好みは別に持ち、本文が無い時も時刻だけは軸につなぐ (C2・C2b)。
     """
+    if _is_action_model(model):
+        from .action_joint import read_action
+        return read_action(model, records, unread_preferences=unread_preferences)
     records = _facts(records)
     unread_preferences = tuple(unread_preferences)
     if model.durations or _work_timed(model):
@@ -329,10 +336,15 @@ def _derive(model, n):
 
 
 def _timed(model):
+    if _is_action_model(model):
+        return True
     return model.Q is not None or bool(model.arrivals) or bool(model.durations) or _work_timed(model)
 
 
 def _belief_contract(model):
+    if _is_action_model(model):
+        from .s4b_action_contracts import BELIEF as action_belief
+        return action_belief
     if _joint_model(model):
         return _JOINT_BELIEF
     if model.duration_priors:
@@ -430,6 +442,8 @@ def _derive_reading(model, reading):
 
 
 def _learning_changing(model):
+    if _is_action_model(model):
+        return False
     return model.Q is not None and bool(model.learnable)
 
 
@@ -448,6 +462,9 @@ class _QuantitySummary:
 
 def _derive_state(model, reading):
     """保存に渡す要約も同じ読みから作る。主体は書き換えない。"""
+    if _is_action_model(model):
+        from .action_entry import derive
+        return derive(model, reading)
     if _joint_model(model):
         from .joint_entry import derive
         return derive(model, reading)
@@ -806,6 +823,15 @@ def _lattice_one_step(view, actions, pending, hand_pending, costs):
 
 def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
     """採用した好みだけで決める。白紙は知る価値だけ、モデルのC・γは読まない (C4)。"""
+    if _is_action_model(view.model):
+        from .action_entry import public_evaluate, _candidates
+        from .action_types import default_budget, ActionIncompatible
+        actions = _candidates(view.model, candidates)
+        resolved = _resolve_preference(_current_preference(view.preferences), view)
+        evaluation = "one_step" if resolved.H_ns is None else "lookahead"
+        if any(evaluation not in item.feature.evaluations for item in resolved.items):
+            raise ActionIncompatible(reason="family_requirement", detail="feature is outside the evaluation type")
+        return public_evaluate(view, actions, resolved, u=u, budget=default_budget())
     resolved = _resolve_preference(_current_preference(view.preferences), view)
     actions = _candidate_names(view.model, candidates)
     one_step = resolved.H_ns is None
@@ -906,6 +932,9 @@ def _quantity_one_step(view, actions, resolved, *, u):
 
 def replay_decision(*, model: _GenerativeModel, ledger: _Ledger, decision: str) -> Draft:
     """約束とモデルの方式を確かめ、親から全欄とinputsを完全照合する (C8・P5)。"""
+    if _is_action_model(model):
+        from .action_persistence import replay
+        return replay(model=model, ledger=ledger, decision=decision)
     entry, record = ledger.entry(decision), ledger.record(decision)
     if not isinstance(record.body, _Decided):
         raise ValueError("decision: expected Decided")
@@ -1115,6 +1144,19 @@ class Agent:
 
     def __init__(self, *, model: _GenerativeModel, lineage: str,
                  component: str = "sui.agent") -> None:
+        if _is_action_model(model):
+            from .action_entry import derive
+            _Producer(component=component, code_version=CODE_VERSION,
+                      state=_StateRef(lineage=lineage, revision=0))
+            self._model, self._lineage, self._component = model, lineage, component
+            self._frontier = frozenset()
+            self._model_ref = _model_ref(model)
+            self._reading = read(model, ())
+            self._preferences = _PreferenceView()
+            self._fact_ancestors = _MappingProxyType({})
+            self._q, self._a, self._lattice = derive(model, self._reading)
+            self._revision, self._belief = 0, None
+            return
         if not isinstance(model, _GenerativeModel):
             raise TypeError("model: expected GenerativeModel")
         _Producer(component=component, code_version=CODE_VERSION,
@@ -1147,6 +1189,12 @@ class Agent:
     def q(self) -> _np.ndarray:
         """今の信念を読み取り専用のコピーで返す。"""
         if self._q is None:
+            if _is_action_model(self._model):
+                from .action_types import ActionIncomplete, ActionModelFalsified
+                if self._lattice["status"] == "unexplained":
+                    raise ActionModelFalsified(reason=self._lattice["reason"], detail="action facts cannot be explained")
+                raise ActionIncomplete(reason=self._lattice["reason"] or "algorithm_unavailable",
+                                       detail="action posterior is not available")
             if _joint_model(self._model) and self._lattice.status == "incomplete":
                 from .quantity import IntegrationIncomplete
                 raise IntegrationIncomplete(self._lattice.reason)
@@ -1155,6 +1203,8 @@ class Agent:
 
     def counts(self, action: str) -> _np.ndarray:
         """行動の数え上げを読み取り専用のコピーで返す。"""
+        if _is_action_model(self._model):
+            raise ValueError("counts: action posterior has no single ledger")
         if _joint_model(self._model) or _learning_changing(self._model):
             raise ValueError("counts: no single ledger under a changing state")
         if not isinstance(action, str):
@@ -1176,6 +1226,8 @@ class Agent:
                          state=_StateRef(lineage=self._lineage, revision=revision))
 
     def _content(self, reading, q, a, *, lattice=None) -> dict:
+        if _is_action_model(self._model):
+            return lattice
         content = {
             "model": self.model_ref, "states": list(self._model.states),
             "outcomes": list(self._model.outcomes), "q": None if q is None else q.tolist(),
@@ -1243,6 +1295,9 @@ class Agent:
 
     def prepare(self, draft: Draft, *, clock: _Clock, ids: _IdSource) -> Commit:
         """両記録を作るだけ。見た親を保ち、台帳・主体を変えない (P10・K4・W12)。"""
+        if _is_action_model(self._model):
+            from .action_persistence import prepare
+            return prepare(self, draft, clock, ids)
         decided = _Record(
             id=ids.new(_RefKind.DECISION), at=clock.now(), writer=_Role.MODEL,
             producer=self.producer,
@@ -1265,6 +1320,9 @@ class Agent:
 
         検査失敗は無書き込み。同じ Commit の再試行で途中から続く (P10・K4・W12)。
         """
+        if _is_action_model(self._model):
+            from .action_persistence import commit
+            return commit(self, prepared, ledger)
         for cid in prepared.parents:
             try:
                 parent = ledger.entry(cid)
@@ -1324,6 +1382,9 @@ class Agent:
         既定は同じ受信の道を順番どおり抜けなく取り込む場合に使う。
         Qか所要ありは今のrunの起動とnowが要る (T5・T7b・J4・J8)。
         """
+        if _is_action_model(self._model):
+            from .action_types import ActionIncomplete
+            raise ActionIncomplete(reason="algorithm_unavailable", detail="action synchronous execution belongs to public integration")
         now, observed = None, None
         if self._model.Q is not None or self._model.durations or _work_timed(self._model):
             axis = self._reading.timeline
@@ -1366,6 +1427,9 @@ class Agent:
         preferences = _preference_view(ledger, target)
         fact_ancestors = (_quantity_fact_ancestors(ledger, target, reading)
                           if _work_timed(self._model) else None)
+        if _is_action_model(self._model):
+            from .action_joint import fact_ancestors as _action_fact_ancestors
+            fact_ancestors = _action_fact_ancestors(ledger, target, reading)
         q, a, lattice = _derive_state(self._model, reading)
         revision = self.revision + 1
         record = self._belief_record(reading, q, a, revision, clock=clock, ids=ids, lattice=lattice)
@@ -1375,12 +1439,17 @@ class Agent:
         self._lattice = lattice
         if _work_timed(self._model):
             self._fact_ancestors = fact_ancestors
+        elif _is_action_model(self._model):
+            self._fact_ancestors = fact_ancestors
         return record
 
     @classmethod
     def restore(cls, *, model: _GenerativeModel, lineage: str, ledger: _Ledger,
                 belief: str, component: str = "sui.agent") -> "Agent":
         """葉の親とモデルから復元し、保存値の全キーと完全一致で照合する。"""
+        if _is_action_model(model):
+            from .action_persistence import restore
+            return restore(cls, model=model, lineage=lineage, ledger=ledger, belief=belief, component=component)
         entry = ledger.entry(belief)
         record = ledger.record(belief)
         if not isinstance(record.body, _Prediction) or record.body.target != "belief":

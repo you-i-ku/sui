@@ -101,14 +101,14 @@ class SystemClock:
 
     def mono_ns(self) -> int:
         """連番を進めず単調時計だけを読む (J1)。"""
-        return _time.monotonic_ns()
+        return _time.perf_counter_ns()
 
     def now(self) -> Instant:
         """連番を進め、単調時計と実時刻を読む。"""
         with self._lock:
             self._seq += 1
             return Instant(run=self.run, run_index=self.run_index, seq=self._seq,
-                           mono_ns=_time.monotonic_ns(), wall_ns=_time.time_ns())
+                           mono_ns=_time.perf_counter_ns(), wall_ns=_time.time_ns())
 
 
 class FakeClock:

@@ -5440,5 +5440,1359 @@
   "paths": [
    "tests/test_joint_blockers.py"
   ]
+ },
+ {
+  "id": "AC01",
+  "file": "src/sui/action_model.py",
+  "old": "    return ActionModel(declaration=data)",
+  "new": "    d=load_canonical(data)\n    d.setdefault(\"arrivals\",{})\n    return ActionModel(declaration=canonical(d))",
+  "expect": [
+   "model8_every_object_rejects_missing_and_extra"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC02",
+  "file": "src/sui/action_model.py",
+  "old": "set(value) != set(names.split())",
+  "new": "not set(names.split()) <= set(value)",
+  "expect": [
+   "model8_every_object_rejects_missing_and_extra"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC03",
+  "file": "src/sui/action_model.py",
+  "old": "    return model.declaration",
+  "new": "    d=load_canonical(model.declaration)\n    for action,w in d[\"work\"].items():\n        if w[\"kind\"]==\"known\":\n            d[\"work\"][action]={\"kind\":\"dp\",\"alpha\":[1000000,1],\"base\":{\"name\":\"atoms\",\"version\":\"1\",\"params\":{\"points\":w[\"points\"]}}}\n    return canonical(d)",
+  "expect": [
+   "model8_all_declared_variants_roundtrip_without"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC04",
+  "file": "src/sui/action_model.py",
+  "edits": [
+   [
+    "            if k in d: error(\"schema\",\"duplicate JSON key\",k)",
+    "            if k in d: pass"
+   ],
+   [
+    "        if canonical(value)!=data: error(\"noncanonical\",\"canonical bytes required\")",
+    "        if canonical(value)!=data: pass"
+   ]
+  ],
+  "expect": [
+   "model8_rejects_noncanonical_and_non_json"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC05",
+  "file": "src/sui/action_model.py",
+  "edits": [
+   [
+    "allow_nan=False",
+    "allow_nan=True"
+   ],
+   [
+    "parse_constant=lambda x:error(\"schema\",\"nonfinite JSON constant\",x)",
+    "parse_constant=lambda x: float(x)"
+   ],
+   [
+    " or not math.isfinite(value) or (positive",
+    " or (positive"
+   ]
+  ],
+  "expect": [
+   "model8_rejects_noncanonical_and_non_json"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC06",
+  "file": "src/sui/action_model.py",
+  "old": "    if sum(values, F(0)) != 1:\n        error(\"normalization\", \"probabilities must sum exactly to one\", field)",
+  "new": "    if sum(values, F(0)) != 1:\n        return",
+  "expect": [
+   "model8_shapes_versions_normalization_and"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC07",
+  "file": "src/sui/action_model.py",
+  "old": "        integer(value[\"not_before_ns\"], field=field)",
+  "new": "        integer(value[\"not_before_ns\"], field=field, minimum=0)",
+  "expect": [
+   "model8_keeps_seconds_ns_work_and_negative_clock_origins"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC08",
+  "file": "src/sui/action_types.py",
+  "old": "class ActionTimeContext:\n    run: Ref",
+  "new": "class ActionTimeContext:\n    extra: str = field(default=\"\", init=False)\n    run: Ref",
+  "expect": [
+   "public_value_type_fields_match",
+   "dispatch_and_runtime_public"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC09",
+  "file": "src/sui/action_types.py",
+  "old": "class ActionIncomplete(_ActionFailure, IntegrationIncomplete): pass",
+  "new": "class ActionIncomplete(_ActionFailure, RuntimeError): pass",
+  "expect": [
+   "exception_inheritance_and_every_reason"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC10",
+  "file": "src/sui/action_types.py",
+  "old": "@dataclass(frozen=True, slots=True, kw_only=True)\nclass ActionSupport:",
+  "new": "@dataclass(slots=True, kw_only=True)\nclass ActionSupport:",
+  "expect": [
+   "action_support_values_and",
+   "specified_budget_is_immutable_and_keeps_all_five"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC11",
+  "file": "src/sui/action_entry.py",
+  "old": "resolved: Resolved,*,u:float,budget:ActionBudget) -> Draft:",
+  "new": "resolved: Resolved,u:float,budget:ActionBudget) -> Draft:",
+  "expect": [
+   "public_function_parameter_names_and_keyword"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC12",
+  "file": "src/sui/dispatch.py",
+  "old": "s=(decision.reading_ns+rule[\"step_ns\"] if kind==\"next\" else",
+  "new": "s=(decision.reading_ns if kind==\"next\" else",
+  "expect": [
+   "command_all_ten_fields_and_decision_reading_is_not"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC13",
+  "file": "src/sui/dispatch.py",
+  "old": "    d=load_canonical(data); _validate(d)",
+  "new": "    d=load_canonical(data)\n    d={k:v for k,v in d.items() if k in \"action choice run not_before_ns reservation_rule dispatch effect late causal_stage causal_position\".split()}\n    _validate(d)",
+  "expect": [
+   "command_rejects_missing_or_extra_control"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC14",
+  "file": "src/sui/dispatch.py",
+  "old": "    d=load_canonical(data); _validate(d)",
+  "new": "    import json\n    d=json.loads(data); _validate(d)",
+  "expect": [
+   "command_canonicality_and_integer"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC15",
+  "file": "src/sui/dispatch.py",
+  "old": "    d=load_canonical(data); _validate(d)",
+  "new": "    d=load_canonical(data)\n    if d[\"dispatch\"][\"name\"]==\"immediate-start\":\n        d.update(dispatch={\"name\":\"wait-dispatch\",\"version\":\"1\"},not_before_ns=0,reservation_rule={\"kind\":\"at\",\"not_before_ns\":0},late=\"send_when_ready\")\n    _validate(d)",
+  "expect": [
+   "command_immediate_null_reservation_and"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC16",
+  "file": "src/sui/action_entry.py",
+  "old": "    if type(u) not in (int,float) or not math.isfinite(u) or not 0<=u<1:",
+  "new": "    if isinstance(u,bool): u=.5\n    if type(u) not in (int,float) or not math.isfinite(u) or not 0<=u<1:",
+  "expect": [
+   "public_evaluate_rejects_invalid_u_with"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "AC17",
+  "file": "src/sui/action_entry.py",
+  "old": "    if not values or any(type(x) is not str or x not in model.choices for x in values):\n        raise ActionInputError(reason=\"unknown_candidate\",detail=\"nonempty known choice names required\")",
+  "new": "    values=tuple(x for x in values if type(x) is str and x in model.choices) or model.choices",
+  "expect": [
+   "public_evaluate_rejects_unknown_or_empty"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "CLK01",
+  "file": "src/sui/clock.py",
+  "old": "        return _time.perf_counter_ns()",
+  "new": "        return _time.monotonic_ns()",
+  "expect": [
+   "system_clock_both_reads_use_same_perf_counter"
+  ],
+  "paths": [
+   "tests/test_s4b_action_clock.py"
+  ]
+ },
+ {
+  "id": "CLK02",
+  "file": "src/sui/clock.py",
+  "old": "        return self._mono_ns",
+  "new": "        self._mono_ns += 1\n        return self._mono_ns",
+  "expect": [
+   "fakeclock_still_advances_only_explicitly_and_rejects_cross"
+  ],
+  "paths": [
+   "tests/test_s4b_action_clock.py"
+  ]
+ },
+ {
+  "id": "CLK03",
+  "file": "src/sui/clock_contracts.py",
+  "old": "@dataclass(frozen=True,slots=True,kw_only=True)\nclass ClockSource:",
+  "new": "@dataclass(slots=True,kw_only=True)\nclass ClockSource:",
+  "expect": [
+   "clock_source_public_fields_and"
+  ],
+  "paths": [
+   "tests/test_s4b_action_clock.py"
+  ]
+ },
+ {
+  "id": "CLK04",
+  "file": "src/sui/runtime.py",
+  "old": "                        self.window.declare_clock_source(self._clock_source)",
+  "new": "                        pass",
+  "expect": [
+   "threadhost_records_source_separately_and_boot_payload_stays"
+  ],
+  "paths": [
+   "tests/test_s4b_action_clock.py"
+  ]
+ },
+ {
+  "id": "CLK05",
+  "file": "src/sui/agent.py",
+  "old": "    records = _facts(records)\n    unread_preferences = tuple(unread_preferences)",
+  "new": "    records = _facts(records)\n    for r in records:\n        object.__setattr__(r.at, 'mono_ns', 0)\n        object.__setattr__(r.at, 'wall_ns', 0)\n        if isinstance(r.body, _Observed) and r.body.received_ns is not None:\n            object.__setattr__(r.body, 'received_ns', 0)\n    unread_preferences = tuple(unread_preferences)",
+  "expect": [
+   "clock_declaration_roundtrips_as_separate_record_without_rewriting_old"
+  ],
+  "paths": [
+   "tests/test_s4b_action_clock.py"
+  ]
+ },
+ {
+  "id": "T01",
+  "file": "src/sui/action_reference.py",
+  "old": "    for command,origin in zip(controls,current.origins):",
+  "new": "    for command,origin in zip((),()):",
+  "expect": [
+   "t1_action_choice_does_not_create"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "T03",
+  "file": "src/sui/action_reference.py",
+  "old": "    ref=reference_target(root,current,current.targets,certificate=certificate,budget=budget)",
+  "new": "    d=load_canonical(root._data.model.declaration)\n    if all(e[\"B\"][\"kind\"]==\"known\" and all(all(x in ([0,1],[1,1]) for x in row) for row in e[\"B\"][\"values\"]) for e in d[\"effects\"].values()):\n        return rational_bounds(F(0))\n    ref=reference_target(root,current,current.targets,certificate=certificate,budget=budget)",
+  "expect": [
+   "t3_known_deterministic_effect_is_not_automatically"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "T04",
+  "file": "src/sui/action_reference.py",
+  "old": "    ref=reference_target(root,current,current.targets,certificate=certificate,budget=budget)",
+  "new": "    current=replace(current,targets=current.targets[-2:])\n    ref=reference_target(root,current,current.targets,certificate=certificate,budget=budget)",
+  "expect": [
+   "t4_independent_resets_register_joint_state"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "T07A",
+  "file": "src/sui/action_joint.py",
+  "old": "key=(label.time_s*1000000000,label.causal_stage,label.causal_position,0 if label.side==\"pre\" else 1)",
+  "new": "key=(label.time_s*1000000000,label.causal_stage,label.causal_position,1)",
+  "expect": [
+   "t7_start_measurement_pre_post_and_completion"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "T07B",
+  "file": "src/sui/action_lookahead.py",
+  "old": "child=ActionNode(belief=belief,controls=controls,targets=node.targets,terminal=True,trigger=node.trigger)",
+  "new": "child=ActionNode(belief=belief,controls=controls,targets=node.targets+(TargetRef(attempt=event.report,position=\"measurement\",side=\"post\"),TargetRef(attempt=event.report,position=\"completion\",side=\"post\")),terminal=True,trigger=node.trigger)",
+  "expect": [
+   "t7_no_report_by_deadline_does_not_register_future"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "T08",
+  "file": "src/sui/action_reference.py",
+  "old": "    for command,origin in zip(controls,current.origins):",
+  "new": "    from itertools import groupby\n    ordered=[]\n    for stage,pairs in groupby(zip(controls,current.origins),key=lambda pair:pair[0].causal_stage):\n        for position,(command,origin) in enumerate(sorted(pairs,key=lambda pair:pair[0].action)):\n            ordered.append((replace(command,causal_position=position),origin))\n    for command,origin in ordered:",
+  "expect": [
+   "t8_same_time_effects_follow_causal_position_not"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "T09",
+  "file": "src/sui/action_finite.py",
+  "edits": [
+   [
+    "        p=world_matrix(model,last.mode,last.response,key[0]-last.key[0])",
+    "        p=world_matrix(model,last.mode,last.response,0 if key[3] in (-3,-2,-1,0) else key[0]-last.key[0])"
+   ],
+   [
+    "    rows=advance(model,(path,),key,budget); result=[]; product=measure(model)",
+    "    elapsed=t-path.node_ns\n    flow=matrix(model,path.knots[-1].mode,elapsed)\n    rows=(replace(path,knots=path.knots+(Knot(key,path.knots[-1].state,path.knots[-1].mode),)),)\n    result=[]; product=measure(model)"
+   ],
+   [
+    "    return _guard(result,budget)\n\n\ndef label_for(data,path,target):",
+    "    swapped=[]\n    for p in result:\n        post=p.knots[-1]\n        for state in range(len(model.states)):\n            mass=flow[state][post.state]\n            if mass: swapped.append(replace(p,probability=p.probability*mass,knots=p.knots[:-1]+(replace(post,state=state),)))\n    return _guard(swapped,budget)\n\n\ndef label_for(data,path,target):"
+   ]
+  ],
+  "expect": [
+   "t9_flow_and_impulse_do_not"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "T16A",
+  "file": "src/sui/action_lookahead.py",
+  "old": "    try: return tuple(map(float,_policy(values,gamma)))",
+  "new": "    try: return tuple(map(float,_policy(values,-gamma)))",
+  "expect": [
+   "t16_public_evaluate_and_plan_match_independent_one_report"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "T16B",
+  "file": "src/sui/action_lookahead.py",
+  "old": "        base=information_potential(root,node,certificate=certificate,budget=budget)",
+  "new": "        root=node.belief\n        base=information_potential(root,node,certificate=certificate,budget=budget)",
+  "expect": [
+   "t16_two_report_policy_matches_terminal_enumeration_and"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "R02",
+  "file": "src/sui/action_learning.py",
+  "old": "                if not learned: continue",
+  "new": "                if not learned and parameter==\"B\":\n                    learned=True\n                    table=[[[rational(x,\"parameter\").numerator*1000000,rational(x,\"parameter\").denominator] for x in row] for row in table]\n                if not learned: continue",
+  "expect": [
+   "r2_known_point_law_keeps_exact_moments_and_two_step"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "R04",
+  "file": "src/sui/action_joint.py",
+  "old": "state=_state_at(path,events,_label(event,\"measurement\",m[\"side\"],model))",
+  "new": "state=_state_at(path,events,_label(event,\"measurement\",\"pre\",model)) if m[\"at\"]==\"start\" else (path.initial if events.index(event)==0 else path.posts[events.index(event)-1])",
+  "expect": [
+   "r4_q_zero_matches_t15_exact_integrated_discrete"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "AC18",
+  "file": "src/sui/action_model.py",
+  "old": "    if not isinstance(d[\"arrivals\"],dict): error(\"schema\",\"arrival route map required\",\"arrivals\")",
+  "new": "    if not isinstance(d[\"arrivals\"],dict) or not d[\"arrivals\"]: error(\"schema\",\"arrival route map required\",\"arrivals\")",
+  "expect": [
+   "model8_every_object_rejects_missing_and_extra"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py"
+  ]
+ },
+ {
+  "id": "B01",
+  "file": "src/sui/action_reference.py",
+  "edits": [
+   [
+    "    if measure(root._data.model).beta:\n        return joint_information(root,current.belief,ref._data,current.targets,budget)",
+    "    law=rational_bounds(F(0))\n    if measure(root._data.model).beta:\n        law=joint_information(root,current.belief,ref._data,(),budget)"
+   ],
+   [
+    "    if b==r: return rational_bounds(F(0))",
+    "    if b==r: return law"
+   ],
+   [
+    "    return Bounds(value,value,None)",
+    "    return Bounds(value+law.lower,value+law.upper,None)"
+   ]
+  ],
+  "expect": [
+   "t5_unknown_effect_joint_information_is_not_sum_of"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B02",
+  "file": "src/sui/action_learning.py",
+  "old": "    def observe(self, parameter, action, column, row, counts):\n        group=self.groups.get((parameter,action,column))",
+  "new": "    def observe(self, parameter, action, column, row, counts):\n        if parameter==\"B\": column=(column+1)%len(self.tables[parameter,action][0])\n        group=self.groups.get((parameter,action,column))",
+  "expect": [
+   "t5_unknown_effect_joint_information_is_not_sum_of"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B03",
+  "file": "src/sui/action_reference.py",
+  "old": "    if measure(root._data.model).beta:\n        return joint_information(root,current.belief,ref._data,current.targets,budget)",
+  "new": "    if measure(root._data.model).beta:\n        pass",
+  "expect": [
+   "t6_unknown_observation_table_learns_with_known_constant"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B04",
+  "file": "src/sui/action_learning.py",
+  "old": "        group=self.groups.get((parameter,action,column))",
+  "new": "        if parameter==\"Theta\":\n            fabricated=list(counts)\n            for key,index in self.indexes.items():\n                if key[0]==\"B\" and key[1]==action and key[3]==row: fabricated[index]+=1\n            counts=tuple(fabricated)\n        group=self.groups.get((parameter,action,column))",
+  "expect": [
+   "t6_constant_record_has_no_information_about_unknown"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B05",
+  "file": "src/sui/action_joint.py",
+  "old": "    return sum((rational(e[\"marks\"][\"probability\"][k][post][pre],\"marks\")*\n        rational(e[\"notice\"][\"probability\"][y][k][post][pre],\"notice\") for k in range(len(e[\"marks\"][\"labels\"]))),F(0))",
+  "new": "    if notice==\"yes\": return rational(e[\"marks\"][\"probability\"][e[\"marks\"][\"labels\"].index(\"success\")][post][pre],\"marks\")\n    return sum((rational(e[\"marks\"][\"probability\"][k][post][pre],\"marks\")*rational(e[\"notice\"][\"probability\"][y][k][post][pre],\"notice\") for k in range(len(e[\"marks\"][\"labels\"]))),F(0))",
+  "expect": [
+   "t12_notification_is_likelihood_not_certain_success_or"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B06",
+  "file": "src/sui/action_joint.py",
+  "old": "    return sum((rational(e[\"marks\"][\"probability\"][k][post][pre],\"marks\")*\n        rational(e[\"notice\"][\"probability\"][y][k][post][pre],\"notice\") for k in range(len(e[\"marks\"][\"labels\"]))),F(0))",
+  "new": "    if notice==\"aborted\": return rational(e[\"marks\"][\"probability\"][e[\"marks\"][\"labels\"].index(\"failure\")][post][pre],\"marks\")\n    return sum((rational(e[\"marks\"][\"probability\"][k][post][pre],\"marks\")*rational(e[\"notice\"][\"probability\"][y][k][post][pre],\"notice\") for k in range(len(e[\"marks\"][\"labels\"]))),F(0))",
+  "expect": [
+   "t12_notification_is_likelihood_not_certain_success_or"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B07",
+  "file": "src/sui/action_joint.py",
+  "old": "    value=known*sum((path.probability*product.moment(tuple(a+b for a,b in zip(path.counts,increment)))/\n        product.moment(path.counts) for path in belief._data.paths),F(0))",
+  "new": "    expected=tuple(sum((path.probability*path.counts[i] for path in belief._data.paths),F(0)) for i in range(len(product.zero)))\n    value=known\n    for beta,offset,size in zip(product.beta,product.offsets,product.sizes):\n        tilted=tuple(b+n for b,n in zip(beta,expected[offset:offset+size]))\n        group=increment[offset:offset+size]\n        for b,n in zip(tilted,group):\n            for k in range(n): value*=b+k\n        for k in range(sum(group)): value/=sum(tilted)+k",
+  "expect": [
+   "t13_noisy_notice_keeps_beta_mixture_moments_prediction_and_joint"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B08",
+  "file": "src/sui/action_learning.py",
+  "old": "    return Bounds(lower,upper,None)",
+  "new": "    entropy=-math.fsum(float(p.probability)*math.log(float(p.probability)) for p in current._data.paths if p.probability)\n    return Bounds(lower+entropy,upper+entropy,None)",
+  "expect": [
+   "t13_noisy_notice_keeps_beta_mixture_moments_prediction_and_joint"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B09",
+  "file": "src/sui/action_learning.py",
+  "old": "        probability=(self.beta[group][coordinate-offset]+counts[coordinate])/(sum(self.beta[group])+sum(counts[offset:offset+size]))",
+  "new": "        probability=self.beta[group][coordinate-offset]/sum(self.beta[group])",
+  "expect": [
+   "t14_unobserved_trial_preserves_law_and_two_future_successes_are_one"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B10",
+  "file": "src/sui/action_joint.py",
+  "old": "state=_state_at(path,events,_label(event,\"measurement\",m[\"side\"],model))",
+  "new": "state=path.initial if events.index(event)==0 else path.posts[events.index(event)-1]",
+  "expect": [
+   "t15_every_prefix_evidence_and_joint_state_matches_independent_path"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B11",
+  "file": "src/sui/action_joint.py",
+  "old": "    value=known*sum((path.probability*product.moment(tuple(a+b for a,b in zip(path.counts,increment)))/\n        product.moment(path.counts) for path in belief._data.paths),F(0))",
+  "new": "    value=known\n    for coordinate,power in enumerate(increment):\n        if not power: continue\n        single=tuple(int(i==coordinate) for i in range(len(increment)))\n        mean=sum((path.probability*product.moment(tuple(a+b for a,b in zip(path.counts,single)))/product.moment(path.counts) for path in belief._data.paths),F(0))\n        value*=mean**power",
+  "expect": [
+   "t15_table_moments_keep_path_mixture_including_cross_column"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B12",
+  "file": "src/sui/action_lookahead.py",
+  "old": "            mass=sum((p.probability*observation_probability(data.model,event,p,events,outcome,notice) for p in paths),F(0))",
+  "new": "            from .action_joint import parameter_moment\n            def average(parameter,row,column,nrows):\n                powers=tuple(tuple(int((i,j)==(row,column)) for j in range(len(data.model.states))) for i in range(nrows))\n                return parameter_moment(node.belief,parameter=parameter,action=command.action,powers=powers,budget=budget).exact\n            if notice is None and e[\"measure\"]=={\"at\":\"report\",\"side\":\"post\"}:\n                mass=sum((p.probability*average(\"B\",post,p.posts[-1] if p.posts else p.initial,len(data.model.states))*average(\"Theta\",data.model.outcomes.index(outcome),post,len(data.model.outcomes)) for p in data.paths for post in range(len(data.model.states))),F(0))\n            else:\n                mass=sum((p.probability*observation_probability(data.model,event,p,events,outcome,notice) for p in paths),F(0))",
+  "expect": [
+   "t15_next_prediction_integrates_state_B_and_Theta"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B13",
+  "file": "src/sui/action_reference.py",
+  "old": "    if measure(root._data.model).beta:\n        return joint_information(root,current.belief,ref._data,current.targets,budget)",
+  "new": "    if measure(root._data.model).beta:\n        pass",
+  "expect": [
+   "t15_joint_information_uses_posterior_expected_log_likelihood_not_marginal"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B14",
+  "file": "src/sui/action_joint.py",
+  "old": "    return tuple(rational_bounds(rational(v,\"weight\")) for v in values)",
+  "new": "    return tuple(rational_bounds(path.probability*rational(v,\"weight\")) for v in values for path in belief._data.paths)",
+  "expect": [
+   "stage1b_hypothesis_weights_keep_known_singletons_in_candidate"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B15",
+  "file": "src/sui/action_finite.py",
+  "old": "    t=event.dispatch_ns; key=(t,event.command.causal_stage,event.command.causal_position,0)",
+  "new": "    t=event.decision_ns if event.decision_ns is not None else event.dispatch_ns\n    key=(t,event.command.causal_stage,event.command.causal_position,0)",
+  "expect": [
+   "t25_confirmations_and_redelivery_do_not_create_B"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "B16",
+  "file": "src/sui/action_finite.py",
+  "edits": [
+   [
+    "            if tag in seen:",
+    "            duplicate=tag in seen or body.caused_by in done\n            if False and tag in seen:"
+   ],
+   [
+    "                if body.caused_by in done:",
+    "                if False and body.caused_by in done:"
+   ],
+   [
+    "                paths,mass=normalize(observe_report(model,paths,cmd,v,budget)); evidence*=mass",
+    "                if duplicate:\n                    rows=[]\n                    for p in paths:\n                        event=next(e for e in p.events if e.command==cmd)\n                        pre=state_at(p,FixedLabel(time_s=event.dispatch_ns/NS,causal_stage=cmd.causal_stage,causal_position=cmd.causal_position,side=\"pre\"))\n                        post=state_at(p,FixedLabel(time_s=event.dispatch_ns/NS,causal_stage=cmd.causal_stage,causal_position=cmd.causal_position,side=\"post\"))\n                        mass,counts=measure(model).observe(\"B\",cmd.action,pre,post,p.counts)\n                        if mass: rows.append(replace(p,probability=p.probability*mass,counts=counts))\n                    paths=tuple(rows)\n                paths,mass=normalize(observe_report(model,paths,cmd,v,budget)); evidence*=mass"
+   ]
+  ],
+  "expect": [
+   "t25_confirmations_and_redelivery_do_not_create_B"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage1b.py"
+  ]
+ },
+ {
+  "id": "S201",
+  "file": "src/sui/action_finite.py",
+  "old": "        p=world_matrix(model,last.mode,last.response,key[0]-last.key[0])",
+  "new": "        d=load_canonical(model.declaration)\n        active=d[\"effects\"][model.actions[0]][\"mode_on_dispatch\"][last.mode]\n        p=world_matrix(model,active,last.response,key[0]-last.key[0])",
+  "expect": [
+   "t10_active_Q_changes_intermediate_state_not_just",
+   "t10_finite_public_branches_carry_transition_error_to"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage2.py"
+  ]
+ },
+ {
+  "id": "S202",
+  "file": "src/sui/progress.py",
+  "old": "        total += duration * rate",
+  "new": "        total = Fraction(0)",
+  "expect": [
+   "t11_progress_keeps_accumulated_work_when_speed"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage2.py"
+  ]
+ },
+ {
+  "id": "S203",
+  "file": "src/sui/progress.py",
+  "old": "time + (upper - total) / rate, piece.density * rate))",
+  "new": "time + (upper - total) / rate, piece.density))",
+  "expect": [
+   "progress_atom_density_and_infinite_work_remain_different"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage2.py"
+  ]
+ },
+ {
+  "id": "S204",
+  "file": "src/sui/joint_stage2.py",
+  "old": "return KernelWindow((self.atom(),) if self.t0 <= h else (),",
+  "new": "return KernelWindow((self.atom(),) if self.t0 < h else (),",
+  "expect": [
+   "one_jump_accelerating_ruler_separates_nonarrival_atom_and",
+   "one_jump_slowing_ruler_uses_absolute_jacobian_and_closed"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage2.py"
+  ]
+ },
+ {
+  "id": "S205",
+  "file": "src/sui/action_types.py",
+  "old": "classes = {\"incomplete\": ActionIncomplete, \"incompatible\": ActionIncompatible,",
+  "new": "classes = {\"incomplete\": ActionInputError, \"incompatible\": ActionIncompatible,",
+  "expect": [
+   "continuous_public_input_stops_honestly_instead_of_returning_only"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage2.py"
+  ]
+ },
+ {
+  "id": "S301",
+  "file": "src/sui/action_finite.py",
+  "old": "    row=next(row for row in law['rows'] if row['when']==when)",
+  "new": "    row=next(row for row in law['rows'] if all(axis=='state' or row['when'][i]==when[i] for i,axis in enumerate(law['given'])))",
+  "expect": [
+   "t17_t21_waiting_preserves_joint_state_delay"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S302",
+  "file": "src/sui/action_finite.py",
+  "old": "            key=(p.hypotheses,row); result[key]=result.get(key,F(0))+p.probability",
+  "new": "            key=(p.hypotheses,row,tuple((command_json(e.command),e.work) for e in p.events)); result[key]=result.get(key,F(0))+p.probability",
+  "expect": [
+   "t18_auxiliary_work_does_not_become_information_and_reading_Z_has_correct"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S303",
+  "file": "src/sui/action_finite.py",
+  "old": "        for p,e in dispatch_paths(data.model,paths,command,budget): rows.extend(apply(data.model,p,replace(e,report=report_name(command)),budget))",
+  "new": "        for p,e in dispatch_paths(data.model,paths,command,budget):\n            if e.receipt_ns is not None and command.not_before_ns is not None and e.receipt_ns>boundary(_clock(load_canonical(data.model.declaration),p.hypotheses[1]),command.not_before_ns,p.clock_origin_ns):\n                e=replace(e,dispatch_ns=None,completion_ns=None)\n            rows.extend(apply(data.model,p,replace(e,report=report_name(command)),budget))",
+  "expect": [
+   "t19_late_root_world_is_sent_and_does_not_create"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S304",
+  "file": "src/sui/action_finite.py",
+  "edits": [
+   [
+    "                if decision_reading is not None and clock_read(clock,td,p.clock_origin_ns)!=decision_reading: continue",
+    "                if decision_reading is not None and False: continue"
+   ],
+   [
+    "        if any(bundle[k] is not None and bundle[k]!=clock_read(clock,t,path.clock_origin_ns) for k,t in\n            (('measurement_reading_ns',mtime),('completion_reading_ns',event.completion_ns))): continue",
+    "        if False: continue"
+   ],
+   [
+    "                    if t is None or clock_read(_clock(d,p.hypotheses[1]),t,p.clock_origin_ns)!=event_reading: continue",
+    "                    if t is None: continue"
+   ],
+   [
+    "                        if clock_read(_clock(d,p.hypotheses[1]),arrival,p.clock_origin_ns)==body.received_ns:",
+    "                        if True:"
+   ]
+  ],
+  "expect": [
+   "t20_clock_readings_are_evidence_not_reference_controls_or_new"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S305",
+  "file": "src/sui/action_finite.py",
+  "old": "clock=_clock(d,p.hypotheses[1]); base=max(tin,boundary(clock,command.not_before_ns,p.clock_origin_ns))",
+  "new": "clock=_clock(d,p.hypotheses[1]); base=tin if path.reference_ns is not None else max(tin,boundary(clock,command.not_before_ns,p.clock_origin_ns))",
+  "expect": [
+   "t22_reservation_keeps_old_label_marginal_and_prevents_endogenous"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S306",
+  "file": "src/sui/action_finite.py",
+  "old": "    ref=reference(root,current,current.targets,certificate,budget)",
+  "new": "    current=replace(current,targets=current.targets[:2])\n    ref=reference(root,current,current.targets,certificate,budget)",
+  "expect": [
+   "t23_waiting_then_independent_reset_extends_joint_information_without"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S307",
+  "file": "src/sui/action_finite.py",
+  "old": "                    if t is None or clock_read(_clock(d,p.hypotheses[1]),t,p.clock_origin_ns)!=event_reading: continue",
+  "new": "                    if t is None: continue",
+  "expect": [
+   "t24_chi_learning_and_duplicate_candidate_split"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S308",
+  "file": "src/sui/action_finite.py",
+  "old": "    axis,n=axes[parameter]\n    return tuple(rational_bounds(sum((p.probability for p in belief._data.paths if p.hypotheses[axis]==i),F(0))) for i in range(n))",
+  "new": "    axis,n=axes[parameter]\n    values=[sum((p.probability for p in belief._data.paths if p.hypotheses[axis]==i),F(0)) for i in range(n)]\n    if parameter==\"chi\":\n        laws=[canonical(c[\"delay\"]) for c in d[\"execution\"][\"chi\"][\"candidates\"]]\n        values=[sum(v for j,v in enumerate(values) if laws[j]==laws[i])/laws.count(laws[i]) for i in range(n)]\n    return tuple(rational_bounds(v) for v in values)",
+  "expect": [
+   "t24_chi_learning_and_duplicate_candidate_split"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S309",
+  "file": "src/sui/action_finite.py",
+  "old": "            key=(p.hypotheses,row); result[key]=result.get(key,F(0))+p.probability",
+  "new": "            key=(p.hypotheses,row,tuple((command_json(e.command),None if e.dispatch_ns is None else e.dispatch_ns-(e.receipt_ns or F(0))) for e in p.events)); result[key]=result.get(key,F(0))+p.probability",
+  "expect": [
+   "known_chi_does_not_count_the_entropy_of_an_individual_delay"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S310",
+  "file": "src/sui/action_finite.py",
+  "edits": [
+   [
+    "            if tag in seen:",
+    "            if False and tag in seen:"
+   ],
+   [
+    "                if physical in confirmed:",
+    "                if False and physical in confirmed:"
+   ]
+  ],
+  "expect": [
+   "chi_source_id_redelivery_does_not_square_the_notification"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S311",
+  "file": "src/sui/action_finite.py",
+  "edits": [
+   [
+    "    key=(label.time_s*NS,label.causal_stage,label.causal_position,0 if label.side=='pre' else 1)\n    return next(k.state for k in reversed(path.knots) if k.key<=key)",
+    "    key=(label.time_s*NS,)\n    return next(k.state for k in reversed(path.knots) if k.key[:1]<=key)"
+   ],
+   [
+    "    key=(label.time_s*NS,label.causal_stage,label.causal_position,0 if label.side=='pre' else 1)\n    if key>=path.knots[-1].key:",
+    "    same=next((k for k in reversed(path.knots) if k.key[0]==label.time_s*NS),None)\n    if same is not None: return (path,)\n    key=(label.time_s*NS,label.causal_stage,label.causal_position,0 if label.side=='pre' else 1)\n    if key>=path.knots[-1].key:"
+   ]
+  ],
+  "expect": [
+   "old_report_label_does_not_collide_with_new_start_post_at_same_clock"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S312",
+  "file": "src/sui/action_finite.py",
+  "old": "            if dt is None: result.append((replace(path,probability=path.probability*p),None)); continue",
+  "new": "            if dt is None: continue",
+  "expect": [
+   "finite_waiting_and_permanent_nonsend_mass_normalize_without_inventing"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "WD01",
+  "file": "src/sui/dispatch.py",
+  "old": "            value=read()\n            if value<ready:",
+  "new": "            value=command.not_before_ns\n            if value<ready:",
+  "expect": [
+   "wait_dispatcher_rereads_after_early_wakeup_and_records_actual_point"
+  ],
+  "paths": [
+   "tests/test_s4b_action_dispatcher.py"
+  ]
+ },
+ {
+  "id": "WD02",
+  "file": "src/sui/dispatch.py",
+  "old": "            self._wait(seconds)\n            value=read()",
+  "new": "            self._wait(seconds)\n            emit(DispatchNotice(kind=\"receipt\",attempt=act.attempt,command=command,run=command.run,reading_ns=read(),point=None))\n            value=read()",
+  "expect": [
+   "wait_dispatcher_rereads_after_early_wakeup_and_records_actual_point"
+  ],
+  "paths": [
+   "tests/test_s4b_action_dispatcher.py"
+  ]
+ },
+ {
+  "id": "WD03",
+  "file": "src/sui/dispatch.py",
+  "old": "            integer(reading_ns,field=\"dispatch.reading_ns\")",
+  "new": "            reading_ns=ready\n            integer(reading_ns,field=\"dispatch.reading_ns\")",
+  "expect": [
+   "wait_dispatcher_rereads_after_early_wakeup_and_records_actual_point"
+  ],
+  "paths": [
+   "tests/test_s4b_action_dispatcher.py"
+  ]
+ },
+ {
+  "id": "WD04",
+  "file": "src/sui/dispatch.py",
+  "old": "        ready=receipt\n        while ready<command.not_before_ns:",
+  "new": "        ready=receipt\n        if ready>=command.not_before_ns: self._wait(1e-9)\n        while ready<command.not_before_ns:",
+  "expect": [
+   "wait_dispatcher_late_or_threshold_arrival_sends_without_extra"
+  ],
+  "paths": [
+   "tests/test_s4b_action_dispatcher.py"
+  ]
+ },
+ {
+  "id": "WD05",
+  "file": "src/sui/dispatch.py",
+  "old": "        result=send(act.action,on_dispatched=on_dispatched)",
+  "new": "        try: result=send(act.action,on_dispatched=on_dispatched)\n        except Exception:\n            result=send(act.action,on_dispatched=on_dispatched)",
+  "expect": [
+   "wait_dispatcher_hand_exception_preserves_notices_and_never"
+  ],
+  "paths": [
+   "tests/test_s4b_action_dispatcher.py"
+  ]
+ },
+ {
+  "id": "WD06",
+  "file": "src/sui/dispatch.py",
+  "edits": [
+   [
+    "        confirmed=False",
+    "        confirmed=False\n        notice=None"
+   ],
+   [
+    "            nonlocal confirmed",
+    "            nonlocal confirmed,notice"
+   ],
+   [
+    "            emit(DispatchNotice(kind=\"dispatch\",attempt=act.attempt,command=command,\n                run=command.run,reading_ns=reading_ns,point=self._point))",
+    "            notice=DispatchNotice(kind=\"dispatch\",attempt=act.attempt,command=command,\n                run=command.run,reading_ns=reading_ns,point=self._point)"
+   ],
+   [
+    "        result=send(act.action,on_dispatched=on_dispatched)",
+    "        result=send(act.action,on_dispatched=on_dispatched)\n        if notice is not None: emit(notice)"
+   ]
+  ],
+  "expect": [
+   "wait_dispatcher_hand_exception_preserves_notices_and_never"
+  ],
+  "paths": [
+   "tests/test_s4b_action_dispatcher.py"
+  ]
+ },
+ {
+  "id": "WD07",
+  "file": "src/sui/dispatch.py",
+  "old": "        if not confirmed:\n            raise ActionRuntimeUnverified(reason=\"dispatch_point\",detail=\"adapter returned without confirming its declared point\")",
+  "new": "        if not confirmed:\n            on_dispatched(read())",
+  "expect": [
+   "wait_dispatcher_does_not_invent_confirmation_when_hand_returns_without"
+  ],
+  "paths": [
+   "tests/test_s4b_action_dispatcher.py"
+  ]
+ },
+ {
+  "id": "S313",
+  "file": "src/sui/action_finite.py",
+  "old": "        paths=_guard(rows,budget)\n    belief=make(data.model,root.context,paths,reports,data.observations,root.status,data.evidence)",
+  "new": "        rows=[p for p in rows if all(e.dispatch_ns is not None for e in p.events if e.command in controls)]\n        paths,_=normalize(rows)\n    belief=make(data.model,root.context,paths,reports,data.observations,root.status,data.evidence)",
+  "expect": [
+   "finite_waiting_and_permanent_nonsend_mass_normalize_without_inventing"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S314",
+  "file": "src/sui/action_finite.py",
+  "old": "pending=[e for e in path.events if (e.command.causal_stage,e.command.causal_position) not in adopted",
+  "new": "pending=[e for e in path.events if e.command==command and (e.command.causal_stage,e.command.causal_position) not in adopted",
+  "expect": [
+   "pending_probe_branches_match_manual_history_reference_and"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S315",
+  "file": "src/sui/action_finite.py",
+  "old": "    if target.attempt not in data.reports: raise ActionInputError(reason='shape',detail='unknown report target',field=target.attempt)",
+  "new": "    if not target.attempt.startswith('observation:') or target.attempt not in data.reports: raise ActionInputError(reason='shape',detail='unknown report target',field=target.attempt)",
+  "expect": [
+   "pending_probe_branches_match_manual_history_reference_and",
+   "t17_t21_waiting_preserves_joint_state_delay"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S316",
+  "file": "src/sui/action_finite.py",
+  "old": "    controls=current.controls; data=root._data",
+  "new": "    controls=(); data=current.belief._data",
+  "expect": [
+   "pending_probe_branches_match_manual_history_reference_and",
+   "t18_auxiliary_work_does_not_become_information_and_reading_Z_has_correct"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S317",
+  "file": "src/sui/action_finite.py",
+  "old": "reports[target.attempt]=replace(frozen,fixed=True,",
+  "new": "reports[target.attempt]=replace(frozen,fixed=False,",
+  "expect": [
+   "t23_waiting_then_independent_reset_extends_joint_information_without"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "S318",
+  "file": "src/sui/action_finite.py",
+  "old": "    if len(labels)<2: return",
+  "new": "    if len(labels)<2: return\n    if any(x for q in load_canonical(data.model.declaration)[\"activity\"][\"Q_by_mode\"].values() for row in q for x in row):\n        raise ActionIncomplete(reason=\"latent_label_envelope\",detail=\"nonzero Q prevents latent-label reduction\")",
+  "expect": [
+   "pending_probe_branches_match_manual_history_reference_and"
+  ],
+  "paths": [
+   "tests/test_s4b_action_stage3.py"
+  ]
+ },
+ {
+  "id": "PI01",
+  "file": "src/sui/runtime.py",
+  "old": "                    if _is_action_model(self.agent._model):\n                        from .action_runtime import start",
+  "new": "                    if False and _is_action_model(self.agent._model):\n                        from .action_runtime import start",
+  "expect": [
+   "public_model8_threadhost_record_chain_rebuild_restore"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI02",
+  "file": "src/sui/action_runtime.py",
+  "old": "        content=Payload.json(value), caused_by=event.attempt, received_ns=received_ns,",
+  "new": "        content=Payload.json(value), caused_by=None, received_ns=received_ns,",
+  "expect": [
+   "public_model8_threadhost_record_chain_rebuild_restore"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI03",
+  "file": "src/sui/action_runtime.py",
+  "old": "decision = DecisionReading(run=clock.run, reading_ns=clock.mono_ns(),",
+  "new": "decision = DecisionReading(run=clock.run, reading_ns=work.view.now_ns,",
+  "expect": [
+   "public_model8_threadhost_record_chain_rebuild_restore",
+   "public_resource_wait_and_window_reconstruction_keep_bound"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI04",
+  "file": "src/sui/action_runtime.py",
+  "old": "    command, decision = window.pledges.commands[job.id]",
+  "new": "    command, decision = window.pledges.commands[job.id]\n    decision=DecisionReading(run=window.clock.run,reading_ns=window.clock.mono_ns(),work=decision.work,parents=decision.parents)\n    command=build_command(model=window.agent._model,choice=command.choice,decision=decision,causal_stage=command.causal_stage,causal_position=command.causal_position)\n    window.pledges.commands[job.id]=(command,decision)",
+  "expect": [
+   "public_resource_wait_and_window_reconstruction_keep_bound"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI05",
+  "file": "src/sui/dispatch.py",
+  "old": "        ready=receipt\n        while ready<command.not_before_ns:",
+  "new": "        ready=receipt\n        if ready>command.not_before_ns: self._wait(1e-9)\n        while ready<command.not_before_ns:",
+  "expect": [
+   "public_resource_wait_and_window_reconstruction_keep_bound"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI06",
+  "file": "src/sui/runtime.py",
+  "old": "        elif isinstance(event, (Done, Failed)):\n            content, contract",
+  "new": "        elif isinstance(event, Failed):\n            p.items[:]=[i for i in p.items if not (isinstance(i,Observe) and getattr(i.record.body,\"caused_by\",None)==event.attempt)]\n            return\n        elif isinstance(event, (Done, Failed)):\n            content, contract",
+  "expect": [
+   "public_hand_exception_keeps_evidence_and_never"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI07",
+  "file": "src/sui/action_runtime.py",
+  "old": "measurement_reading_ns=result.measurement_reading_ns,\n            completion_reading_ns=result.completion_reading_ns",
+  "new": "measurement_reading_ns=window.clock.mono_ns() if result.measurement_reading_ns is None else result.measurement_reading_ns,\n            completion_reading_ns=window.clock.mono_ns() if result.completion_reading_ns is None else result.completion_reading_ns",
+  "expect": [
+   "public_report_null_readings_are_not_filled_from_record"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI08",
+  "file": "src/sui/runtime.py",
+  "old": "            Thread(target=self._worker, args=(work, hand), daemon=True).start()",
+  "new": "            self._worker(work,hand)",
+  "expect": [
+   "public_wait_worker_does_not_block_window_and_timeout_does_not"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI09",
+  "file": "src/sui/action_runtime.py",
+  "old": "    except Exception as exc:\n        return Thought(work=work.work, error=type(exc).__name__)",
+  "new": "    except Exception as exc:\n        from .action_types import ActionIncomplete,default_budget\n        if isinstance(exc,ActionIncomplete):\n            from .action_entry import public_evaluate\n            from .preference import current,resolve\n            draft=public_evaluate(work.view,work.candidates,resolve(current(work.view.preferences),work.view),u=work.u,budget=default_budget())\n            decision=DecisionReading(run=clock.run,reading_ns=clock.mono_ns(),work=work.work,parents=work.view.frontier)\n            return Thought(work=work.work,draft=draft,decision_reading=decision,_command=bind(work,draft,decision))\n        return Thought(work=work.work, error=type(exc).__name__)",
+  "expect": [
+   "public_incomplete_worker_never_writes_decision_or"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI10",
+  "file": "src/sui/clock_contracts.py",
+  "old": "        return {\"run\":str(self.run),\"provider\":self.provider,\"implementation\":self.implementation,",
+  "new": "        return {\"run\":str(self.run),\"implementation\":self.implementation,",
+  "expect": [
+   "public_clock_source_follows_boot_once_with_exact"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI11",
+  "file": "src/sui/runtime.py",
+  "old": "        elif isinstance(work, Act) and work.command is not None:",
+  "new": "        elif isinstance(work, Act):",
+  "expect": [
+   "public_model7_threadhost_keeps_legacy_hand_and"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI12",
+  "file": "src/sui/action_persistence.py",
+  "old": "        time = data['time']",
+  "new": "        import time as live_clock\n        time = {**data['time'],'now_ns':live_clock.perf_counter_ns()}",
+  "expect": [
+   "public_prepare_commit_is_idempotent_and_replay_ignores_later"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI13",
+  "file": "src/sui/action_joint.py",
+  "old": "    records=tuple(r for r in _facts(records) if r.category in (Category.FACT,Category.INTENTION,Category.PREFERENCE))",
+  "new": "    records=tuple(r for r in _facts(records) if r.category in (Category.FACT,Category.INTENTION,Category.PREFERENCE) and not (isinstance(r.body,AttemptStarted) and r.body.contract==ATTEMPT or isinstance(r.body,Observed) and r.body.contract in (RESERVATION,RECEIPT,DISPATCH,REPORT)))",
+  "expect": [
+   "public_model8_threadhost_record_chain_rebuild_restore"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "PI14",
+  "file": "src/sui/action_lookahead.py",
+  "old": "            owner=planned_attempt(command)",
+  "new": "            owner=branch_event.report",
+  "expect": [
+   "public_value_type_fields_match",
+   "v022_plan_attempt_labels_and_public"
+  ],
+  "paths": [
+   "tests/test_s4b_action_contracts.py",
+   "tests/test_s4b_action_stage1a.py"
+  ]
+ },
+ {
+  "id": "PI15",
+  "file": "backup/sui_backup.py",
+  "old": "                dst.models.put(src.models.get(ref))",
+  "new": "                model=src.models.get(ref)\n                if getattr(model,\"declaration\",b\"\").find(b'\"scheme\":\"sui.model.8\"')<0:\n                    dst.models.put(model)",
+  "expect": [
+   "model8_backup_preserves_facts_model_and"
+  ],
+  "paths": [
+   "backup"
+  ]
+ },
+ {
+  "id": "PI16",
+  "file": "src/sui/runtime.py",
+  "old": "                    p.bindings[event.work] = (command, event.decision_reading)",
+  "new": "                    from dataclasses import replace\n                    p.bindings[event.work] = (command, replace(event.decision_reading,parents=frozenset(self.ledger.heads())))",
+  "expect": [
+   "public_thought_keeps_frozen_view_when_a_fact_arrives_during"
+  ],
+  "paths": [
+   "tests/test_s4b_action_integration.py"
+  ]
+ },
+ {
+  "id": "BR01",
+  "file": "src/sui/action_finite.py",
+  "old": "    check(context.check_events)",
+  "new": "    pass  # Unrecorded checks do not condition pending attempts.",
+  "expect": [
+   "b1_actual_attempt_unrecorded_tick_conditions_on"
+  ],
+  "paths": [
+   "tests/test_s4b_action_review_regressions.py"
+  ]
+ },
+ {
+  "id": "BR02",
+  "file": "src/sui/action_finite.py",
+  "old": "    if labels and any(e.dispatch_ns is not None and (*e.key,1)<=latest for p,e in reference_dispatched):",
+  "new": "    if False and labels and any(e.dispatch_ns is not None and (*e.key,1)<=latest for p,e in reference_dispatched):",
+  "expect": [
+   "b2_unsafe_reservation_stops_before_certifying_negative",
+   "b2_safe_reservation_still_has_zero"
+  ],
+  "paths": [
+   "tests/test_s4b_action_review_regressions.py"
+  ]
+ },
+ {
+  "id": "BR03",
+  "file": "src/sui/action_finite.py",
+  "old": "    return min(boots,key=lambda r:(r.at.seq,str(r.id))).body.received_ns if boots else 0",
+  "new": "    return 0",
+  "expect": [
+   "b3_boot_reading_is_origin_not_elapsed_physical"
+  ],
+  "paths": [
+   "tests/test_s4b_action_review_regressions.py"
+  ]
+ },
+ {
+  "id": "BR04",
+  "file": "src/sui/action_finite.py",
+  "old": "                paths=checkpoint(model,paths,saved['time']['now_ns'],cmd.causal_stage,budget)",
+  "new": "                paths=checkpoint(model,paths,boot_reading(reading,context.run),cmd.causal_stage,budget)",
+  "expect": [
+   "b4_threadhost_nonzero_first_tick_rebuilds_completed"
+  ],
+  "paths": [
+   "tests/test_s4b_action_review_regressions.py"
+  ]
+ },
+ {
+  "id": "BR05",
+  "file": "src/sui/action_finite.py",
+  "old": "                old_events.append(replace(old,completion_ns=end))",
+  "new": "                old_events.append(old)",
+  "expect": [
+   "t1a_action_branches_recompute_running_work_after_another"
+  ],
+  "paths": [
+   "tests/test_s4b_action_review_regressions.py"
+  ]
+ },
+ {
+  "id": "BR06",
+  "file": "src/sui/action_finite.py",
+  "edits": [
+   [
+    "    from .action_response import _transition,_generator",
+    "    from .action_response import _transition,_generator\n    action,dispatch_state=response if isinstance(response,tuple) else (response,None)\n    generator=_generator(model,action,mode)\n    if dispatch_state is not None:\n        d=load_canonical(model.declaration); effect=d['effects'][action]; n=len(model.states)\n        b=np.asarray([[rational_bounds(rational(x,'B')).lower for x in row] for row in effect['B']['values']])\n        rates=np.asarray(effect['response_rate_s'],dtype=float)\n        generator[n:,:n]=b[:,[dispatch_state]]*rates[None,:]"
+   ],
+   [
+    "    p=_transition(model,response,mode,elapsed/NS)",
+    "    p=transition(generator,dt)"
+   ],
+   [
+    "        reachable=_generator(model,response,mode)>0",
+    "        reachable=generator>0"
+   ],
+   [
+    "            q=replace(p,probability=p.probability*mass,counts=counts,knots=p.knots+(Knot((*key[:3],1),post,mode,event.command.action if responding else pre.response),))",
+    "            q=replace(p,probability=p.probability*mass,counts=counts,knots=p.knots+(Knot((*key[:3],1),post,mode,(event.command.action,pre.state) if responding else pre.response),))"
+   ]
+  ],
+  "expect": [
+   "t1b_response_wait_uses_state_at_response_not"
+  ],
+  "paths": [
+   "tests/test_s4b_action_review_regressions.py"
+  ]
  }
 ]
