@@ -7007,7 +7007,7 @@
   "file": "src/sui/rate.py",
   "edits": [
    [
-    "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)",
+    "        information = self.interval(self.maximum(self.number(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)",
     "        information = self.hp"
    ]
   ],
@@ -7016,7 +7016,8 @@
   ],
   "paths": [
    "tests/test_s4b2_selection.py"
-  ]
+  ],
+  "note": "2026-10-06 Claude: 数の型の差し替え口 (区間の演算を self.interval・self.maximum・self.number に) に合わせて書き直し、意味は同じ"
  },
  {
   "id": "S4B2-M12",
@@ -7027,12 +7028,12 @@
     "        self.entropy_kernels = tuple(_c1_total(row) for row in self.kernels) + (_c1_total(state_kernels), ((0, _Fraction(0), _Fraction(1)),))"
    ],
    [
-    "        h_conditional = RationalInterval(max(_Fraction(0), joint.lower - state.upper), joint.upper - state.lower)",
-    "        h_conditional = RationalInterval(max(_Fraction(0), joint.lower - state.upper), joint.upper - state.lower)\n        self.state_information = RationalInterval(self.hc.lower - h_conditional.upper, self.hc.upper - h_conditional.lower)"
+    "        h_conditional = self.interval(self.maximum(self.number(0), joint.lower - state.upper), joint.upper - state.lower)",
+    "        h_conditional = self.interval(self.maximum(self.number(0), joint.lower - state.upper), joint.upper - state.lower)\n        self.state_information = self.interval(self.hc.lower - h_conditional.upper, self.hc.upper - h_conditional.lower)"
    ],
    [
-    "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)",
-    "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower + self.state_information.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper + self.state_information.upper - self.conditional.lower / self.z)"
+    "        information = self.interval(self.maximum(self.number(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)",
+    "        information = self.interval(self.maximum(self.number(0), self.hp.lower + self.hc.lower + self.state_information.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper + self.state_information.upper - self.conditional.lower / self.z)"
    ]
   ],
   "expect": [
@@ -7042,15 +7043,16 @@
   "paths": [
    "tests/test_s4b2_selection.py",
    "tests/test_s4b2_refinement.py"
-  ]
+  ],
+  "note": "2026-10-06 Claude: 数の型の差し替え口 (区間の演算を self.interval・self.maximum・self.number に) に合わせて書き直し、意味は同じ"
  },
  {
   "id": "S4B2-M13",
   "file": "src/sui/rate.py",
   "edits": [
    [
-    "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)",
-    "        label_entropy = self.work.log(_Fraction(max(1, len(self.cells))))\n        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z) + label_entropy.lower,\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z + label_entropy.upper)"
+    "        information = self.interval(self.maximum(self.number(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)",
+    "        label_entropy = self.work.log(self.number(max(1, len(self.cells))))\n        information = self.interval(self.maximum(self.number(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z) + label_entropy.lower,\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z + label_entropy.upper)"
    ]
   ],
   "expect": [
@@ -7058,7 +7060,8 @@
   ],
   "paths": [
    "tests/test_s4b2_selection.py"
-  ]
+  ],
+  "note": "2026-10-06 Claude: 数の型の差し替え口 (区間の演算を self.interval・self.maximum・self.number に) に合わせて書き直し、意味は同じ"
  },
  {
   "id": "S4B2-M14",
@@ -7407,7 +7410,7 @@
   "file": "src/sui/rate.py",
   "edits": [
    [
-    "        error = (right - left)**5 * max(abs(fourth.lower), abs(fourth.upper)) / 2880",
+    "        error = (right - left)**5 * self.maximum(abs(fourth.lower), abs(fourth.upper)) / 2880",
     "        error = (right - left) * self.log_k.upper"
    ]
   ],
@@ -7417,7 +7420,7 @@
   "paths": [
    "tests/test_s4b2_refinement.py"
   ],
-  "note": "2026-10-06 Claude: 標準の予算の重い試験まで選ばれて 300 秒の TIMEOUT になったので、小さい予算の試験だけを選ぶ接頭辞に"
+  "note": "2026-10-06 Claude: 標準の予算の重い試験まで選ばれて 300 秒の TIMEOUT になったので、小さい予算の試験だけを選ぶ接頭辞に / 2026-10-06 Claude: 数の型の差し替え口 (区間の演算を self.interval・self.maximum・self.number に) に合わせて書き直し、意味は同じ"
  },
  {
   "id": "S4B2-M43",
@@ -7434,5 +7437,43 @@
   "paths": [
    "tests/test_s4b2_rate.py"
   ]
+ },
+ {
+  "id": "S4B2-N1",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "try:\n    from gmpy2 import mpq as _InformationScalar\nexcept (ImportError, OSError):\n    _InformationScalar = _Fraction\n",
+    "from gmpy2 import mpq as _InformationScalar\n"
+   ]
+  ],
+  "expect": [
+   "c2_all_source_modules_import_without_optional",
+   "c1_n0_canonical_bytes_without"
+  ],
+  "paths": [
+   "tests/test_portable.py",
+   "tests/test_s4b2_bytes.py"
+  ],
+  "note": "2026-10-06 Claude: 数の型の差し替え口 (§16)。gmpy2 を無条件に読み込むと、無い環境で sui が壊れる (任意の部品でなくなる)"
+ },
+ {
+  "id": "S4B2-N2",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        return _Fraction(*self.ratio(value, upper=upper))\n",
+    "        return _Fraction(*self.ratio(value, upper=upper)).limit_denominator(10**30)\n"
+   ]
+  ],
+  "expect": [
+   "c1_n0_evaluation_and_certificate_canonical",
+   "c1_n0_public_selection_canonical",
+   "c1_n0_canonical_bytes_without"
+  ],
+  "paths": [
+   "tests/test_s4b2_bytes.py"
+  ],
+  "note": "2026-10-06 Claude: 数の型の差し替え口 (§16)。境界で正確な分数に戻さず近い分数に丸める (値はほぼ同じで包含は通りうる、バイトが変わる)"
  }
 ]

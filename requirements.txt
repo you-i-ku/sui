@@ -1,6 +1,8 @@
-# S0 のテスト用。実行時は標準ライブラリのみ。
+# S0 のテスト用。実行時は標準ライブラリのみ (gmpy2 は任意: あれば速く、無くても同じバイトの結果)。
 pytest==9.1.1
 numpy==2.5.3
 scipy==1.18.1
 pytest-xdist==3.8.0
 execnet==2.1.2
+# 任意の高速化 (S4b-2 §16、LGPL-3.0-or-later)。sha256: cp312 win_amd64 753baf48bf00b391297622cecc4d33fb3e10966fe3e61c2e6e22a3f387fa6446 / cp312 manylinux x86_64 c3021ec352e1b26baf4752f99d88adc9e930f115a053162c127d1c1b2f5783c2
+gmpy2==2.3.2

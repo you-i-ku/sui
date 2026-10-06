@@ -7,6 +7,11 @@ from types import MappingProxyType as _MappingProxyType
 import hashlib as _hashlib
 import json as _json
 
+try:
+    from gmpy2 import mpq as _InformationScalar
+except (ImportError, OSError):
+    _InformationScalar = _Fraction
+
 from .contracts import ContractRef as _ContractRef
 from .agent import ModelFalsified as _ModelFalsified, RebuildMismatch as _RebuildMismatch
 from .ids import Ref as _Ref
@@ -1232,7 +1237,58 @@ def _ep_derivative(kernel):
                 ((k - 1, d, k * c), (k, d, -d * c)) if term[0] >= 0))
 
 
-class _RateInformationWork(_C1IntegralWork):
+@_dataclass(frozen=True, slots=True)
+class _InformationInterval:
+    lower: object
+    upper: object
+
+
+@_dataclass(frozen=True, slots=True)
+class _InformationArithmetic:
+    """Exact scalar arithmetic and conversion at the information boundary."""
+    scalar: object = _InformationScalar
+
+    def number(self, numerator=0, denominator=None):
+        if denominator is not None:
+            return self.scalar(int(numerator), int(denominator))
+        if isinstance(numerator, _Fraction):
+            return self.scalar(numerator.numerator, numerator.denominator)
+        return self.scalar(numerator)
+
+    def ratio(self, value, *, upper=False):
+        return int(value.numerator), int(value.denominator)
+
+    def to_fraction(self, value, *, upper=False):
+        return _Fraction(*self.ratio(value, upper=upper))
+
+    def endpoints(self, value):
+        return value, value
+
+    def interval(self, lower, upper):
+        lower, upper = self.number(lower), self.number(upper)
+        lower, upper = self.endpoints(lower)[0], self.endpoints(upper)[1]
+        if lower > upper:
+            raise RateNumericalRange("invalid_interval", "ordered Fraction endpoints required")
+        return _InformationInterval(lower, upper)
+
+    @staticmethod
+    def minimum(*values):
+        return min(*values)
+
+    @staticmethod
+    def maximum(*values):
+        return max(*values)
+
+    def floor(self, value):
+        numerator, denominator = self.ratio(value)
+        return numerator // denominator
+
+    @staticmethod
+    def order_key(value):
+        return value
+
+
+class _RateInformationWork:
     """Reusable rational series, with uniform remainders on reduced domains.
 
     max_terms counts the coefficients constructed, not repeated evaluations
@@ -1240,15 +1296,26 @@ class _RateInformationWork(_C1IntegralWork):
     and outward integer rounding; their number is bounded by max_cells and
     max_refinements. No floating point value participates in an enclosure.
     """
-    def __init__(self, budget):
-        super().__init__(budget)
+    def __init__(self, budget, *, arithmetic=None):
+        self.arithmetic = arithmetic or _InformationArithmetic()
+        self.number = self.arithmetic.number
+        self.interval = self.arithmetic.interval
+        self.minimum, self.maximum = self.arithmetic.minimum, self.arithmetic.maximum
+        self.budget, self.trace, self.terms = budget, [], 0
         self.logs = {}
         # A tiny requested tolerance must not prevent an early selection.
-        self.epsilon = _Fraction(1, 10**24)
+        self.epsilon = self.number(1, 10**24)
         self.log_degree = self.exp_degree = 0
         self.log_coefficients = []
-        self.exp_coefficients = [_Fraction(1)]
+        self.exp_coefficients = [self.number(1)]
         self.exponentials = {}
+
+    def pair(self, value):
+        return _pair(self.arithmetic.to_fraction(value))
+
+    def public(self, interval):
+        return RationalInterval(self.arithmetic.to_fraction(interval.lower),
+                                self.arithmetic.to_fraction(interval.upper, upper=True))
 
     def coefficients(self, kind, degree):
         name = kind + "_degree"
@@ -1258,28 +1325,32 @@ class _RateInformationWork(_C1IntegralWork):
         if self.terms + degree - old > self.budget.max_terms:
             raise RateIncomplete("budget", "elementary-series coefficients exceed max_terms")
         if kind == "log":
-            self.log_coefficients.extend(_Fraction(2, 2 * n + 1) for n in range(old, degree))
+            self.log_coefficients.extend(self.number(2, 2 * n + 1) for n in range(old, degree))
         else:
             for n in range(old + 1, degree + 1):
                 self.exp_coefficients.append(self.exp_coefficients[-1] / n)
         self.terms += degree - old
         setattr(self, name, degree)
         _trace(self.trace, "series", dimension=kind + "-uniform", terms=degree - old,
-               cutoff=_pair(_Fraction(1, 3) if kind == "log" else _Fraction(1)))
+               cutoff=self.pair(self.number(1, 3) if kind == "log" else self.number(1)))
 
     def series_enclosure(self, interval, *, positive=False):
-        # These integer inequalities bound the series result on a rational
-        # grid. Their extra width stays inside the transcendental enclosure;
-        # all arithmetic and endpoint comparisons are exact Fraction/int.
-        target = 8 * self.epsilon.denominator // self.epsilon.numerator + 1
+        # Integer floor/ceil bounds retain the elementary-series grid.
+        numerator, denominator = self.arithmetic.ratio(self.epsilon)
+        target = 8 * denominator // numerator + 1
         grid = 1 << target.bit_length()
         if positive and interval.lower > 0:
-            grid <<= max(0, interval.lower.denominator.bit_length() - interval.lower.numerator.bit_length())
-        lower = (interval.lower * grid).numerator // (interval.lower * grid).denominator
-        upper = -((-interval.upper * grid).numerator // (-interval.upper * grid).denominator)
-        return RationalInterval(_Fraction(lower, grid), _Fraction(upper, grid))
+            numerator, denominator = self.arithmetic.ratio(interval.lower)
+            grid <<= max(0, denominator.bit_length() - numerator.bit_length())
+        lower = self.arithmetic.floor(interval.lower * grid)
+        upper = -self.arithmetic.floor(-interval.upper * grid)
+        return self.interval(self.number(lower, grid), self.number(upper, grid))
 
     def log(self, x):
+        x = self.number(x)
+        lower, upper = self.arithmetic.endpoints(x)
+        if lower != upper:
+            return self.interval(self.log(lower).lower, self.log(upper).upper)
         if x <= 0:
             raise RateNumericalRange("invalid_interval", "log requires a positive endpoint")
         if x in self.logs:
@@ -1293,36 +1364,40 @@ class _RateInformationWork(_C1IntegralWork):
             exponent += 1
         def series(value, degree):
             z = (value - 1) / (value + 1)
-            term, total = z, _Fraction(0)
+            term, total = z, self.number(0)
             if not z:
-                return RationalInterval(_Fraction(0), _Fraction(0))
+                return self.interval(self.number(0), self.number(0))
             for coefficient in self.log_coefficients[:degree]:
                 total += coefficient * term
                 term *= z * z
             remainder = 2 * term / ((2 * degree + 1) * (1 - z * z))
-            return RationalInterval(total, total + remainder)
+            return self.interval(total, total + remainder)
         epsilon = self.epsilon / (1 + abs(exponent))
-        degree = max(1, self.log_degree)
-        while _Fraction(9, 4) * _Fraction(1, 3)**(2 * degree + 1) / (2 * degree + 1) > epsilon:
+        degree = self.maximum(1, self.log_degree)
+        while self.number(9, 4) * self.number(1, 3)**(2 * degree + 1) / (2 * degree + 1) > epsilon:
             degree += 1
         self.coefficients("log", degree)
         base = series(m, degree)
         if exponent:
-            ln2 = self.logs.get(_Fraction(2))
+            ln2 = self.logs.get(self.number(2))
             if ln2 is None or ln2.upper - ln2.lower > epsilon:
-                ln2 = series(_Fraction(2), degree)
-                self.logs[_Fraction(2)] = ln2
+                ln2 = series(self.number(2), degree)
+                self.logs[self.number(2)] = ln2
             if exponent > 0:
-                base = RationalInterval(base.lower + exponent * ln2.lower, base.upper + exponent * ln2.upper)
+                base = self.interval(base.lower + exponent * ln2.lower, base.upper + exponent * ln2.upper)
             else:
-                base = RationalInterval(base.lower + exponent * ln2.upper, base.upper + exponent * ln2.lower)
+                base = self.interval(base.lower + exponent * ln2.upper, base.upper + exponent * ln2.lower)
         base = self.series_enclosure(base)
         self.logs[x] = base
         return base
 
     def exp(self, x):
+        x = self.number(x)
+        lower, upper = self.arithmetic.endpoints(x)
+        if lower != upper:
+            return self.interval(self.exp(lower).lower, self.exp(upper).upper)
         if x == 0:
-            return RationalInterval(_Fraction(1), _Fraction(1))
+            return self.interval(self.number(1), self.number(1))
         if abs(x) > self.budget.max_terms:
             raise RateNumericalRange("representation_limit", "exponential argument exceeds rational series resources")
         key = (x, self.epsilon)
@@ -1333,69 +1408,73 @@ class _RateInformationWork(_C1IntegralWork):
         while reduced > 1:
             reduced /= 2
             squares += 1
-        degree = max(1, self.exp_degree)
+        degree = self.maximum(1, self.exp_degree)
         epsilon = self.epsilon / (2**squares * 16)
-        while _Fraction(degree + 2, (degree + 1) * factorial(degree + 1)) > epsilon:
+        while self.number(degree + 2, (degree + 1) * factorial(degree + 1)) > epsilon:
             degree += 1
         self.coefficients("exp", degree)
-        total = power = _Fraction(1)
+        total = power = self.number(1)
         for n in range(1, degree + 1):
             power *= reduced
             total += power * self.exp_coefficients[n]
         term = power * self.exp_coefficients[degree]
         remainder = term * reduced / (degree + 1) / (1 - reduced / (degree + 2))
-        value = self.series_enclosure(RationalInterval(total, total + remainder))
+        value = self.series_enclosure(self.interval(total, total + remainder))
         for _ in range(squares):
-            value = self.series_enclosure(RationalInterval(value.lower**2, value.upper**2))
+            value = self.series_enclosure(self.interval(value.lower**2, value.upper**2))
         if x < 0:
-            value = self.series_enclosure(RationalInterval(1 / value.upper, 1 / value.lower), positive=True)
+            value = self.series_enclosure(self.interval(1 / value.upper, 1 / value.lower), positive=True)
         self.exponentials[key] = value
         return value
 
     def phi(self, x):
+        x = self.number(x)
+        lower, upper = self.arithmetic.endpoints(x)
+        if lower != upper:
+            return self.phi_interval(self.interval(lower, upper))
         if x == 0:
-            return RationalInterval(_Fraction(0), _Fraction(0))
+            return self.interval(self.number(0), self.number(0))
         value = self.log(x)
-        return RationalInterval(-x * value.upper, -x * value.lower)
+        return self.interval(-x * value.upper, -x * value.lower)
 
     def phi_interval(self, interval):
         """Continuous envelope at zero; never take log(0) or divide by zero."""
-        a, b = max(_Fraction(0), interval.lower), min(_Fraction(1), interval.upper)
+        a, b = self.maximum(self.number(0), interval.lower), self.minimum(self.number(1), interval.upper)
         if not b:
-            return RationalInterval(_Fraction(0), _Fraction(0))
+            return self.interval(self.number(0), self.number(0))
         left, right = self.phi(a), self.phi(b)
-        peak = self.exp(_Fraction(-1))
+        peak = self.exp(self.number(-1))
         upper = right.upper if b <= peak.lower else left.upper if a >= peak.upper else peak.upper
-        return RationalInterval(max(_Fraction(0), min(left.lower, right.lower)), upper)
+        return self.interval(self.maximum(self.number(0), self.minimum(left.lower, right.lower)), upper)
 
     def add(self, a, b):
-        return self.series_enclosure(RationalInterval(a.lower + b.lower, a.upper + b.upper))
+        return self.series_enclosure(self.interval(a.lower + b.lower, a.upper + b.upper))
 
     def scale(self, a, b):
-        return self.series_enclosure(RationalInterval(min(a.lower * b, a.upper * b),
-                                                      max(a.lower * b, a.upper * b)))
+        return self.series_enclosure(self.interval(self.minimum(a.lower * b, a.upper * b),
+                                                      self.maximum(a.lower * b, a.upper * b)))
 
     def multiply(self, a, b):
         products = (a.lower * b.lower, a.lower * b.upper, a.upper * b.lower, a.upper * b.upper)
-        return self.series_enclosure(RationalInterval(min(products), max(products)))
+        return self.series_enclosure(self.interval(self.minimum(products), self.maximum(products)))
 
     def divide(self, a, b):
         if b.lower <= 0:
             raise RateNumericalRange("invalid_interval", "positive divisor required")
-        return self.multiply(a, RationalInterval(1 / b.upper, 1 / b.lower))
+        return self.multiply(a, self.interval(1 / b.upper, 1 / b.lower))
 
     def power(self, a, n):
         if n % 2:
-            return self.series_enclosure(RationalInterval(a.lower**n, a.upper**n), positive=a.lower > 0)
-        return self.series_enclosure(RationalInterval(_Fraction(0) if a.lower <= 0 <= a.upper else
-                                                      min(a.lower**n, a.upper**n), max(a.lower**n, a.upper**n)),
+            return self.series_enclosure(self.interval(a.lower**n, a.upper**n), positive=a.lower > 0)
+        return self.series_enclosure(self.interval(self.number(0) if a.lower <= 0 <= a.upper else
+                                                      self.minimum(a.lower**n, a.upper**n), self.maximum(a.lower**n, a.upper**n)),
                                          positive=a.lower > 0)
 
 
 def _entropy(work, probabilities):
     bounds = tuple(work.phi(p) for p in probabilities)
-    return RationalInterval(sum((b.lower for b in bounds), _Fraction(0)),
-                            sum((b.upper for b in bounds), _Fraction(0)))
+    return work.interval(sum((b.lower for b in bounds), work.number(0)),
+                            sum((b.upper for b in bounds), work.number(0)))
 
 
 def _rate_policy(work, values, gamma):
@@ -1407,35 +1486,38 @@ def _rate_policy(work, values, gamma):
         raise RateNoAdmissibleCandidate("all_forbidden", "all J are certified positive infinity")
     if any(v.status not in ("finite", "positive_infinity") for v in values):
         raise RateInputError("shape", "unknown quantity status")
-    zero = RationalInterval(_Fraction(0), _Fraction(0))
+    gamma = work.number(gamma)
+    bounds = tuple(None if v.bounds is None else work.interval(work.number(v.bounds.lower),
+                                                               work.number(v.bounds.upper)) for v in values)
+    zero = work.interval(work.number(0), work.number(0))
     result = [zero] * len(values)
-    equal = gamma == 0 or all(values[i].bounds.lower == values[i].bounds.upper == values[finite[0]].bounds.lower
+    equal = gamma == 0 or all(bounds[i].lower == bounds[i].upper == bounds[finite[0]].lower
                               for i in finite)
     for i in finite:
         if equal or len(finite) == 1:
-            result[i] = RationalInterval(_Fraction(1, len(finite)), _Fraction(1, len(finite)))
+            result[i] = work.interval(work.number(1, len(finite)), work.number(1, len(finite)))
             continue
-        lower_sum = upper_sum = _Fraction(1)
+        lower_sum = upper_sum = work.number(1)
         for j in finite:
             if j == i:
                 continue
-            lower_sum += work.exp(gamma * (values[i].bounds.lower - values[j].bounds.upper)).lower
-            upper_sum += work.exp(gamma * (values[i].bounds.upper - values[j].bounds.lower)).upper
-        result[i] = RationalInterval(1 / upper_sum, 1 / lower_sum)
+            lower_sum += work.exp(gamma * (bounds[i].lower - bounds[j].upper)).lower
+            upper_sum += work.exp(gamma * (bounds[i].upper - bounds[j].lower)).upper
+        result[i] = work.interval(1 / upper_sum, 1 / lower_sum)
     if len(result) == 2:
         # With two candidates the complement is an exact identity, including
         # the elementary-series enclosure width of the first probability.
-        result[1] = RationalInterval(1 - result[0].upper, 1 - result[0].lower)
+        result[1] = work.interval(1 - result[0].upper, 1 - result[0].lower)
     cumulative = [zero]
     for i in range(1, len(result)):
-        lower = max(sum(v.lower for v in result[:i]), 1 - sum(v.upper for v in result[i:]))
-        upper = min(sum(v.upper for v in result[:i]), 1 - sum(v.lower for v in result[i:]))
-        cumulative.append(RationalInterval(max(_Fraction(0), lower), min(_Fraction(1), upper)))
-    cumulative.append(RationalInterval(_Fraction(1), _Fraction(1)))
+        lower = work.maximum(sum(v.lower for v in result[:i]), 1 - sum(v.upper for v in result[i:]))
+        upper = work.minimum(sum(v.upper for v in result[:i]), 1 - sum(v.lower for v in result[i:]))
+        cumulative.append(work.interval(work.maximum(work.number(0), lower), work.minimum(work.number(1), upper)))
+    cumulative.append(work.interval(work.number(1), work.number(1)))
     return tuple(result), tuple(cumulative)
 
 
-def _evaluate_rate(view, candidates, resolved, budget, *, require_width=True):
+def _evaluate_rate(view, candidates, resolved, budget, *, require_width=True, _arithmetic=None):
     from .rate_entry import certify_rate_scope, _rate_evaluation_inputs, rate_history, _fixed_events
     scope = certify_rate_scope(view, candidates, resolved, budget=budget)
     errors = {"incomplete": RateIncomplete, "missing_spec": RateSpecificationMissing,
@@ -1464,7 +1546,7 @@ def _evaluate_rate(view, candidates, resolved, budget, *, require_width=True):
                         ("_model", view.model), ("_windows", tuple(_freeze(w) for w in windows)),
                         ("_measurements", ()), ("_time", horizon), ("_problem", history.evidence_key)):
         object.__setattr__(belief, name, value)
-    engine = _C1Information(view, choices, resolved, belief, cfg, gamma, budget)
+    engine = _C1Information(view, choices, resolved, belief, cfg, gamma, budget, arithmetic=_arithmetic)
     evaluation = engine.evaluation()
     # A public selection tests its exact u against this initial enclosure and
     # refines only while unresolved. Standalone mathematical queries and later
@@ -1486,10 +1568,12 @@ class _C1Information:
     Cells tighten the same integral for the standalone probability enclosure
     and, when necessary, for the selector's exact cumulative inequality.
     """
-    def __init__(self, view, choices, resolved, belief, cfg, gamma, budget):
+    def __init__(self, view, choices, resolved, belief, cfg, gamma, budget, *, arithmetic=None):
         self.view, self.choices, self.resolved = view, choices, resolved
         self.belief, self.cfg, self.gamma, self.budget = belief, cfg, gamma, budget
-        self.work = _RateInformationWork(budget)
+        self.work = _RateInformationWork(budget, arithmetic=arithmetic)
+        self.number, self.interval = self.work.number, self.work.interval
+        self.minimum, self.maximum = self.work.minimum, self.work.maximum
         self.work.trace = [dict(step) for step in belief.evidence.certificate.trace]
         self.work.terms = sum(step["terms"] or 0 for step in self.work.trace if step["operation"] == "series")
         duration = cfg["_duration"]
@@ -1516,19 +1600,25 @@ class _C1Information:
         if self.z <= 0:
             raise RateModelFalsified("zero_evidence", "analytic root mass is zero")
         self.probabilities = tuple(tuple(m / self.z for m in row) for row in masses)
+        self.beta = self.number(self.beta)
+        self.numeric_derivatives = tuple(tuple(tuple((k, self.number(d), self.number(v)) for k, d, v in kernel)
+                                               for kernel in row) for row in self.derivatives)
+        self.numeric_entropy_kernels = tuple(row[0] for row in self.numeric_derivatives[:-1])
+        self.z = self.number(self.z)
+        self.probabilities = tuple(tuple(self.number(p) for p in row) for row in self.probabilities)
         pc = tuple(sum(row) for row in self.probabilities)
         ps = tuple(sum(row[s] for row in self.probabilities) for s in range(2))
         self.hc = _entropy(self.work, pc)
         joint, state = _entropy(self.work, (p for row in self.probabilities for p in row)), _entropy(self.work, ps)
-        h_conditional = RationalInterval(max(_Fraction(0), joint.lower - state.upper), joint.upper - state.lower)
-        ln2 = self.work.log(_Fraction(2))
-        self.hp = RationalInterval(ln2.lower - _Fraction(1, 2), ln2.upper - _Fraction(1, 2))
+        h_conditional = self.interval(self.maximum(self.number(0), joint.lower - state.upper), joint.upper - state.lower)
+        ln2 = self.work.log(self.number(2))
+        self.hp = self.interval(ln2.lower - self.number(1, 2), ln2.upper - self.number(1, 2))
         self.base_series = sum(v.upper - v.lower for v in (self.hp, self.hc, joint, state))
-        self.conditional = RationalInterval(_Fraction(0), self.z * h_conditional.upper)
-        self.cutoff = _Fraction(8) / self.beta
-        exponential = self.work.exp(-self.beta * self.cutoff)
-        self.tail = RationalInterval(9 * exponential.lower, 9 * exponential.upper)
-        self.log_k = self.work.log(_Fraction(len(cfg["_read"]["alphabet"]["values"])))
+        self.conditional = self.interval(self.number(0), self.z * h_conditional.upper)
+        self.cutoff = _Fraction(8) / _Fraction(*cfg["_rate"]["prior"]["params"]["rate"])
+        exponential = self.work.exp(-self.beta * self.number(self.cutoff))
+        self.tail = self.interval(9 * exponential.lower, 9 * exponential.upper)
+        self.log_k = self.work.log(self.number(len(cfg["_read"]["alphabet"]["values"])))
         self.cells, self.refinements, self.next_box = {}, 0, 1
         _trace(self.work.trace, "analytic", dimension="joint-masses-and-probe-entropy")
         _trace(self.work.trace, "tail", dimension="conditional-entropy", cutoff=_pair(self.cutoff))
@@ -1537,11 +1627,11 @@ class _C1Information:
         self.key = _c1_key(belief._problem, "evaluation", (choices, resolved.H_ns, gamma))
 
     def evaluation(self):
-        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),
+        information = self.interval(self.maximum(self.number(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),
                                        self.hp.upper + self.hc.upper - self.conditional.lower / self.z)
-        zero = RationalInterval(_Fraction(0), _Fraction(0))
+        zero = self.interval(self.number(0), self.number(0))
         infos = tuple(information if c == self.read_choice else zero for c in self.choices)
-        js = tuple(RationalInterval(-v.upper, -v.lower) for v in infos)
+        js = tuple(self.interval(-v.upper, -v.lower) for v in infos)
         temporary = tuple(CertifiedQuantity("finite", j, "signed" if j.lower < 0 else "zero", None, None, None) for j in js)
         qs, cumulative = _rate_policy(self.work, temporary, self.gamma)
         trace = [dict(step) for step in self.work.trace]
@@ -1550,33 +1640,33 @@ class _C1Information:
         for c, i, q in zip(self.choices, infos, qs):
             for quantity, sources in (("information", (("information", i.upper - i.lower),
                    ("series", self.base_series + sum(v[3] for v in self.cells.values()) / self.z
-                    if c == self.read_choice else _Fraction(0)),
-                   ("tail", self.tail.upper * self.log_k.upper / self.z if c == self.read_choice else _Fraction(0)),
+                    if c == self.read_choice else self.number(0)),
+                   ("tail", self.tail.upper * self.log_k.upper / self.z if c == self.read_choice else self.number(0)),
                    ("quadrature", sum(v[4] for v in self.cells.values()) / self.z
-                    if c == self.read_choice else _Fraction(0)), ("conditioning", _Fraction(0)))),
+                    if c == self.read_choice else self.number(0)), ("conditioning", self.number(0)))),
                    ("q_star", (("information", q.upper - q.lower),
-                               ("series", min(q.upper - q.lower, 2 * len(self.choices) * self.work.epsilon))))):
-                for source, value in (*sources, ("rounding", _Fraction(0))):
-                    residuals.append({"quantity": quantity, "candidate": c, "source": source, "upper": _pair(value)})
-        enclosures = {"gamma": _pair(self.gamma), "evidence": _pair(self.z),
-                      "joint_count_state": [[_pair(v) for v in row] for row in self.probabilities],
-                      "probe_conditional_entropy": [1, 2], "count_conditional_integral": _interval_json(self.conditional),
-                      "prior_tail": _interval_json(self.tail), "entropy_tail_upper": _pair(self.tail.upper * self.log_k.upper),
+                               ("series", self.minimum(q.upper - q.lower, 2 * len(self.choices) * self.work.epsilon))))):
+                for source, value in (*sources, ("rounding", self.number(0))):
+                    residuals.append({"quantity": quantity, "candidate": c, "source": source, "upper": self.work.pair(value)})
+        enclosures = {"gamma": _pair(self.gamma), "evidence": self.work.pair(self.z),
+                      "joint_count_state": [[self.work.pair(v) for v in row] for row in self.probabilities],
+                      "probe_conditional_entropy": [1, 2], "count_conditional_integral": _interval_json(self.work.public(self.conditional)),
+                      "prior_tail": _interval_json(self.work.public(self.tail)), "entropy_tail_upper": self.work.pair(self.tail.upper * self.log_k.upper),
                       "rate_cells": [{"id": key, "lower": _pair(v[0]), "upper": _pair(v[1]),
-                                      "conditional_integral": _interval_json(v[2]),
-                                      "series_upper": _pair(v[3]), "quadrature_upper": _pair(v[4])}
+                                      "conditional_integral": _interval_json(self.work.public(v[2])),
+                                      "series_upper": self.work.pair(v[3]), "quadrature_upper": self.work.pair(v[4])}
                                      for key, v in sorted(self.cells.items())],
-                      "information": [_interval_json(v) for v in infos], "J": [_interval_json(v) for v in js],
-                      "q_star": [_interval_json(v) for v in qs], "cumulative": [_interval_json(v) for v in cumulative]}
+                      "information": [_interval_json(self.work.public(v)) for v in infos], "J": [_interval_json(self.work.public(v)) for v in js],
+                      "q_star": [_interval_json(self.work.public(v)) for v in qs], "cumulative": [_interval_json(self.work.public(v)) for v in cumulative]}
         cert = Certificate(self.key, _ContractRef("sui.s4b.rate_c1", "1"), _ContractRef("rational-series", "1"),
                            self.budget, tuple(trace), enclosures, tuple(residuals))
         def quantity(v, signed=False):
             support = "zero" if v.upper == v.lower == 0 else "signed" if signed else "positive" if v.lower > 0 else "unproved"
-            return CertifiedQuantity("finite", v, support, None, None, cert)
+            return CertifiedQuantity("finite", self.work.public(v), support, None, None, cert)
         costs = tuple(quantity(zero) for _ in self.choices)
         objective = tuple(quantity(v, True) for v in js)
         return RateEvaluation(self.choices, costs, tuple(quantity(v) for v in infos), objective, objective,
-                              tuple(quantity(v) for v in qs), cumulative, cert, (self.view, self.choices, self.resolved))
+                              tuple(quantity(v) for v in qs), tuple(self.work.public(v) for v in cumulative), cert, (self.view, self.choices, self.resolved))
 
     def refine(self):
         if self.refinements >= self.budget.max_refinements:
@@ -1587,14 +1677,14 @@ class _C1Information:
             self.work.epsilon /= 2
             self.work.logs.clear()
             self.hc = _entropy(self.work, (sum(row) for row in self.probabilities))
-            ln2 = self.work.log(_Fraction(2))
-            self.hp = RationalInterval(ln2.lower - _Fraction(1, 2), ln2.upper - _Fraction(1, 2))
+            ln2 = self.work.log(self.number(2))
+            self.hp = self.interval(ln2.lower - self.number(1, 2), ln2.upper - self.number(1, 2))
             self.base_series = self.hp.upper - self.hp.lower + self.hc.upper - self.hc.lower
-            self.log_k = self.work.log(_Fraction(len(self.cfg["_read"]["alphabet"]["values"])))
-            exponential = self.work.exp(-self.beta * self.cutoff)
-            self.tail = RationalInterval((1 + self.beta * self.cutoff) * exponential.lower,
-                                         (1 + self.beta * self.cutoff) * exponential.upper)
-            _trace(self.work.trace, "analytic", dimension="refine-elementary-series", cutoff=_pair(self.work.epsilon))
+            self.log_k = self.work.log(self.number(len(self.cfg["_read"]["alphabet"]["values"])))
+            exponential = self.work.exp(-self.beta * self.number(self.cutoff))
+            self.tail = self.interval((1 + self.beta * self.number(self.cutoff)) * exponential.lower,
+                                         (1 + self.beta * self.number(self.cutoff)) * exponential.upper)
+            _trace(self.work.trace, "analytic", dimension="refine-elementary-series", cutoff=self.work.pair(self.work.epsilon))
             for key, value in sorted(self.cells.items()):
                 self.cells[key] = self.cell(value[0], value[1])
             self.update_integral()
@@ -1604,7 +1694,7 @@ class _C1Information:
         else:
             if len(self.cells) >= self.budget.max_cells:
                 raise RateIncomplete("budget", "information cells exceed max_cells")
-            key = min(self.cells, key=lambda k: (-(self.cells[k][2].upper - self.cells[k][2].lower), k))
+            key = min(self.cells, key=lambda k: (self.work.arithmetic.order_key(-(self.cells[k][2].upper - self.cells[k][2].lower)), k))
             cell_width = self.cells[key][2].upper - self.cells[key][2].lower
             if self.tail.upper * self.log_k.upper >= cell_width:
                 # Reveal the next dyadic prior box when the unevaluated tail
@@ -1615,9 +1705,9 @@ class _C1Information:
                 self.next_box += 1
                 self.cells[box] = self.cell(left, right)
                 self.cutoff = right
-                exponential = self.work.exp(-self.beta * right)
-                self.tail = RationalInterval((1 + self.beta * right) * exponential.lower,
-                                             (1 + self.beta * right) * exponential.upper)
+                exponential = self.work.exp(-self.beta * self.number(right))
+                self.tail = self.interval((1 + self.beta * self.number(right)) * exponential.lower,
+                                             (1 + self.beta * self.number(right)) * exponential.upper)
                 _trace(self.work.trace, "tail", dimension="conditional-entropy", cutoff=_pair(right))
             else:
                 left, right, *_ = self.cells.pop(key)
@@ -1630,59 +1720,61 @@ class _C1Information:
     def update_integral(self):
         lower = sum(v[2].lower for v in self.cells.values())
         upper = sum(v[2].upper for v in self.cells.values()) + self.tail.upper * self.log_k.upper
-        self.conditional = RationalInterval(max(self.conditional.lower, lower), min(self.conditional.upper, upper))
+        self.conditional = self.interval(self.maximum(self.conditional.lower, lower), self.minimum(self.conditional.upper, upper))
 
     def cell(self, left, right):
         work = self.work
         from math import comb, factorial
-        zero = RationalInterval(_Fraction(0), _Fraction(0))
+        zero = self.interval(self.number(0), self.number(0))
+        exact_left, exact_right = left, right
+        left, right = self.number(left), self.number(right)
         middle, radius = (left + right) / 2, (right - left) / 2
         def point(kernel, t):
-            lower = upper = _Fraction(0)
+            lower = upper = self.number(0)
             for k, d, c in kernel:
                 exponential = work.exp(-d * t)
                 coefficient = c * t**k
                 lower += coefficient * (exponential.lower if coefficient > 0 else exponential.upper)
                 upper += coefficient * (exponential.upper if coefficient > 0 else exponential.lower)
-            return work.series_enclosure(RationalInterval(lower, upper))
+            return work.series_enclosure(self.interval(lower, upper))
         def natural_range(kernel):
-            lower = upper = _Fraction(0)
+            lower = upper = self.number(0)
             for k, d, c in kernel:
                 a, b = work.exp(-d * right), work.exp(-d * left)
                 lo, hi = left**k * a.lower, right**k * b.upper
                 lower += c * (lo if c > 0 else hi)
                 upper += c * (hi if c > 0 else lo)
-            return RationalInterval(lower, upper)
+            return self.interval(lower, upper)
         ranges = []
-        for derivatives in self.derivatives:
+        for derivatives in self.numeric_derivatives:
             coefficients = tuple(point(k, middle) for k in derivatives[:8])
             final = natural_range(derivatives[8])
             row = []
             for j in range(5):
-                remainder = max(abs(final.lower), abs(final.upper)) * radius**(8 - j) / factorial(8 - j)
+                remainder = self.maximum(abs(final.lower), abs(final.upper)) * radius**(8 - j) / factorial(8 - j)
                 for k in range(j + 1, 8):
                     value = coefficients[k]
-                    remainder += max(abs(value.lower), abs(value.upper)) * radius**(k - j) / factorial(k - j)
-                row.append(RationalInterval(coefficients[j].lower - remainder, coefficients[j].upper + remainder))
+                    remainder += self.maximum(abs(value.lower), abs(value.upper)) * radius**(k - j) / factorial(k - j)
+                row.append(self.interval(coefficients[j].lower - remainder, coefficients[j].upper + remainder))
             ranges.append(tuple(row))
         # Taylor's theorem bounds whole-cell derivatives, including the
         # cancellations in overflow probabilities. At a zero we use the
         # continuous entropy envelope instead of differentiating log(0).
         if any(row[0].lower <= 0 for row in ranges[:-1]):
-            a, b = work.exp(-self.beta * left), work.exp(-self.beta * right)
-            mass = max(_Fraction(0), (1 + self.beta * left) * a.upper - (1 + self.beta * right) * b.lower)
-            values = tuple(work.phi_interval(RationalInterval(max(_Fraction(0), row[0].lower),
-                                                              min(_Fraction(1), max(_Fraction(0), row[0].upper))))
+            a, b = work.exp(-self.beta * left), work.exp(-self.beta * self.number(right))
+            mass = self.maximum(self.number(0), (1 + self.beta * left) * a.upper - (1 + self.beta * self.number(right)) * b.lower)
+            values = tuple(work.phi_interval(self.interval(self.maximum(self.number(0), row[0].lower),
+                                                              self.minimum(self.number(1), self.maximum(self.number(0), row[0].upper))))
                            for row in ranges[:-1])
-            upper = min(self.log_k.upper, max(_Fraction(0), sum(v.upper for v in values[:-2]) -
+            upper = self.minimum(self.log_k.upper, self.maximum(self.number(0), sum(v.upper for v in values[:-2]) -
                                              sum(v.lower for v in values[-2:])))
-            integral = RationalInterval(_Fraction(0), mass * upper)
-            _trace(work.trace, "analytic", dimension="zero-safe-entropy-envelope", cutoff=_pair(right))
-            return left, right, integral, _Fraction(0), integral.upper - integral.lower
+            integral = self.interval(self.number(0), mass * upper)
+            _trace(work.trace, "analytic", dimension="zero-safe-entropy-envelope", cutoff=_pair(exact_right))
+            return exact_left, exact_right, integral, self.number(0), integral.upper - integral.lower
 
         def phi_derivatives(row):
             g, d1, d2, d3, d4 = row
-            log = RationalInterval(work.log(g.lower).lower + 1, work.log(g.upper).upper + 1)
+            log = self.interval(work.log(g.lower).lower + 1, work.log(g.upper).upper + 1)
             mul, add, scale, div, power = work.multiply, work.add, work.scale, work.divide, work.power
             f0 = work.phi_interval(g)
             f1 = scale(mul(log, d1), -1)
@@ -1704,19 +1796,19 @@ class _C1Information:
             fourth = work.add(fourth, work.scale(work.multiply(ranges[-1][j], entropy_derivatives[4 - j]), comb(4, j)))
         def integrand(t):
             entropy = zero
-            for index, kernel in enumerate(self.entropy_kernels):
+            for index, kernel in enumerate(self.numeric_entropy_kernels):
                 value = point(kernel, t)
-                phi = work.phi_interval(RationalInterval(max(_Fraction(0), value.lower),
-                                                         min(_Fraction(1), max(_Fraction(0), value.upper))))
+                phi = work.phi_interval(self.interval(self.maximum(self.number(0), value.lower),
+                                                         self.minimum(self.number(1), self.maximum(self.number(0), value.upper))))
                 entropy = work.add(entropy, work.scale(phi, 1 if index < len(self.entropy_kernels) - 2 else -1))
-            return work.multiply(point(self.derivatives[-1][0], t), entropy)
+            return work.multiply(point(self.numeric_derivatives[-1][0], t), entropy)
         simpson = work.scale(work.add(work.add(integrand(left), work.scale(integrand(middle), 4)), integrand(right)),
                              (right - left) / 6)
         # One-panel Simpson remainder: width^5 / 2880 * sup |f''''|.
-        error = (right - left)**5 * max(abs(fourth.lower), abs(fourth.upper)) / 2880
-        integral = RationalInterval(max(_Fraction(0), simpson.lower - error), max(_Fraction(0), simpson.upper + error))
-        _trace(work.trace, "analytic", dimension="joint-entropy-Simpson-fourth-derivative", cutoff=_pair(right))
-        return left, right, integral, simpson.upper - simpson.lower, 2 * error
+        error = (right - left)**5 * self.maximum(abs(fourth.lower), abs(fourth.upper)) / 2880
+        integral = self.interval(self.maximum(self.number(0), simpson.lower - error), self.maximum(self.number(0), simpson.upper + error))
+        _trace(work.trace, "analytic", dimension="joint-entropy-Simpson-fourth-derivative", cutoff=_pair(exact_right))
+        return exact_left, exact_right, integral, simpson.upper - simpson.lower, 2 * error
 
 
 def _check_rate_evaluation(evaluation):
@@ -1765,8 +1857,9 @@ def _check_algebraic_evaluation(evaluation):
     work = _RateInformationWork(evaluation.certificate.budget)
     # Independently supplied enclosures may be much narrower than the display
     # tolerance. Verify their inequalities with rational series guard digits.
-    work.epsilon = min(work.epsilon, _Fraction(1, 10**40))
+    work.epsilon = work.minimum(work.epsilon, work.number(1, 10**40))
     qs, cumulative = _rate_policy(work, evaluation.J, gamma)
+    qs, cumulative = tuple(map(work.public, qs)), tuple(map(work.public, cumulative))
     for supplied, checked in zip(evaluation.q_star, qs):
         if supplied.status != "finite" or supplied.bounds is None or not 0 <= supplied.bounds.lower <= checked.lower <= checked.upper <= supplied.bounds.upper <= 1:
             raise RateIncomplete("proof_unavailable", "q enclosure fails independent algebraic check")

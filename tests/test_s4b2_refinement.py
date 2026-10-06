@@ -96,7 +96,7 @@ def test_v010_standard_budget_narrows_probability_and_agrees_with_independent_in
     for quantity, expected in ((actual.information[0], independent[n][0]),
                                (actual.q_star[0], independent[n][1])):
         assert quantity.status == "finite" and quantity.support == "positive"
-        assert quantity.bounds.lower <= expected[1] and expected[0] <= quantity.bounds.upper
+        assert quantity.bounds.lower <= expected[0] <= expected[1] <= quantity.bounds.upper
 
 
 @pytest.mark.parametrize("n", range(4))

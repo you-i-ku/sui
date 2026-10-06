@@ -235,10 +235,21 @@ def likelihood(world, *, budget=STANDARD_BUDGET):
 
 
 def assert_encloses(actual, expected, width=F(1, 10**9)):
-    """Two independently bounded computations must intersect at required width."""
-    assert actual.lower <= actual.upper
-    assert actual.lower <= expected[1] and expected[0] <= actual.upper
+    """The actual interval contains the entire independent enclosure."""
+    assert actual.lower <= expected[0] <= expected[1] <= actual.upper
     assert actual.upper-actual.lower <= width
+
+
+@pytest.mark.parametrize("side", ("lower", "upper"))
+def test_assert_encloses_rejects_overlapping_one_sided_truncation(side):
+    midpoint, error = F(3, 5), F(1, 10**9)
+    expected = (midpoint-error, midpoint+error)
+    actual = (rate.RationalInterval(midpoint, expected[1]) if side == "lower"
+              else rate.RationalInterval(expected[0], midpoint))
+    assert actual.lower <= expected[1] and expected[0] <= actual.upper
+    assert actual.upper-actual.lower <= error
+    with pytest.raises(AssertionError):
+        assert_encloses(actual, expected)
 
 
 def test_exact_fixture_all_content_and_reference_kinds():
@@ -292,12 +303,14 @@ def test_T04_zero_events_distinguish_coverage_from_unobserved_time(windows):
     assert [r.body.contract for r in world.records] == [BOOT, SOURCE]
     result = likelihood(world)
     expected = forward(events=(), windows=windows)
-    assert_encloses(result.value, expected)
     if not windows or windows[0][0] > END:
+        # With no observed arrivals or silence, total CTMC probability is
+        # exactly one. Sharpen the Taylor ruler to this analytic point value.
         assert expected[0] <= 1 <= expected[1]
-        assert_encloses(result.value, (F(1), F(1)))
+        expected = (F(1), F(1))
     else:
         assert expected[1] < 1
+    assert_encloses(result.value, expected)
 
 
 def test_T04_unknown_coverage_law_is_not_assumed_independent():

@@ -4,6 +4,9 @@ version = "0.0.0"
 requires-python = ">=3.12"
 dependencies = ["numpy==2.5.3", "scipy==1.18.1"]
 
+[project.optional-dependencies]
+fast = ["gmpy2==2.3.2"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]

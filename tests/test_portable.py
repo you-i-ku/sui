@@ -1,5 +1,6 @@
 import ast
 from dataclasses import replace
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -168,22 +169,70 @@ def test_c1_meanings_describe_content_shapes():
 def test_c2_dependencies_match_requirements_and_external_imports():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     dependencies = dict(item.split("==") for item in project["dependencies"])
+    optional = dict(item.split("==") for item in project["optional-dependencies"]["fast"])
     requirements = dict(line.strip().split("==") for line in
                         (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
                         if line.strip() and not line.lstrip().startswith("#"))
     assert {name: dependencies[name] for name in ("numpy", "scipy")} == {
         name: requirements[name] for name in ("numpy", "scipy")
     }
+    assert "gmpy2" not in dependencies
+    assert optional["gmpy2"] == requirements["gmpy2"]
     external = set()
-    for path in (ROOT / "src" / "sui").glob("*.py"):
+    for path in (ROOT / "src" / "sui").rglob("*.py"):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Import):
                 external.update(alias.name.split(".")[0] for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.level == 0:
                 external.add(node.module.split(".")[0])
     external -= sys.stdlib_module_names | {"sui"}
-    assert external == {"numpy", "scipy"}
-    assert external <= dependencies.keys()
+    assert external == {"numpy", "scipy", "gmpy2"}
+    assert external <= dependencies.keys() | optional.keys()
+
+
+def test_c2_all_source_modules_import_without_optional_gmpy2():
+    modules = sorted({
+        ".".join(path.relative_to(ROOT / "src").with_suffix("").parts)
+        .removesuffix(".__init__")
+        for path in (ROOT / "src" / "sui").rglob("*.py")
+    })
+    assert {"sui", "sui.rate"} <= set(modules)
+    script = r'''
+import importlib
+import json
+import sys
+
+sys.path.insert(0, sys.argv[1])
+modules = json.loads(sys.argv[2])
+assert not any(name == "sui" or name.startswith("sui.") for name in sys.modules)
+assert not any(name == "gmpy2" or name.startswith("gmpy2.") for name in sys.modules)
+sys.modules["gmpy2"] = None
+
+def assert_gmpy2_unavailable():
+    assert sys.modules.get("gmpy2") is None
+    assert not any(name.startswith("gmpy2.") for name in sys.modules)
+    try:
+        importlib.import_module("gmpy2")
+    except ModuleNotFoundError as error:
+        assert error.name == "gmpy2"
+    else:
+        raise AssertionError("gmpy2 was importable in the fallback process")
+
+assert_gmpy2_unavailable()
+for name in modules:
+    importlib.import_module(name)
+    assert_gmpy2_unavailable()
+print(f"Imported {len(modules)} modules without gmpy2")
+'''
+    result = subprocess.run(
+        [sys.executable, "-I", "-B", "-W", "error", "-c", script,
+         str(ROOT / "src"), json.dumps(modules)],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.splitlines()[-1:] == [
+        f"Imported {len(modules)} modules without gmpy2"
+    ]
 
 
 def test_c3_core_and_tests_do_not_depend_on_backup():
