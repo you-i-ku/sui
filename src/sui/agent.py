@@ -30,7 +30,7 @@ from .s4d_contracts import BELIEF as _S4D_BELIEF, DECISION as _S4D_DECISION
 from .s4b_contracts import (BELIEF as _S4B_BELIEF, QUANTITY_BELIEF as _QUANTITY_BELIEF,
                             DECISION as _QUANTITY_DECISION)
 from .s4b1c_contracts import BELIEF as _JOINT_BELIEF, DECISION as _JOINT_DECISION
-from .model import _joint_model, _work_timed, _is_action_model
+from .model import _joint_model, _work_timed, _is_action_model, _is_rate_model
 from .lattice import (learn as _learn, hand_table as _lattice_hand_table,
                       one_step_components as _lattice_components)
 from .preference import (PreferenceView as _PreferenceView, from_ledger as _preference_view,
@@ -88,6 +88,7 @@ class Reading:
     timing: object | None = None
     _joint_timing: object | None = None
     _action_records: tuple = ()
+    rate_records: tuple[_Record, ...] = ()
 
     def __post_init__(self) -> None:
         counts = {}
@@ -105,6 +106,7 @@ class Reading:
         object.__setattr__(self, "_event_ns", _MappingProxyType(dict(self._event_ns)))
         object.__setattr__(self, "preferences", tuple(self.preferences))
         object.__setattr__(self, "unread_preferences", tuple(self.unread_preferences))
+        object.__setattr__(self, "rate_records", tuple(self.rate_records))
         object.__setattr__(self, "_clock_issues", tuple(
             _MappingProxyType(dict(issue)) for issue in self._clock_issues))
 
@@ -124,6 +126,9 @@ def _named_content(content, key):
 
 
 def _read_jobs(model: _GenerativeModel, records: _Iterable[_Record]) -> dict[_Ref, str]:
+    if _is_rate_model(model):
+        from .rate_entry import read_jobs
+        return read_jobs(model, records)
     if _is_action_model(model):
         from .action_joint import read_jobs
         return read_jobs(model, records)
@@ -147,6 +152,9 @@ def read(model: _GenerativeModel, records: _Iterable[_Record], *,
     所要ありは測定時刻順と試みの時刻の組を事実から作る (F1〜F3・J9・J15)。
     好みは別に持ち、本文が無い時も時刻だけは軸につなぐ (C2・C2b)。
     """
+    if _is_rate_model(model):
+        from .rate_entry import read_rate
+        return read_rate(model, records, unread_preferences=unread_preferences)
     if _is_action_model(model):
         from .action_joint import read_action
         return read_action(model, records, unread_preferences=unread_preferences)
@@ -336,12 +344,15 @@ def _derive(model, n):
 
 
 def _timed(model):
-    if _is_action_model(model):
+    if _is_rate_model(model) or _is_action_model(model):
         return True
     return model.Q is not None or bool(model.arrivals) or bool(model.durations) or _work_timed(model)
 
 
 def _belief_contract(model):
+    if _is_rate_model(model):
+        from .s4b_contracts import RATE_BELIEF
+        return RATE_BELIEF
     if _is_action_model(model):
         from .s4b_action_contracts import BELIEF as action_belief
         return action_belief
@@ -442,7 +453,7 @@ def _derive_reading(model, reading):
 
 
 def _learning_changing(model):
-    if _is_action_model(model):
+    if _is_rate_model(model) or _is_action_model(model):
         return False
     return model.Q is not None and bool(model.learnable)
 
@@ -499,6 +510,9 @@ def _derive_state(model, reading):
 
 def plan_s4c(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
     """model.1〜3だけを旧の計算に渡す。contentはS4cと同じ (C5・P5)。"""
+    if _is_rate_model(view.model):
+        from .rate import RateInputError
+        raise RateInputError("shape", "plan_s4c does not accept model.9", "model")
     if view.model.duration_priors:
         raise ValueError("plan_s4c: learned durations are not supported")
     if _joint_model(view.model):
@@ -821,8 +835,16 @@ def _lattice_one_step(view, actions, pending, hand_pending, costs):
         raise ModelFalsified("the model cannot explain the facts") from exc
 
 
-def plan(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
+def plan(view: View, candidates: _Iterable[str], *, u: float, rate_budget=None) -> Draft:
     """採用した好みだけで決める。白紙は知る価値だけ、モデルのC・γは読まない (C4)。"""
+    if _is_rate_model(view.model):
+        from .rate_entry import public_evaluate, candidate_names, resolve_budget
+        return public_evaluate(view, candidate_names(view.model, candidates),
+            _resolve_preference(_current_preference(view.preferences), view), u=u,
+            budget=resolve_budget(view.model, rate_budget))
+    if rate_budget is not None:
+        from .rate import RateInputError
+        raise RateInputError("invalid_budget", "rate_budget requires model.9", "rate_budget")
     if _is_action_model(view.model):
         from .action_entry import public_evaluate, _candidates
         from .action_types import default_budget, ActionIncompatible
@@ -932,6 +954,11 @@ def _quantity_one_step(view, actions, resolved, *, u):
 
 def replay_decision(*, model: _GenerativeModel, ledger: _Ledger, decision: str) -> Draft:
     """約束とモデルの方式を確かめ、親から全欄とinputsを完全照合する (C8・P5)。"""
+    if _is_rate_model(model):
+        from .rate_entry import verify_rate_decision
+        from .rate import default_rate_budget
+        return verify_rate_decision(model=model, ledger=ledger, decision=decision,
+                                    budget=default_rate_budget())
     if _is_action_model(model):
         from .action_persistence import replay
         return replay(model=model, ledger=ledger, decision=decision)
@@ -1143,7 +1170,20 @@ class Agent:
     """
 
     def __init__(self, *, model: _GenerativeModel, lineage: str,
-                 component: str = "sui.agent") -> None:
+                 component: str = "sui.agent", rate_budget=None) -> None:
+        from .rate_entry import resolve_budget
+        self._rate_budget = resolve_budget(model, rate_budget)
+        if _is_rate_model(model):
+            from .rate_entry import derive
+            _Producer(component=component, code_version=CODE_VERSION,
+                      state=_StateRef(lineage=lineage, revision=0))
+            self._model, self._lineage, self._component = model, lineage, component
+            self._frontier, self._model_ref = frozenset(), _model_ref(model)
+            self._reading, self._preferences = read(model, ()), _PreferenceView()
+            self._fact_ancestors = _MappingProxyType({})
+            self._q, self._a, self._lattice = derive(model, self._reading, budget=self.rate_budget)
+            self._revision, self._belief = 0, None
+            return
         if _is_action_model(model):
             from .action_entry import derive
             _Producer(component=component, code_version=CODE_VERSION,
@@ -1174,6 +1214,10 @@ class Agent:
         self._belief: _Record | None = None
 
     @property
+    def rate_budget(self):
+        return self._rate_budget
+
+    @property
     def frontier(self) -> frozenset[str]:
         return self._frontier
 
@@ -1189,6 +1233,12 @@ class Agent:
     def q(self) -> _np.ndarray:
         """今の信念を読み取り専用のコピーで返す。"""
         if self._q is None:
+            if _is_rate_model(self._model):
+                from .rate import RateIncomplete, RateModelFalsified
+                if self._lattice["status"] == "unexplained":
+                    raise RateModelFalsified(self._lattice["reason"], "rate facts cannot be explained")
+                raise RateIncomplete(self._lattice["reason"] or "accuracy",
+                    "model.9 exposes certified state_marginal quantities in its belief summary")
             if _is_action_model(self._model):
                 from .action_types import ActionIncomplete, ActionModelFalsified
                 if self._lattice["status"] == "unexplained":
@@ -1203,6 +1253,9 @@ class Agent:
 
     def counts(self, action: str) -> _np.ndarray:
         """行動の数え上げを読み取り専用のコピーで返す。"""
+        if _is_rate_model(self._model):
+            from .rate import RateInputError
+            raise RateInputError("shape", "rate posterior has no single count ledger")
         if _is_action_model(self._model):
             raise ValueError("counts: action posterior has no single ledger")
         if _joint_model(self._model) or _learning_changing(self._model):
@@ -1226,7 +1279,7 @@ class Agent:
                          state=_StateRef(lineage=self._lineage, revision=revision))
 
     def _content(self, reading, q, a, *, lattice=None) -> dict:
-        if _is_action_model(self._model):
+        if _is_rate_model(self._model) or _is_action_model(self._model):
             return lattice
         content = {
             "model": self.model_ref, "states": list(self._model.states),
@@ -1288,6 +1341,9 @@ class Agent:
         """今の先端を固定する。保存qがNoneでも説明の可否は各評価入口で決める (N6)。"""
         if self._belief is None:
             raise ValueError("view: a belief record is required")
+        if _is_rate_model(self._model):
+            from .rate_entry import rate_view
+            return rate_view(self, now_ns, observed_ns, check_events)
         return View(model=self._model, frontier=self.frontier,
                     belief=self._belief.id, reading=self._reading, now_ns=now_ns,
                     observed_ns=observed_ns, preferences=self._preferences, check_events=tuple(check_events),
@@ -1295,6 +1351,9 @@ class Agent:
 
     def prepare(self, draft: Draft, *, clock: _Clock, ids: _IdSource) -> Commit:
         """両記録を作るだけ。見た親を保ち、台帳・主体を変えない (P10・K4・W12)。"""
+        if _is_rate_model(self._model):
+            from .rate_entry import prepare
+            return prepare(self, draft, clock, ids)
         if _is_action_model(self._model):
             from .action_persistence import prepare
             return prepare(self, draft, clock, ids)
@@ -1320,6 +1379,9 @@ class Agent:
 
         検査失敗は無書き込み。同じ Commit の再試行で途中から続く (P10・K4・W12)。
         """
+        if _is_rate_model(self._model):
+            from .rate_entry import commit
+            return commit(self, prepared, ledger)
         if _is_action_model(self._model):
             from .action_persistence import commit
             return commit(self, prepared, ledger)
@@ -1358,8 +1420,16 @@ class Agent:
     def decide(self, candidates: _Iterable[str], *, u: float, clock: _Clock,
                ids: _IdSource, ledger: _Ledger,
                now_mono_ns: int | None = None,
-               observed_mono_ns: int | None = None, check_events=()) -> tuple[_Record, _Record]:
+                observed_mono_ns: int | None = None, check_events=(), rate_budget=None) -> tuple[_Record, _Record]:
         """同期も新しい入口を通す。好みは取り込み済みのviewで固定 (C3・C4)。"""
+        if _is_rate_model(self._model):
+            from .rate_entry import decide
+            return decide(self, candidates, u=u, clock=clock, ids=ids, ledger=ledger,
+                now_ns=now_mono_ns, observed_ns=observed_mono_ns,
+                check_events=check_events, budget=self.rate_budget if rate_budget is None else rate_budget)
+        if rate_budget is not None:
+            from .rate import RateInputError
+            raise RateInputError("invalid_budget", "rate_budget requires model.9", "rate_budget")
         return self._decide(candidates, planner=plan, u=u, clock=clock, ids=ids, ledger=ledger,
                             now_mono_ns=now_mono_ns, observed_mono_ns=observed_mono_ns, check_events=check_events)
 
@@ -1368,6 +1438,9 @@ class Agent:
                    now_mono_ns: int | None = None,
                    observed_mono_ns: int | None = None) -> tuple[_Record, _Record]:
         """互換の入口で旧の約束とcontentを作る (C5・P5)。"""
+        if _is_rate_model(self._model):
+            from .rate import RateInputError
+            raise RateInputError("shape", "decide_s4c does not accept model.9", "model")
         if self._model.duration_priors:
             raise ValueError("plan_s4c: learned durations are not supported")
         if _joint_model(self._model):
@@ -1412,6 +1485,9 @@ class Agent:
     def adopt(self, ledger: _Ledger, *, clock: _Clock, ids: _IdSource,
               through: _Iterable[str] | None = None) -> _Record | None:
         """先端の下の事実を読み直し、葉の保存後にだけ全状態を採用する。"""
+        if _is_rate_model(self._model):
+            from .rate_entry import adopt
+            return adopt(self, ledger, clock=clock, ids=ids, through=through)
         target = ledger.heads() if through is None else ledger.maximal(through)
         for cid in target:
             if not ledger.entry(cid).is_event:
@@ -1445,8 +1521,15 @@ class Agent:
 
     @classmethod
     def restore(cls, *, model: _GenerativeModel, lineage: str, ledger: _Ledger,
-                belief: str, component: str = "sui.agent") -> "Agent":
+                belief: str, component: str = "sui.agent", rate_budget=None) -> "Agent":
         """葉の親とモデルから復元し、保存値の全キーと完全一致で照合する。"""
+        if _is_rate_model(model):
+            from .rate_entry import restore
+            return restore(cls, model=model, lineage=lineage, ledger=ledger,
+                           belief=belief, component=component, budget=rate_budget)
+        if rate_budget is not None:
+            from .rate import RateInputError
+            raise RateInputError("invalid_budget", "rate_budget requires model.9", "rate_budget")
         if _is_action_model(model):
             from .action_persistence import restore
             return restore(cls, model=model, lineage=lineage, ledger=ledger, belief=belief, component=component)

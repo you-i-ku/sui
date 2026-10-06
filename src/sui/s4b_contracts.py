@@ -30,3 +30,53 @@ DECLARATIONS += (
         failure='保証するのは級数/記録の尾/求積を正規化と条件づけまで運んだ計算の幅。丸めと選ぶ手の一致は保証しない。永久未着の候補と先読みはOutsideEvaluationType、数値範囲はNumericalRange、計算量の中断はIntegrationIncomplete',
         cancel='なし', redelivery='同じ親、好み、now_ns/observed_ns/check_events、uから再計算。γの増幅の限界に備え区間を残す'),
 )
+
+# New contracts are separately registered; the legacy declarations stay byte
+# for byte as they were. Registration is not an assertion of runtime fitness.
+RATE_REPORT = _ContractRef("sui.s4b.rate_report", "1")
+RATE_ARRIVAL = _ContractRef("sui.s4b.rate_arrival", "1")
+RATE_BELIEF = _ContractRef("sui.s4b.rate_belief", "1")
+RATE_DECISION = _ContractRef("sui.s4b.rate_decision", "1")
+RATE_JOB = _ContractRef("sui.s4b.rate_job", "1")
+RATE_REFINEMENT = _ContractRef("sui.s4b.rate_refinement", "1")
+RATE_DECLARATIONS: tuple[_Contract, ...] = (
+    _Contract(ref=RATE_REPORT,
+        meaning='Observed content={channel,experiment,window_start_ns,window_end_ns,arrival_count,outcome,completion_ns}. model.9 resolves the joint count/probe or constant-completion kernel. null is unobserved, not zero. One physical report has one source_id.',
+        unit='Clock readings integer ns; count exact nonnegative or at_least declared cap; finite-record-counting/1 likelihood is dimensionless mass',
+        state_owner='sui.membrane', persistence='Keep raw payload and attempt/clock/receipt provenance in the ledger; reconstruct from model.9 and frozen facts',
+        failure='Malformed input RateInputError; missing semantics RateSpecificationMissing; proved contradictory event/clock RateModelFalsified; unavailable computation RateIncomplete',
+        cancel='none', redelivery='Same source_id and physical content is one event; conflicting content is a contradiction'),
+    _Contract(ref=RATE_ARRIVAL,
+        meaning='Observed content={process,mark,event_ns}. Physical marked-arrival/1 inside declared exact-arrival/1 coverage; mark=null marginalizes contents and preserves the arrival event. Never convert to a count report.',
+        unit='event_ns integer run clock ns; marked-arrival-density/1 is density on ordered event times, with declared time unit raised to minus the number of arrivals',
+        state_owner='sui.membrane', persistence='Keep raw ordered event times, process, mark, source_id, clock provenance and receipt independently',
+        failure='Unknown kernels or measure stop; event contradiction is proved only; latent clocks and unsupported tied-time subspaces remain incomplete',
+        cancel='none', redelivery='Same physical source is idempotent; a new Record alone does not create another physical arrival'),
+)
+
+RATE_DECLARATIONS += (
+    _Contract(ref=RATE_BELIEF,
+        meaning='Prediction target=belief. content={model,states,status,reason,context,derivation_budget,evidence,state_marginal,parameter_moments,structure_weights,unread}. derivation_budget={tolerance,max_cells,max_terms,max_refinements} is saved even before an evidence certificate exists. Certified quantities retain their axes; uncomputed fields are null.',
+        unit='Exact rational enclosures; mass dimensionless, time raw run ns, moments in declared units',
+        state_owner='sui.agent', persistence='Derived leaf only; verify with the saved derivation budget from model bytes and parent raw records, never from summary means; restored execution retains its current budget',
+        failure='prior/complete/incomplete/unexplained/no_axis distinguish missing computation and proved contradiction',
+        cancel='none', redelivery='Canonical reconstruction from the same frozen parent evidence'),
+    _Contract(ref=RATE_DECISION,
+        meaning='Decided content={root,candidates,u,values,display,selection,intent,certificate}. True softmax is enclosed; choose only previous.upper <= u < current.lower. Root freezes model, belief, parents, facts, context and preferences.',
+        unit='Information nat; q_star and cumulative probabilities; u exact rational; clock raw run ns',
+        state_owner='sui.agent', persistence='Reexecute the saved version and trace; proof validity and canonical byte regeneration are separate checks',
+        failure='Unavailable reference/version RateReplayUnavailable; false proof/root/intent/inputs RateReplayMismatch; exhausted computation RateIncomplete',
+        cancel='none', redelivery='Same Commit keeps the same u, full command, intent and reservation'),
+    _Contract(ref=RATE_JOB,
+        meaning='JobOpened step=0 content is the full {choice,action,reservation_rule,execution,effect} of the certified decision intent.',
+        unit='Planned start in declared physical time, with causal stage and position',
+        state_owner='sui.agent', persistence='Saved after all validation and after Decided; decision refers to its Record.id',
+        failure='Command, reservation or decision mismatch rejects before saving; unverified runtime stops',
+        cancel='No invented execution or cancellation law', redelivery='Retry the same job identity and command'),
+    _Contract(ref=RATE_REFINEMENT,
+        meaning='Prediction target=decision_refinement content={decision,problem_key,values,certificate}. A derived refinement sheet; intersect only after verifying both enclosures of the same quantities.',
+        unit='Same units and targets as the original decision',
+        state_owner='sui.agent', persistence='Original decision/u/selection/command stay immutable; this leaf is not a raw observation',
+        failure='Nonintersecting or false enclosures RateReplayMismatch; unavailable replay and budget exhaustion remain distinct',
+        cancel='No automatic refinement driver', redelivery='Repeated verification does not add an observation'),
+)

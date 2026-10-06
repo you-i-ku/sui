@@ -4485,8 +4485,13 @@
    "y8",
    "d26"
   ],
-  "old": "                if requirements.needs_axis:\n                    axis = self.agent._reading.timeline",
-  "new": "                if requirements.needs_axis and (self.agent._model.Q is not None or self.agent._model.durations):\n                    axis = self.agent._reading.timeline"
+  "edits": [
+   [
+    "                if requirements.needs_axis:\n                    if _is_rate_model(self.agent._model):",
+    "                if requirements.needs_axis and (_is_rate_model(self.agent._model) or self.agent._model.Q is not None or self.agent._model.durations):\n                    if _is_rate_model(self.agent._model):"
+   ]
+  ],
+  "note": "2026-10-06 Claude: S4b-2 区切り 4 で runtime の Think に model.9 の分岐が入ったので書き直した。意図する誤り (Q も所要も無い旧モデルで軸の検査を飛ばす) は同じ"
  },
  {
   "id": "X154",
@@ -6867,6 +6872,567 @@
   ],
   "expect": [
    "atoms_direct"
+  ]
+ },
+ {
+  "id": "S4B2-M01",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        rate = beta + decay\n        x = rate * cutoff",
+    "        mean = _Fraction(shape, 1) / beta\n        point = self.negative_exp(decay * mean, epsilon)\n        value = RationalInterval(mean**degree * point.lower, mean**degree * point.upper)\n        return value, RationalInterval(_Fraction(0), _Fraction(0))\n        rate = beta + decay\n        x = rate * cutoff"
+   ]
+  ],
+  "expect": [
+   "T05_public_all_root_rationals_and_higher"
+  ],
+  "paths": [
+   "tests/test_s4b2_learning.py"
+  ]
+ },
+ {
+  "id": "S4B2-M02",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "                    contribution = _ep_product(kernel, transition[endpoint][state])",
+    "                    contribution = _ep_scale(transition[endpoint][state], _full_gamma_integral(cfg, kernel))"
+   ]
+  ],
+  "expect": [
+   "T06_public_branch_content_joint_cells_and_conditioned"
+  ],
+  "paths": [
+   "tests/test_s4b2_learning.py"
+  ]
+ },
+ {
+  "id": "S4B2-M03",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "            active = None\n        for position, label in enumerate(labels):",
+    "            active = None\n            if w[\"record\"] == cfg[\"_root\"][\"id\"]:\n                factored = {}\n                for (prefix, state, count), kernel in vector.items():\n                    total = _c1_total(v for (p, s, c), v in vector.items() if p == prefix and c == count)\n                    mass = _full_gamma_integral(cfg, total)\n                    factored[(prefix, state, count)] = _ep_scale(total, _full_gamma_integral(cfg, kernel) / mass) if mass else ()\n                vector = factored\n        for position, label in enumerate(labels):"
+   ]
+  ],
+  "expect": [
+   "T06_public_branch_content_joint_cells_and_conditioned"
+  ],
+  "paths": [
+   "tests/test_s4b2_learning.py"
+  ]
+ },
+ {
+  "id": "S4B2-M04",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        p = tuple({i: value / omega + (1 if i == j else 0) for i, value in column.items()\n                   if value / omega + (1 if i == j else 0)} for j, column in enumerate(columns))",
+    "        p = tuple({i: value / omega + (1 if i == j else 0) for i, value in column.items()\n                   if value / omega + (1 if i == j else 0)} for j, column in enumerate(columns))\n        p = tuple({i: value / sum(column.values()) for i, value in column.items()} if sum(column.values()) else {j: _Fraction(1)} for j, column in enumerate(p))"
+   ]
+  ],
+  "expect": [
+   "T02_fixed_mmpp_column_likelihood_keeps_survival"
+  ],
+  "paths": [
+   "tests/test_s4b2_rate.py"
+  ]
+ },
+ {
+  "id": "S4B2-M05",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        vector, series_error, tail_error, omega, terms = work.propagate(columns, vector, right - left)",
+    "        vector, series_error, tail_error, omega, terms = work.propagate(columns, vector, _Fraction(0) if active_exact and right == horizon and left >= max((t for t, _, _ in arrivals), default=_Fraction(0)) else right - left)"
+   ]
+  ],
+  "expect": [
+   "T02_fixed_mmpp_column_likelihood_keeps_survival"
+  ],
+  "paths": [
+   "tests/test_s4b2_rate.py"
+  ]
+ },
+ {
+  "id": "S4B2-M06",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        active_exact = [w for w in windows if w[\"kind\"] == \"exact\" and w[\"start\"] <= left < w[\"end\"]]",
+    "        active_exact = [{\"process\": pid} for pid in rates]"
+   ]
+  ],
+  "expect": [
+   "T04_zero_events_distinguish_coverage_from_unobserved"
+  ],
+  "paths": [
+   "tests/test_s4b2_rate.py"
+  ]
+ },
+ {
+  "id": "S4B2-M07",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "            diagonal = q[s][s] - sum(rates[w[\"process\"]][mode][s] for w in active_exact)",
+    "            diagonal = q[s][s]"
+   ]
+  ],
+  "expect": [
+   "T04_zero_events_distinguish_coverage_from_unobserved"
+  ],
+  "paths": [
+   "tests/test_s4b2_rate.py"
+  ]
+ },
+ {
+  "id": "S4B2-M10",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "    return tuple(branches)",
+    "    from dataclasses import replace as _replace\n    if counted:\n        branches = [b for b in branches if b.report[\"arrival_count\"][\"kind\"] != \"at_least\"]\n        lo = sum(b.probability.bounds.lower for b in branches)\n        hi = sum(b.probability.bounds.upper for b in branches)\n        branches = [_replace(b, probability=_replace(b.probability, bounds=RationalInterval(b.probability.bounds.lower / hi, b.probability.bounds.upper / lo))) for b in branches]\n    return tuple(branches)"
+   ]
+  ],
+  "expect": [
+   "T06_public_branch_content_joint_cells_and_conditioned"
+  ],
+  "paths": [
+   "tests/test_s4b2_learning.py"
+  ]
+ },
+ {
+  "id": "S4B2-M11",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)",
+    "        information = self.hp"
+   ]
+  ],
+  "expect": [
+   "T08_M11_dropping_arrivals_changes_same_u_to"
+  ],
+  "paths": [
+   "tests/test_s4b2_selection.py"
+  ]
+ },
+ {
+  "id": "S4B2-M12",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        self.entropy_kernels = tuple(k for row in self.kernels for k in row) + state_kernels",
+    "        self.entropy_kernels = tuple(_c1_total(row) for row in self.kernels) + (_c1_total(state_kernels), ((0, _Fraction(0), _Fraction(1)),))"
+   ],
+   [
+    "        h_conditional = RationalInterval(max(_Fraction(0), joint.lower - state.upper), joint.upper - state.lower)",
+    "        h_conditional = RationalInterval(max(_Fraction(0), joint.lower - state.upper), joint.upper - state.lower)\n        self.state_information = RationalInterval(self.hc.lower - h_conditional.upper, self.hc.upper - h_conditional.lower)"
+   ],
+   [
+    "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)",
+    "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower + self.state_information.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper + self.state_information.upper - self.conditional.lower / self.z)"
+   ]
+  ],
+  "expect": [
+   "T07_T08_public_C1_joint_information_selects_without",
+   "v010_standard_budget_narrows_probability_and_agrees_with_independent"
+  ],
+  "paths": [
+   "tests/test_s4b2_selection.py",
+   "tests/test_s4b2_refinement.py"
+  ]
+ },
+ {
+  "id": "S4B2-M13",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)",
+    "        label_entropy = self.work.log(_Fraction(max(1, len(self.cells))))\n        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z) + label_entropy.lower,\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z + label_entropy.upper)"
+   ]
+  ],
+  "expect": [
+   "T07_T08_public_C1_joint_information_selects_without"
+  ],
+  "paths": [
+   "tests/test_s4b2_selection.py"
+  ]
+ },
+ {
+  "id": "S4B2-M14",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "    _check_rate_evaluation(evaluation)\n    while True:",
+    "    _check_rate_evaluation(evaluation)\n    from dataclasses import replace as _replace\n    midpoint_values = tuple(CertifiedQuantity(v.status, RationalInterval((v.bounds.lower+v.bounds.upper)/2, (v.bounds.lower+v.bounds.upper)/2) if v.status == \"finite\" else None, v.support, v.log_bounds, v.reason, v.certificate) for v in evaluation.J)\n    gamma = _Fraction(*evaluation.certificate.enclosures.get(\"gamma\", [1, 1])) if isinstance(evaluation.certificate.enclosures, _Mapping) else _Fraction(1)\n    _, midpoint_cumulative = _rate_policy(_RateInformationWork(evaluation.certificate.budget), midpoint_values, gamma)\n    evaluation = _replace(evaluation, cumulative=midpoint_cumulative)\n    while True:"
+   ]
+  ],
+  "expect": [
+   "T09_M17_straddling_boundary_never_falls_through_to"
+  ],
+  "paths": [
+   "tests/test_s4b2_selection.py"
+  ]
+ },
+ {
+  "id": "S4B2-M15",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        if engine is None:\n            raise RateIncomplete(\"selection_boundary\", \"cumulative boundary is not certified\")",
+    "        if engine is None:\n            return _certify_computed_choice(evaluation, None, u=_Fraction(0))"
+   ]
+  ],
+  "expect": [
+   "T09_M17_straddling_boundary_never_falls_through_to"
+  ],
+  "paths": [
+   "tests/test_s4b2_selection.py"
+  ]
+ },
+ {
+  "id": "S4B2-M16",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "            if previous.upper <= u < current.lower:",
+    "            if previous.upper <= u <= current.lower:"
+   ]
+  ],
+  "expect": [
+   "T09_M15_M16_M26_exact_boundary_and_sub_float"
+  ],
+  "paths": [
+   "tests/test_s4b2_selection.py"
+  ]
+ },
+ {
+  "id": "S4B2-M17",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        if engine is None:\n            raise RateIncomplete(\"selection_boundary\", \"cumulative boundary is not certified\")",
+    "        if engine is None:\n            index = len(evaluation.candidates) - 1\n            return CertifiedChoice(index, evaluation.candidates[index], u, evaluation.cumulative[index], evaluation.cumulative[index+1], evaluation.certificate)"
+   ]
+  ],
+  "expect": [
+   "T09_M17_straddling_boundary_never_falls_through_to"
+  ],
+  "paths": [
+   "tests/test_s4b2_selection.py"
+  ]
+ },
+ {
+  "id": "S4B2-M18",
+  "file": "src/sui/rate_entry.py",
+  "edits": [
+   [
+    "        snapshot = ledger.snapshot(parents)",
+    "        snapshot = ledger.snapshot(ledger.heads())"
+   ]
+  ],
+  "expect": [
+   "T12_M18_later_report_changes_posterior_but_not_saved"
+  ],
+  "paths": [
+   "tests/test_s4b2_integration.py"
+  ]
+ },
+ {
+  "id": "S4B2-M19",
+  "file": "src/sui/rate_entry.py",
+  "edits": [
+   [
+    "    expected = rebuilt.content.as_json()",
+    "    expected = rebuilt.content.as_json()\n    if (data[\"root\"] == expected[\"root\"] and data[\"candidates\"] == expected[\"candidates\"] and data[\"intent\"] == expected[\"intent\"] and data[\"certificate\"][\"trace\"] == expected[\"certificate\"][\"trace\"]):\n        overlaps = all(max(_Fraction(*a[name][\"bounds\"][\"lower\"]), _Fraction(*b[name][\"bounds\"][\"lower\"])) <= min(_Fraction(*a[name][\"bounds\"][\"upper\"]), _Fraction(*b[name][\"bounds\"][\"upper\"])) for a,b in zip(data[\"values\"], expected[\"values\"]) for name in (\"expected_cost\", \"information\", \"G\", \"J\", \"q_star\"))\n        if overlaps:\n            for key in (\"values\", \"certificate\", \"selection\"): expected[key] = data[key]\n            rebuilt = _replace(rebuilt, content=Payload.json(expected))"
+   ]
+  ],
+  "expect": [
+   "T12_M19_M20_replay_rejects_one_changed_claim_with"
+  ],
+  "paths": [
+   "tests/test_s4b2_integration.py"
+  ]
+ },
+ {
+  "id": "S4B2-M20",
+  "file": "src/sui/rate_entry.py",
+  "edits": [
+   [
+    "    expected = rebuilt.content.as_json()",
+    "    expected = rebuilt.content.as_json()\n    expected[\"candidates\"] = data[\"candidates\"]\n    expected[\"intent\"] = data[\"intent\"]\n    rebuilt = _replace(rebuilt, content=Payload.json(expected))"
+   ]
+  ],
+  "expect": [
+   "T12_M19_M20_replay_rejects_one_changed_claim_with"
+  ],
+  "paths": [
+   "tests/test_s4b2_integration.py"
+  ]
+ },
+ {
+  "id": "S4B2-M21",
+  "file": "src/sui/rate_entry.py",
+  "edits": [
+   [
+    "    raw = tuple(sorted((r for r in by_id.values() if r.category in (Category.FACT, Category.INTENTION, Category.PREFERENCE)),",
+    "    raw = tuple(sorted((r for r in by_id.values() if r.category in (Category.FACT, Category.INTENTION, Category.PREFERENCE) or isinstance(r.body, Prediction) and r.body.target == \"decision_refinement\"),"
+   ]
+  ],
+  "expect": [
+   "T15_M21_valid_narrower_refinement_is_derived_and_keeps_original"
+  ],
+  "paths": [
+   "tests/test_s4b2_integration.py"
+  ]
+ },
+ {
+  "id": "S4B2-M22",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "    lower = sum(vector)",
+    "    lower = sum(vector)\n    if lower == 0 and any(possible): raise RateModelFalsified(\"zero_evidence\", \"lower zero interpreted as impossible\")"
+   ]
+  ],
+  "expect": [
+   "T10_M27_tiny_positive_rate_is_not_structural"
+  ],
+  "paths": [
+   "tests/test_s4b2_learning.py"
+  ]
+ },
+ {
+  "id": "S4B2-M23",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "    _check_rate_evaluation(evaluation)\n    engine = None",
+    "    from dataclasses import replace as _replace\n    keep = tuple(i for i in range(len(evaluation.candidates)) if all(getattr(evaluation, name)[i].status != \"uncertified\" for name in (\"expected_cost\", \"information\", \"G\", \"J\", \"q_star\")))\n    if len(keep) == 1 and len(keep) < len(evaluation.candidates):\n        index = keep[0]\n        one = RationalInterval(_Fraction(1), _Fraction(1))\n        zero = RationalInterval(_Fraction(0), _Fraction(0))\n        evaluation = _replace(evaluation, candidates=(evaluation.candidates[index],),\n            **{name: (getattr(evaluation, name)[index],) for name in (\"expected_cost\", \"information\", \"G\", \"J\")},\n            q_star=(_replace(evaluation.q_star[index], bounds=one),), cumulative=(zero, one))\n    _check_rate_evaluation(evaluation)\n    engine = None"
+   ]
+  ],
+  "expect": [
+   "T10_M23_any_uncertified_candidate_blocks_even_an_apparently_certain"
+  ],
+  "paths": [
+   "tests/test_s4b2_selection.py"
+  ]
+ },
+ {
+  "id": "S4B2-M26",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "            if previous.upper <= u < current.lower:",
+    "            if float(previous.upper) <= float(u) < float(current.lower):"
+   ]
+  ],
+  "expect": [
+   "T09_M15_M16_M26_exact_boundary_and_sub_float"
+  ],
+  "paths": [
+   "tests/test_s4b2_selection.py"
+  ]
+ },
+ {
+  "id": "S4B2-M27",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "    support = \"zero\" if upper == 0 else \"positive\" if lower > 0 else \"unproved\"",
+    "    support = \"zero\" if upper == 0 else \"positive\" if lower > 0 else \"unproved\"\n    if 0 < upper < budget.tolerance:\n        value = RationalInterval(_Fraction(0), _Fraction(0))\n        support = \"zero\""
+   ]
+  ],
+  "expect": [
+   "T10_M27_tiny_positive_rate_is_not_structural"
+  ],
+  "paths": [
+   "tests/test_s4b2_learning.py"
+  ]
+ },
+ {
+  "id": "S4B2-M31",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "    kernel = _ep_scale(kernel, _c1_probe_mass(cfg, measurements))\n    intervals, cert = _c1_integrate",
+    "    kernel = _ep_scale(kernel, _c1_probe_mass(cfg, measurements))\n    sources = set()\n    for record in history._records:\n        source = getattr(record.body, \"source_id\", None)\n        if source is not None:\n            key = (getattr(record.body, \"route\", None), source)\n            if key in sources: kernel = _ep_product(kernel, kernel)\n            sources.add(key)\n    intervals, cert = _c1_integrate"
+   ]
+  ],
+  "expect": [
+   "T18_M31_transport_and_shared_clock_do_not_add"
+  ],
+  "paths": [
+   "tests/test_s4b2_integration.py"
+  ]
+ },
+ {
+  "id": "S4B2-M32",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "    beta = _Fraction(*cfg[\"_rate\"][\"prior\"][\"params\"][\"rate\"])\n    denominator = denominator if denominator is not None else _c1_total(kernels)",
+    "    beta = _Fraction(*cfg[\"_rate\"][\"prior\"][\"params\"][\"rate\"]) / cfg[\"_duration\"]\n    denominator = denominator if denominator is not None else _c1_total(kernels)"
+   ]
+  ],
+  "expect": [
+   "T16_seconds_ms_push_forward_evidence_state_branches_and_rate"
+  ],
+  "paths": [
+   "tests/test_s4b2_learning.py"
+  ]
+ },
+ {
+  "id": "S4B2-M33",
+  "file": "src/sui/rate_entry.py",
+  "edits": [
+   [
+    "    if spec[\"kernel\"][\"name\"] == \"saturating-count\":\n        for key in (\"window_start_ns\", \"window_end_ns\"):",
+    "    if spec[\"kernel\"][\"name\"] == \"saturating-count\":\n        if content[\"window_start_ns\"] is None: content[\"window_start_ns\"] = 0\n        for key in (\"window_start_ns\", \"window_end_ns\"):"
+   ],
+   [
+    "        p = _load(body.content.data)\n        event_ns = p[\"completion_ns\"] if body.contract == RATE_REPORT else p[\"event_ns\"]",
+    "        p = _load(body.content.data)\n        if p.get(\"window_start_ns\", 0) is None: p[\"window_start_ns\"] = history._boot_ns\n        event_ns = p[\"completion_ns\"] if body.contract == RATE_REPORT else p[\"event_ns\"]"
+   ]
+  ],
+  "expect": [
+   "T04_M33_missing_root_time_is_not_assumed"
+  ],
+  "paths": [
+   "tests/test_s4b2_learning.py"
+  ]
+ },
+ {
+  "id": "S4B2-M36",
+  "file": "src/sui/agent.py",
+  "edits": [
+   [
+    "    if _is_rate_model(view.model):\n        from .rate_entry import public_evaluate, candidate_names, resolve_budget",
+    "    if _is_rate_model(view.model) or _is_action_model(view.model):\n        from .rate_entry import public_evaluate, candidate_names, resolve_budget"
+   ]
+  ],
+  "expect": [
+   "R07_M36_all_five_legacy_golden"
+  ],
+  "paths": [
+   "tests/test_s4b2_golden.py"
+  ]
+ },
+ {
+  "id": "S4B2-M37",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        if engine is None:\n            raise RateIncomplete(\"selection_boundary\", \"cumulative boundary is not certified\")",
+    "        if engine is None or evaluation._source is not None:\n            raise RateIncomplete(\"selection_boundary\", \"cumulative boundary is not certified\")"
+   ]
+  ],
+  "expect": [
+   "R1_public_selection_refines_ambiguous_initial"
+  ],
+  "paths": [
+   "tests/test_s4b2_review_regressions.py"
+  ],
+  "note": "2026-10-06 Claude: R1 の直し (公開の選択は初期の区間から検査し、未確定の間だけ精密化) の後、精密化の分岐を通る試験が無く生き残った。初期の区間に u=3/5・61/100 が入る場面の試験 (試験の係 sui-s4b2-test6 3 通目) で確かめる"
+ },
+ {
+  "id": "S4B2-M38",
+  "file": "src/sui/rate_entry.py",
+  "edits": [
+   [
+    "    expected = rebuilt.content.as_json()",
+    "    expected = rebuilt.content.as_json()\n    expected[\"certificate\"][\"trace\"] = data[\"certificate\"][\"trace\"]\n    rebuilt = _replace(rebuilt, content=Payload.json(expected))"
+   ]
+  ],
+  "expect": [
+   "T12_M19_M20_replay_rejects_one_changed_claim_with"
+  ],
+  "paths": [
+   "tests/test_s4b2_integration.py"
+  ]
+ },
+ {
+  "id": "S4B2-M39",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "    u = _Fraction(u)\n    if not 0 <= u < 1:",
+    "    u = _Fraction(str(u)) if isinstance(u, float) else _Fraction(u)\n    if not 0 <= u < 1:"
+   ]
+  ],
+  "expect": [
+   "T09_M26_float_is_its_exact_binary_rational_not_decimal_14_over"
+  ],
+  "paths": [
+   "tests/test_s4b2_selection.py"
+  ]
+ },
+ {
+  "id": "S4B2-M40",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "    root = cfg[\"_root\"]\n    if len(windows) > 2 or len(reports) > 2:",
+    "    root = cfg[\"_root\"]\n    if any(w[\"record\"] == root[\"id\"] and w[\"count\"] == w[\"cap\"] for w in windows):\n        raise RateIncomplete(\"history_scope\", \"root saturation is rejected\")\n    if len(windows) > 2 or len(reports) > 2:"
+   ]
+  ],
+  "expect": [
+   "T06_root_saturation_is"
+  ],
+  "paths": [
+   "tests/test_s4b2_learning.py"
+  ]
+ },
+ {
+  "id": "S4B2-M41",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "    probe_weighted_mass = _c1_probe_mass(cfg, belief._measurements, powers=component_powers)",
+    "    probe_weighted_mass = probe_mass\n    for index, exponent in enumerate(component_powers):\n        if exponent:\n            single = tuple(exponent if j == index else 0 for j in range(len(component_powers)))\n            probe_weighted_mass *= _c1_probe_mass(cfg, belief._measurements, powers=single) / probe_mass"
+   ]
+  ],
+  "expect": [
+   "T05_public_root_simplex_and_mixed",
+   "T05_public_read_child_updates_components_and_joint"
+  ],
+  "paths": [
+   "tests/test_s4b2_learning.py"
+  ]
+ },
+ {
+  "id": "S4B2-M42",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        error = (right - left)**5 * max(abs(fourth.lower), abs(fourth.upper)) / 2880",
+    "        error = (right - left) * self.log_k.upper"
+   ]
+  ],
+  "expect": [
+   "v010_standard_budget_narrows_probability_and_agrees_with_independent_small"
+  ],
+  "paths": [
+   "tests/test_s4b2_refinement.py"
+  ],
+  "note": "2026-10-06 Claude: 標準の予算の重い試験まで選ばれて 300 秒の TIMEOUT になったので、小さい予算の試験だけを選ぶ接頭辞に"
+ },
+ {
+  "id": "S4B2-M43",
+  "file": "src/sui/rate.py",
+  "edits": [
+   [
+    "        error *= norm\n        for key in source_errors: source_errors[key] *= norm",
+    "        error *= 1\n        for key in source_errors: source_errors[key] *= 1"
+   ]
+  ],
+  "expect": [
+   "T03_public_density_is_not_clipped_and_error_includes_arrival"
+  ],
+  "paths": [
+   "tests/test_s4b2_rate.py"
   ]
  }
 ]

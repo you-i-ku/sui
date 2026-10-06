@@ -22,7 +22,7 @@ from .records import AttemptStarted, Decided, Observed, Payload, Producer, Recor
 from .s1_contracts import ATTEMPT, OUTCOME
 from .s3_contracts import ABANDON, ENDED
 from .s4_contracts import BOOT as _BOOT, LISTEN as _LISTEN
-from .model import evaluation_timing, _is_action_model
+from .model import evaluation_timing, _is_action_model, _is_rate_model
 from .action_runtime import ActionDone
 from .dispatch import DispatchNotice
 
@@ -115,6 +115,7 @@ class Think:
     u: float
     now_ns: int | None = None
     observed_ns: int | None = None
+    rate_budget: object | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -199,7 +200,12 @@ class Window:
 
     def __init__(self, *, agent: Agent, ledger: Ledger, clock: Clock, ids: IdSource,
                  membrane: Producer, route: str, hand: Hand, drive: Drive,
-                 capacity: Mapping[str, int], pledges: Pledges) -> None:
+                  capacity: Mapping[str, int], pledges: Pledges) -> None:
+        if _is_rate_model(agent._model):
+            from .clock import FakeClock
+            from .rate import RateRuntimeUnverified
+            if not isinstance(clock, FakeClock):
+                raise RateRuntimeUnverified("clock_fit", "model.9 real runtime clock is unverified")
         if agent._belief is None:
             raise ValueError("Window: a belief record is required")
         if "think" not in capacity or any(type(n) is not int or n <= 0
@@ -403,6 +409,9 @@ class Window:
                 action = jobs[job.id]
                 resources = self._resources(action)
                 if all(used[name] < self.capacity[name] for name in resources):
+                    if _is_rate_model(self.agent._model):
+                        from .rate import RateRuntimeUnverified
+                        raise RateRuntimeUnverified("dispatch_fit", "model.9 external hand execution is unverified")
                     if _is_action_model(self.agent._model):
                         from .action_runtime import start
                         p.items.append(start(self, job, action))
@@ -448,11 +457,18 @@ class Window:
                 now, observed = None, None
                 requirements = evaluation_timing(self.agent._model)
                 if requirements.needs_axis:
-                    axis = self.agent._reading.timeline
-                    if (axis is None or self.clock.run not in axis.runs
-                            or p.latest_ns is None or p.latest_ns[0] != self.clock.run):
-                        raise ValueError("Think: current run boot and received time are required")
-                    now = axis.to_axis(*p.latest_ns)
+                    if _is_rate_model(self.agent._model):
+                        if p.latest_ns is None or p.latest_ns[0] != self.clock.run:
+                            from .rate import RateInputError
+                            raise RateInputError("shape", "Think requires a current run receipt")
+                        now = observed = p.latest_ns[1]
+                        axis = None
+                    else:
+                        axis = self.agent._reading.timeline
+                        if (axis is None or self.clock.run not in axis.runs
+                                or p.latest_ns is None or p.latest_ns[0] != self.clock.run):
+                            raise ValueError("Think: current run boot and received time are required")
+                        now = axis.to_axis(*p.latest_ns)
                     if _is_action_model(self.agent._model):
                         # Model.8 clock-process declarations and command thresholds
                         # use run-local raw readings, not the cross-run display axis.
@@ -464,7 +480,7 @@ class Window:
                 if requirements.needs_check_events:
                     sources = tuple(source if "fact" in source else {"unrecorded": {
                         "kind": source["unrecorded"]["kind"],
-                        "reading": (source["unrecorded"]["reading"] if _is_action_model(self.agent._model)
+                        "reading": (source["unrecorded"]["reading"] if _is_action_model(self.agent._model) or _is_rate_model(self.agent._model)
                                     else axis.to_axis(self.clock.run, source["unrecorded"]["reading"])),
                         "after": source["unrecorded"]["after"]}}
                         for source in p.latest_check_events)
@@ -472,7 +488,8 @@ class Window:
                 work = Think(work=f"think:{p.issued + 1}",
                              view=self.agent.view(now_ns=now, observed_ns=observed, **options),
                              candidates=request.candidates, u=request.u,
-                             now_ns=now, observed_ns=observed)
+                              now_ns=now, observed_ns=observed,
+                              rate_budget=self.agent.rate_budget if _is_rate_model(self.agent._model) else None)
                 p.thinking[work.work] = work
                 self._outbox.append(work)
                 p.issued += 1
@@ -492,6 +509,9 @@ def _perform(work: Think | Act, hand: Hand) -> Thought | Done | Failed:
     """係が持つのは入力と手だけ。台帳・主体・時計に触らない。"""
     if isinstance(work, Think):
         try:
+            if _is_rate_model(work.view.model):
+                return Thought(work=work.work, draft=plan(work.view, work.candidates, u=work.u,
+                                                        rate_budget=work.rate_budget))
             return Thought(work=work.work, draft=plan(work.view, work.candidates, u=work.u))
         except Exception as exc:
             return Thought(work=work.work, error=type(exc).__name__)

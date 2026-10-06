@@ -1,0 +1,625 @@
+{
+  "certificate_capabilities": [
+    {
+      "name": "sui.s4b.rate_fixed_mmpp",
+      "version": "1"
+    },
+    {
+      "name": "sui.s4b.rate_c1",
+      "version": "1"
+    }
+  ],
+  "contract": {
+    "name": "sui.s4b.rate_model",
+    "version": "1"
+  },
+  "controls": {
+    "calendar": [],
+    "choices": [
+      {
+        "action": "read",
+        "completion_process": "read-done",
+        "id": "read",
+        "observation_records": [
+          "read-report"
+        ],
+        "reservation": {
+          "kind": "immediate"
+        }
+      },
+      {
+        "action": "wait",
+        "completion_process": "wait-done",
+        "id": "wait",
+        "observation_records": [
+          "wait-report"
+        ],
+        "reservation": {
+          "kind": "immediate"
+        }
+      }
+    ]
+  },
+  "coverage": {
+    "intervals": [
+      {
+        "end": [
+          1,
+          1
+        ],
+        "record": "root-report",
+        "source": {
+          "id": "root-window",
+          "kind": "exogenous"
+        },
+        "start": [
+          0,
+          1
+        ]
+      },
+      {
+        "end": [
+          2,
+          1
+        ],
+        "record": "read-report",
+        "source": {
+          "id": "read",
+          "kind": "choice"
+        },
+        "start": [
+          1,
+          1
+        ]
+      }
+    ],
+    "policy": {
+      "name": "choice-gated-window",
+      "params": {
+        "left": "open",
+        "right": "closed"
+      },
+      "version": "1"
+    }
+  },
+  "measure": {
+    "conditioning": [],
+    "family": {
+      "name": "finite-record-counting",
+      "version": "1"
+    }
+  },
+  "order": {
+    "causal": "declared_stage_position",
+    "side": "explicit",
+    "ties": {
+      "name": "causal-ties",
+      "version": "1"
+    },
+    "time": "declared_physical_time"
+  },
+  "processes": [
+    {
+      "family": {
+        "name": "finite-ctmc",
+        "version": "1"
+      },
+      "id": "state-process",
+      "outputs": [
+        "state"
+      ],
+      "params": {
+        "initial_mode": "fixed",
+        "modes": [
+          "fixed"
+        ],
+        "off_diagonal": {
+          "fixed": [
+            [
+              {
+                "kind": "constant",
+                "value": [
+                  0,
+                  1
+                ]
+              },
+              {
+                "kind": "constant",
+                "value": [
+                  0,
+                  1
+                ]
+              }
+            ],
+            [
+              {
+                "coefficient": [
+                  1,
+                  1
+                ],
+                "kind": "scaled_variable",
+                "variable": "r"
+              },
+              {
+                "kind": "constant",
+                "value": [
+                  0,
+                  1
+                ]
+              }
+            ]
+          ]
+        }
+      },
+      "parents": [
+        "r"
+      ]
+    },
+    {
+      "family": {
+        "name": "marked-arrival",
+        "version": "1"
+      },
+      "id": "arrival-process",
+      "outputs": [
+        "arrivals"
+      ],
+      "params": {
+        "boundary": "membrane",
+        "marks": null,
+        "rates": {
+          "fixed": [
+            {
+              "coefficient": [
+                1,
+                1
+              ],
+              "kind": "scaled_variable",
+              "variable": "r"
+            },
+            {
+              "coefficient": [
+                2,
+                1
+              ],
+              "kind": "scaled_variable",
+              "variable": "r"
+            }
+          ]
+        },
+        "route": "c1",
+        "state_process": "state-process"
+      },
+      "parents": [
+        "r",
+        "state"
+      ]
+    },
+    {
+      "family": {
+        "name": "shared-probe",
+        "version": "1"
+      },
+      "id": "probe",
+      "outputs": [
+        "measurement"
+      ],
+      "params": {
+        "labels": [
+          "y0",
+          "y1"
+        ],
+        "probability_variable": "p",
+        "state_process": "state-process"
+      },
+      "parents": [
+        "p",
+        "state"
+      ]
+    },
+    {
+      "family": {
+        "name": "fixed-completion",
+        "version": "1"
+      },
+      "id": "read-done",
+      "outputs": [
+        "read-completion"
+      ],
+      "params": {
+        "action": "read",
+        "constant_notice": null,
+        "count_record": "read-report",
+        "duration": [
+          1,
+          1
+        ],
+        "effect": "identity",
+        "probe": "probe"
+      },
+      "parents": [
+        "state",
+        "arrivals",
+        "measurement"
+      ]
+    },
+    {
+      "family": {
+        "name": "fixed-completion",
+        "version": "1"
+      },
+      "id": "wait-done",
+      "outputs": [
+        "wait-completion"
+      ],
+      "params": {
+        "action": "wait",
+        "constant_notice": "done",
+        "count_record": null,
+        "duration": [
+          1,
+          1
+        ],
+        "effect": "identity",
+        "probe": null
+      },
+      "parents": [
+        "state"
+      ]
+    }
+  ],
+  "records": [
+    {
+      "alphabet": {
+        "kind": "finite",
+        "values": [
+          {
+            "arrival_count": {
+              "kind": "exact",
+              "value": 0
+            },
+            "outcome": null
+          },
+          {
+            "arrival_count": {
+              "kind": "exact",
+              "value": 1
+            },
+            "outcome": null
+          },
+          {
+            "arrival_count": {
+              "kind": "exact",
+              "value": 2
+            },
+            "outcome": null
+          },
+          {
+            "arrival_count": {
+              "kind": "at_least",
+              "value": 3
+            },
+            "outcome": null
+          }
+        ]
+      },
+      "clock": {
+        "name": "exact",
+        "params": {},
+        "version": "1"
+      },
+      "experiment": "root-window",
+      "generator": "arrival-process",
+      "id": "root-report",
+      "kernel": {
+        "name": "saturating-count",
+        "params": {
+          "arrival_process": "arrival-process",
+          "cap": 3,
+          "clock": {
+            "name": "exact",
+            "params": {},
+            "version": "1"
+          },
+          "report_at": "window_end"
+        },
+        "version": "1"
+      },
+      "probe": null
+    },
+    {
+      "alphabet": {
+        "kind": "finite",
+        "values": [
+          {
+            "arrival_count": {
+              "kind": "exact",
+              "value": 0
+            },
+            "outcome": "y0"
+          },
+          {
+            "arrival_count": {
+              "kind": "exact",
+              "value": 0
+            },
+            "outcome": "y1"
+          },
+          {
+            "arrival_count": {
+              "kind": "exact",
+              "value": 1
+            },
+            "outcome": "y0"
+          },
+          {
+            "arrival_count": {
+              "kind": "exact",
+              "value": 1
+            },
+            "outcome": "y1"
+          },
+          {
+            "arrival_count": {
+              "kind": "exact",
+              "value": 2
+            },
+            "outcome": "y0"
+          },
+          {
+            "arrival_count": {
+              "kind": "exact",
+              "value": 2
+            },
+            "outcome": "y1"
+          },
+          {
+            "arrival_count": {
+              "kind": "at_least",
+              "value": 3
+            },
+            "outcome": "y0"
+          },
+          {
+            "arrival_count": {
+              "kind": "at_least",
+              "value": 3
+            },
+            "outcome": "y1"
+          }
+        ]
+      },
+      "clock": {
+        "name": "exact",
+        "params": {},
+        "version": "1"
+      },
+      "experiment": "read",
+      "generator": "read-done",
+      "id": "read-report",
+      "kernel": {
+        "name": "saturating-count",
+        "params": {
+          "arrival_process": "arrival-process",
+          "cap": 3,
+          "clock": {
+            "name": "exact",
+            "params": {},
+            "version": "1"
+          },
+          "report_at": "window_end"
+        },
+        "version": "1"
+      },
+      "probe": "probe"
+    },
+    {
+      "alphabet": {
+        "kind": "finite",
+        "values": [
+          {
+            "arrival_count": null,
+            "outcome": null
+          }
+        ]
+      },
+      "clock": {
+        "name": "exact",
+        "params": {},
+        "version": "1"
+      },
+      "experiment": "wait",
+      "generator": "wait-done",
+      "id": "wait-report",
+      "kernel": {
+        "name": "constant-report",
+        "params": {
+          "notice": "done"
+        },
+        "version": "1"
+      },
+      "probe": null
+    }
+  ],
+  "scheme": "sui.model.9",
+  "state_space": {
+    "initial": [
+      [
+        1,
+        1
+      ],
+      [
+        0,
+        1
+      ]
+    ],
+    "states": [
+      "0",
+      "1"
+    ]
+  },
+  "targets": {
+    "laws": [
+      "r",
+      "p"
+    ],
+    "state_positions": [
+      {
+        "position": {
+          "causal_position": 0,
+          "causal_stage": 0,
+          "time": [
+            2,
+            1
+          ]
+        },
+        "record": "read-report",
+        "side": "post"
+      },
+      {
+        "position": {
+          "causal_position": 0,
+          "causal_stage": 0,
+          "time": [
+            2,
+            1
+          ]
+        },
+        "record": "wait-report",
+        "side": "post"
+      }
+    ]
+  },
+  "units": {
+    "cost": "nat",
+    "information": "nat",
+    "rate": "second^-1",
+    "record": "ns",
+    "time": {
+      "name": "second",
+      "seconds": [
+        1,
+        1
+      ]
+    }
+  },
+  "variables": [
+    {
+      "domain": {
+        "kind": "positive-real"
+      },
+      "generated_by": null,
+      "id": "r",
+      "prior": {
+        "name": "gamma",
+        "params": {
+          "rate": [
+            2,
+            1
+          ],
+          "shape": [
+            2,
+            1
+          ]
+        },
+        "version": "1"
+      },
+      "role": "law",
+      "scope": "model",
+      "unit": "second^-1"
+    },
+    {
+      "domain": {
+        "kind": "simplex",
+        "labels": [
+          "y0",
+          "y1"
+        ]
+      },
+      "generated_by": null,
+      "id": "p",
+      "prior": {
+        "name": "dirichlet",
+        "params": {
+          "alpha": [
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              1
+            ]
+          ]
+        },
+        "version": "1"
+      },
+      "role": "law",
+      "scope": "model",
+      "unit": "1"
+    },
+    {
+      "domain": {
+        "kind": "state-path",
+        "states": [
+          "0",
+          "1"
+        ]
+      },
+      "generated_by": "state-process",
+      "id": "state",
+      "prior": null,
+      "role": "auxiliary",
+      "scope": "run",
+      "unit": "1"
+    },
+    {
+      "domain": {
+        "kind": "event-stream"
+      },
+      "generated_by": "arrival-process",
+      "id": "arrivals",
+      "prior": null,
+      "role": "auxiliary",
+      "scope": "run",
+      "unit": "1"
+    },
+    {
+      "domain": {
+        "kind": "finite",
+        "labels": [
+          "y0",
+          "y1"
+        ]
+      },
+      "generated_by": "probe",
+      "id": "measurement",
+      "prior": null,
+      "role": "auxiliary",
+      "scope": "attempt",
+      "unit": "1"
+    },
+    {
+      "domain": {
+        "kind": "event"
+      },
+      "generated_by": "read-done",
+      "id": "read-completion",
+      "prior": null,
+      "role": "auxiliary",
+      "scope": "attempt",
+      "unit": "1"
+    },
+    {
+      "domain": {
+        "kind": "event"
+      },
+      "generated_by": "wait-done",
+      "id": "wait-completion",
+      "prior": null,
+      "role": "auxiliary",
+      "scope": "attempt",
+      "unit": "1"
+    }
+  ]
+}

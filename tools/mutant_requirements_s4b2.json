@@ -1,0 +1,1089 @@
+{
+ "schema": "sui.s4b2.mutant_requirements.1",
+ "spec": "specs/S4b2_変わる速さと届き方を学ぶ.md v0.15",
+ "scope": "C1区切り1〜4の本体変異。数学定規だけ・scope停止だけを未実装経路の変異合格に数えない。tests/src/仕様書は変更しない。",
+ "requirements": [
+  {
+   "id": "S4B2-M01",
+   "error": "E[exp(Qt)] を exp(E[Q]t) に置き換え、Gamma積分を事前平均の率で評価する",
+   "public_functions": [
+    "sui.rate.rebuild_rate_belief",
+    "sui.rate.state_marginal"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_C1IntegralWork.gamma_term",
+     "line": 1026,
+     "old": "        rate = beta + decay\n        x = rate * cutoff"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T05_public_all_root_rationals_and_higher_moments"
+   ],
+   "mutation_ids": [
+    "S4B2-M01"
+   ],
+   "coverage": "production_patch",
+   "limit": "C1の率積分に対する点平均置換。一般の集中極限R06の成功経路は未実装。"
+  },
+  {
+   "id": "S4B2-M02",
+   "error": "未来の区間で共有rを事前から独立に引き直す",
+   "public_functions": [
+    "sui.rate.rate_branches"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_c1_paths",
+     "line": 937,
+     "old": "                    contribution = _ep_product(kernel, transition[endpoint][state])"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T06_public_branch_content_joint_cells_and_conditioned_moments"
+   ],
+   "mutation_ids": [
+    "S4B2-M02"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M03",
+   "error": "根の状態と率の共同事後を周辺の積へ置換する",
+   "public_functions": [
+    "sui.rate.state_marginal",
+    "sui.rate.rate_branches"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_c1_paths",
+     "line": 918,
+     "old": "            active = None\n        for position, label in enumerate(labels):"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T06_public_branch_content_joint_cells_and_conditioned_moments"
+   ],
+   "mutation_ids": [
+    "S4B2-M03"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M04",
+   "error": "D0の列を再正規化して生存質量を捨てる",
+   "public_functions": [
+    "sui.rate.fixed_likelihood"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_SeriesWork.propagate",
+     "line": 483,
+     "old": "        p = tuple({i: value / omega + (1 if i == j else 0) for i, value in column.items()\n                   if value / omega + (1 if i == j else 0)} for j, column in enumerate(columns))"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_rate.py::test_T02_fixed_mmpp_column_likelihood_keeps_survival_mass"
+   ],
+   "mutation_ids": [
+    "S4B2-M04"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M05",
+   "error": "最後の観測済み無到着区間を落とす",
+   "public_functions": [
+    "sui.rate.fixed_likelihood"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "fixed_likelihood",
+     "line": 346,
+     "old": "        vector, series_error, tail_error, omega, terms = work.propagate(columns, vector, right - left)"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_rate.py::test_T02_fixed_mmpp_column_likelihood_keeps_survival_mass"
+   ],
+   "mutation_ids": [
+    "S4B2-M05"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M06",
+   "error": "未観測の隙間にもexp(-lambda*t)を掛ける",
+   "public_functions": [
+    "sui.rate.fixed_likelihood"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "fixed_likelihood",
+     "line": 317,
+     "old": "        active_exact = [w for w in windows if w[\"kind\"] == \"exact\" and w[\"start\"] <= left < w[\"end\"]]"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_rate.py::test_T04_zero_events_distinguish_coverage_from_unobserved_time"
+   ],
+   "mutation_ids": [
+    "S4B2-M06"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M07",
+   "error": "観測済み無到着の生存因子を落とす",
+   "public_functions": [
+    "sui.rate.fixed_likelihood"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "fixed_likelihood",
+     "line": 325,
+     "old": "            diagonal = q[s][s] - sum(rates[w[\"process\"]][mode][s] for w in active_exact)"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_rate.py::test_T04_zero_events_distinguish_coverage_from_unobserved_time"
+   ],
+   "mutation_ids": [
+    "S4B2-M07"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M08",
+   "error": "共有する時計を独立な二標本にする",
+   "public_functions": [],
+   "production_targets": [],
+   "must_fail_tests": [
+    "tests/test_s4b2_integration.py::test_T18_M31_transport_and_shared_clock_do_not_add_evidence"
+   ],
+   "mutation_ids": [],
+   "coverage": "not_yet_covered",
+   "reason": "C1はexact時計だけ。コピーされた時刻欄の整合検査はあるが、共有潜在時計を積分する本体はない。source_id重複除去M31をこの独立化の代用にしない。",
+   "scope_evidence": [
+    "src/sui/rate.py:759",
+    "src/sui/rate_entry.py:247"
+   ]
+  },
+  {
+   "id": "S4B2-M09",
+   "error": "Bの遷移を自然遷移の回数へ足す",
+   "public_functions": [],
+   "production_targets": [],
+   "must_fail_tests": [],
+   "mutation_ids": [],
+   "coverage": "not_yet_covered",
+   "reason": "C1は恒等作用だけで、Bと自然遷移の共同十分統計量を更新する本体は未実装。T19の実在するs4b2試験もない。",
+   "scope_evidence": [
+    "src/sui/rate.py:774",
+    "src/sui/rate_entry.py:453"
+   ]
+  },
+  {
+   "id": "S4B2-M10",
+   "error": "3以上の未来の枝を削除して残りを再正規化する",
+   "public_functions": [
+    "sui.rate.rate_branches"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "rate_branches",
+     "line": 682,
+     "old": "    return tuple(branches)"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T06_public_branch_content_joint_cells_and_conditioned_moments"
+   ],
+   "mutation_ids": [
+    "S4B2-M10"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M11",
+   "error": "到着情報を落としてpの情報だけにする",
+   "public_functions": [
+    "sui.rate.evaluate_rate"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_C1Information.evaluation",
+     "line": 1542,
+     "old": "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_selection.py::test_T08_M11_dropping_arrivals_changes_same_u_to_wait"
+   ],
+   "mutation_ids": [
+    "S4B2-M11"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M12",
+   "error": "I(r;C)+I(S2;C)を共同情報I((r,S2);C)の代わりにする",
+   "public_functions": [
+    "sui.rate.evaluate_rate"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_C1Information.__init__",
+     "line": 1508,
+     "old": "        self.entropy_kernels = tuple(k for row in self.kernels for k in row) + state_kernels"
+    },
+    {
+     "file": "src/sui/rate.py",
+     "function": "_C1Information.__init__",
+     "line": 1525,
+     "old": "        h_conditional = RationalInterval(max(_Fraction(0), joint.lower - state.upper), joint.upper - state.lower)"
+    },
+    {
+     "file": "src/sui/rate.py",
+     "function": "_C1Information.evaluation",
+     "line": 1542,
+     "old": "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_selection.py::test_T07_T08_public_C1_joint_information_selects_without_display",
+    "tests/test_s4b2_refinement.py::test_v010_standard_budget_narrows_probability_and_agrees_with_independent_integral"
+   ],
+   "mutation_ids": [
+    "S4B2-M12"
+   ],
+   "coverage": "production_patch",
+   "limit": "C1内で依存するrとS2の周辺情報の加算。pとrの相関した一般入力は未認証。"
+  },
+  {
+   "id": "S4B2-M13",
+   "error": "計算用の求積セル番号の一様なラベルエントロピーを知る価値へ足す",
+   "public_functions": [
+    "sui.rate.evaluate_rate"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_C1Information.evaluation",
+     "line": 1542,
+     "old": "        information = RationalInterval(max(_Fraction(0), self.hp.lower + self.hc.lower - self.conditional.upper / self.z),\n                                       self.hp.upper + self.hc.upper - self.conditional.lower / self.z)"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_selection.py::test_T07_T08_public_C1_joint_information_selects_without_display"
+   ],
+   "mutation_ids": [
+    "S4B2-M13"
+   ],
+   "coverage": "production_patch",
+   "limit": "C1の計算上のセルIDを対象に足す誤り。混合事前の成分IDを足す一般経路は未実装。"
+  },
+  {
+   "id": "S4B2-M14",
+   "error": "J区間の中点からsoftmaxを計算して境界を認証する",
+   "public_functions": [
+    "sui.rate.certify_choice"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_certify_computed_choice",
+     "line": 1192,
+     "old": "    _check_rate_evaluation(evaluation)\n    while True:"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_selection.py::test_T09_M17_straddling_boundary_never_falls_through_to_last"
+   ],
+   "mutation_ids": [
+    "S4B2-M14"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M15",
+   "error": "未確定の境界で保存uを捨て新しいu=0を引き直す",
+   "public_functions": [
+    "sui.rate.certify_choice"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_certify_computed_choice",
+     "line": 1207,
+     "old": "        if engine is None:\n            raise RateIncomplete(\"selection_boundary\", \"cumulative boundary is not certified\")"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_selection.py::test_T09_M17_straddling_boundary_never_falls_through_to_last"
+   ],
+   "mutation_ids": [
+    "S4B2-M15"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M16",
+   "error": "累積上端の比較u< Fをu<= Fへ変える",
+   "public_functions": [
+    "sui.rate.certify_choice"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_certify_computed_choice",
+     "line": 1196,
+     "old": "            if previous.upper <= u < current.lower:"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_selection.py::test_T09_M15_M16_M26_exact_boundary_and_sub_float_neighbours"
+   ],
+   "mutation_ids": [
+    "S4B2-M16"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M17",
+   "error": "未確定の境界で最後の候補へ丸め落とす",
+   "public_functions": [
+    "sui.rate.certify_choice"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_certify_computed_choice",
+     "line": 1207,
+     "old": "        if engine is None:\n            raise RateIncomplete(\"selection_boundary\", \"cumulative boundary is not certified\")"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_selection.py::test_T09_M17_straddling_boundary_never_falls_through_to_last"
+   ],
+   "mutation_ids": [
+    "S4B2-M17"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M18",
+   "error": "replayの保存した根へ後日の事実を混ぜる",
+   "public_functions": [
+    "sui.rate_entry.verify_rate_decision"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate_entry.py",
+     "function": "_frozen_view",
+     "line": 713,
+     "old": "        snapshot = ledger.snapshot(parents)"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_integration.py::test_T12_M18_later_report_changes_posterior_but_not_saved_replay"
+   ],
+   "mutation_ids": [
+    "S4B2-M18"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M19",
+   "error": "再実行した区間と重なれば保存された偽の区間とその証明を正しいとする",
+   "public_functions": [
+    "sui.rate_entry.verify_rate_decision"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate_entry.py",
+     "function": "_verify_body",
+     "line": 786,
+     "old": "    expected = rebuilt.content.as_json()"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_integration.py::test_T12_M19_M20_replay_rejects_one_changed_claim_with_fields"
+   ],
+   "mutation_ids": [
+    "S4B2-M19"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M20",
+   "error": "選択後に変えた候補の命令・予約・intentを検査せず信用する",
+   "public_functions": [
+    "sui.rate_entry.verify_rate_decision"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate_entry.py",
+     "function": "_verify_body",
+     "line": 786,
+     "old": "    expected = rebuilt.content.as_json()"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_integration.py::test_T12_M19_M20_replay_rejects_one_changed_claim_with_fields"
+   ],
+   "mutation_ids": [
+    "S4B2-M20"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M21",
+   "error": "decision_refinementを原記録の学習入力へ足す",
+   "public_functions": [
+    "sui.rate_entry.read_rate",
+    "sui.rate_entry.adopt"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate_entry.py",
+     "function": "read_rate",
+     "line": 35,
+     "old": "    raw = tuple(sorted((r for r in by_id.values() if r.category in (Category.FACT, Category.INTENTION, Category.PREFERENCE)),"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_integration.py::test_T15_M21_valid_narrower_refinement_is_derived_and_keeps_original_decision"
+   ],
+   "mutation_ids": [
+    "S4B2-M21"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M22",
+   "error": "証拠の下界0を構造的なZ=0と誤認し反証を返す",
+   "public_functions": [
+    "sui.rate.fixed_likelihood"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "fixed_likelihood",
+     "line": 375,
+     "old": "    lower = sum(vector)"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T10_M27_tiny_positive_rate_is_not_structural_zero"
+   ],
+   "mutation_ids": [
+    "S4B2-M22"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M23",
+   "error": "未認証候補の項を無視し確定済みの残りだけで選ぶ",
+   "public_functions": [
+    "sui.rate.certify_choice"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "certify_choice",
+     "line": 1162,
+     "old": "    _check_rate_evaluation(evaluation)\n    engine = None"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_selection.py::test_T10_M23_any_uncertified_candidate_blocks_even_an_apparently_certain_choice"
+   ],
+   "mutation_ids": [
+    "S4B2-M23"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M24",
+   "error": "exact密度の未知率の尾を事前質量だけで包む",
+   "public_functions": [],
+   "production_targets": [],
+   "must_fail_tests": [
+    "tests/test_s4b2_rate.py::test_M24_exact_density_tail_cannot_be_bounded_by_prior_mass"
+   ],
+   "mutation_ids": [],
+   "coverage": "not_yet_covered",
+   "reason": "fixed_likelihoodはtheta固定の密度を扱うが、未知Gamma到着率を積分する密度経路はない。C1積分は有限記録のmassのみ。T03の演算子増幅を落とす変異は別の要件M43とする。",
+   "scope_evidence": [
+    "src/sui/rate.py:197",
+    "src/sui/rate.py:828",
+    "src/sui/rate.py:1040"
+   ]
+  },
+  {
+   "id": "S4B2-M25",
+   "error": "隣の求積との差をSimpsonの保証つき剰余の代わりにする",
+   "public_functions": [
+    "sui.rate.evaluate_rate"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_C1Information.cell",
+     "line": 1718,
+     "old": "        error = (right - left)**5 * max(abs(fourth.lower), abs(fourth.upper)) / 2880"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_refinement.py::test_v010_standard_budget_narrows_probability_and_agrees_with_independent_integral",
+    "tests/test_s4b2_selection.py::test_T07_M25_certificate_trace_is_deterministic_and_records_rational_residuals"
+   ],
+   "mutation_ids": [
+    "S4B2-M25"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M26",
+   "error": "最近丸めしたfloat端点を外向き累積区間の比較に使う",
+   "public_functions": [
+    "sui.rate.certify_choice"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_certify_computed_choice",
+     "line": 1196,
+     "old": "            if previous.upper <= u < current.lower:"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_selection.py::test_T09_M15_M16_M26_exact_boundary_and_sub_float_neighbours"
+   ],
+   "mutation_ids": [
+    "S4B2-M26"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M27",
+   "error": "小さい正の確率を構造0に丸める",
+   "public_functions": [
+    "sui.rate.fixed_likelihood"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "fixed_likelihood",
+     "line": 388,
+     "old": "    support = \"zero\" if upper == 0 else \"positive\" if lower > 0 else \"unproved\""
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T10_M27_tiny_positive_rate_is_not_structural_zero"
+   ],
+   "mutation_ids": [
+    "S4B2-M27"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M28",
+   "error": "M0への帰着で事前相関を無視",
+   "public_functions": [],
+   "production_targets": [],
+   "must_fail_tests": [
+    "tests/test_s4b2_rate.py::test_R03_public_common_rate_matches_independent_M0_factorization"
+   ],
+   "mutation_ids": [],
+   "coverage": "not_yet_covered",
+   "reason": "既知thetaのM0定規はあるが相関した未知率の共同事前・モデル比較の計算経路がない。R03固定率成功を相関の変異の合格と数えない。T17の実在s4b2試験もない。",
+   "scope_evidence": [
+    "src/sui/rate.py:762",
+    "src/sui/rate.py:779"
+   ]
+  },
+  {
+   "id": "S4B2-M29",
+   "error": "Q=0だけで静的1bへ帰着したとする",
+   "public_functions": [],
+   "production_targets": [],
+   "must_fail_tests": [
+    "tests/test_s4b2_integration.py::test_R01_point_rates_stop_explicitly_outside_initial_certifier"
+   ],
+   "mutation_ids": [],
+   "coverage": "not_yet_covered",
+   "reason": "C1以外のQ=0・DP仕事・到着情報を保った静的橋は未認証。新経路で1bへ戻す本体分岐がない。現存試験はscope停止だけ。",
+   "scope_evidence": [
+    "specs/S4b2_変わる速さと届き方を学ぶ.md:1296",
+    "src/sui/rate.py:779"
+   ]
+  },
+  {
+   "id": "S4B2-M30",
+   "error": "M0/M1のsoftmaxを平均する",
+   "public_functions": [],
+   "production_targets": [],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T13_outside_C1_stops_with_typed_reason"
+   ],
+   "mutation_ids": [],
+   "coverage": "not_yet_covered",
+   "reason": "C1の一モデルだけを評価しておりM0/M1のモデル事後・混合予測・混合評価の本体も独立有限モデル平均試験も未実装。",
+   "scope_evidence": [
+    "src/sui/rate.py:747",
+    "src/sui/rate.py:1438"
+   ]
+  },
+  {
+   "id": "S4B2-M31",
+   "error": "同じsource_id再通知を独立報告として尤度へ足す",
+   "public_functions": [
+    "sui.rate.rebuild_rate_belief",
+    "sui.rate_entry.adopt"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_c1_belief",
+     "line": 973,
+     "old": "    kernel = _ep_scale(kernel, _c1_probe_mass(cfg, measurements))\n    intervals, cert = _c1_integrate"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_integration.py::test_T18_M31_transport_and_shared_clock_do_not_add_evidence"
+   ],
+   "mutation_ids": [
+    "S4B2-M31"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M32",
+   "error": "単位を移したGamma rateを移さず秒の値として読む",
+   "public_functions": [
+    "sui.rate.rebuild_rate_belief",
+    "sui.rate.parameter_moment"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_c1_integrate",
+     "line": 1046,
+     "old": "    beta = _Fraction(*cfg[\"_rate\"][\"prior\"][\"params\"][\"rate\"])\n    denominator = denominator if denominator is not None else _c1_total(kernels)"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T16_seconds_ms_push_forward_evidence_state_branches_and_rate_moments"
+   ],
+   "mutation_ids": [
+    "S4B2-M32"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M33",
+   "error": "不明な窓開始をBOOTの0経過として補う",
+   "public_functions": [
+    "sui.rate_entry.read_rate",
+    "sui.rate.rebuild_rate_belief"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate_entry.py",
+     "function": "_report_spec",
+     "line": 197,
+     "old": "    if spec[\"kernel\"][\"name\"] == \"saturating-count\":\n        for key in (\"window_start_ns\", \"window_end_ns\"):"
+    },
+    {
+     "file": "src/sui/rate_entry.py",
+     "function": "_fixed_events",
+     "line": 243,
+     "old": "        p = _load(body.content.data)\n        event_ns = p[\"completion_ns\"] if body.contract == RATE_REPORT else p[\"event_ns\"]"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T04_M33_missing_root_time_is_not_assumed_zero"
+   ],
+   "mutation_ids": [
+    "S4B2-M33"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M34",
+   "error": "全法則既知なら状態情報も0とする",
+   "public_functions": [],
+   "production_targets": [],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_R02_all_point_parameters_leave_state_information_in_counts",
+    "tests/test_s4b2_integration.py::test_R01_point_rates_stop_explicitly_outside_initial_certifier"
+   ],
+   "mutation_ids": [],
+   "coverage": "not_yet_covered",
+   "reason": "全点事前の情報評価はC1外でrate_prior_scope停止。現存R02は独立数学定規で本体を呼ばず、状態情報を計算する点事前本体がない。",
+   "scope_evidence": [
+    "src/sui/rate.py:762",
+    "tests/test_s4b2_learning.py:591"
+   ]
+  },
+  {
+   "id": "S4B2-M35",
+   "error": "有限kappaの禁止確率を0へ落とす",
+   "public_functions": [],
+   "production_targets": [],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_R06_concentrating_gamma_prior_and_positive_forbidden_counterexample"
+   ],
+   "mutation_ids": [],
+   "coverage": "not_yet_covered",
+   "reason": "C1は固定Gamma(2,2)、空の費用だけ。一般の集中事前と禁止特徴の保証つき期待費用は未実装。現存R06は独立数学定規で公開費用計算を呼ばない。M27の小確率丸めと区別する。",
+   "scope_evidence": [
+    "src/sui/rate.py:802",
+    "src/sui/rate_entry.py:372",
+    "tests/test_s4b2_learning.py:605"
+   ]
+  },
+  {
+   "id": "S4B2-M36",
+   "error": "model.8にも新選択の入口と符号化を適用する",
+   "public_functions": [
+    "sui.agent.plan"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/agent.py",
+     "function": "plan",
+     "line": 840,
+     "old": "    if _is_rate_model(view.model):\n        from .rate_entry import public_evaluate, candidate_names, resolve_budget"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_golden.py::test_R07_M36_all_five_legacy_golden_checks"
+   ],
+   "mutation_ids": [
+    "S4B2-M36"
+   ],
+   "coverage": "production_patch",
+   "limit": "model.8誤分岐の代表パッチ。model.1〜7の各新符号化への直接変異は未追加。"
+  },
+  {
+   "id": "S4B2-M37",
+   "error": "区切り3:保存uの境界をまたぐ区間を再精密化せずselection_boundaryで止める",
+   "public_functions": [
+    "sui.rate.certify_choice"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_certify_computed_choice",
+     "line": 1207,
+     "old": "        if engine is None:\n            raise RateIncomplete(\"selection_boundary\", \"cumulative boundary is not certified\")"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_refinement.py::test_v010_standard_budget_narrows_probability_and_agrees_with_independent_integral"
+   ],
+   "mutation_ids": [
+    "S4B2-M37"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M38",
+   "error": "区切り4:replayで保存traceを検査せず数値の再実行との一致だけで認める",
+   "public_functions": [
+    "sui.rate_entry.verify_rate_decision"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate_entry.py",
+     "function": "_verify_body",
+     "line": 786,
+     "old": "    expected = rebuilt.content.as_json()"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_integration.py::test_T12_M19_M20_replay_rejects_one_changed_claim_with_fields"
+   ],
+   "mutation_ids": [
+    "S4B2-M38"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M39",
+   "error": "区切り3/4:uの二進有理数を十進表示から作り直す",
+   "public_functions": [
+    "sui.rate.certify_choice"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_choice_u",
+     "line": 1179,
+     "old": "    u = _Fraction(u)\n    if not 0 <= u < 1:"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_selection.py::test_T09_M26_float_is_its_exact_binary_rational_not_decimal_14_over_25"
+   ],
+   "mutation_ids": [
+    "S4B2-M39"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M40",
+   "error": "区切り2/3:根の3以上の飽和をhistory_scopeで止める",
+   "public_functions": [
+    "sui.rate.rebuild_rate_belief"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "rebuild_rate_belief",
+     "line": 540,
+     "old": "    root = cfg[\"_root\"]\n    if len(windows) > 2 or len(reports) > 2:"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T06_root_saturation_is_certified"
+   ],
+   "mutation_ids": [
+    "S4B2-M40"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M41",
+   "error": "区切り2:parameter_momentのsimplex共同モーメントを成分の周辺積にする",
+   "public_functions": [
+    "sui.rate.parameter_moment"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "parameter_moment",
+     "line": 618,
+     "old": "    probe_weighted_mass = _c1_probe_mass(cfg, belief._measurements, powers=component_powers)"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_learning.py::test_T05_public_root_simplex_and_mixed_moments",
+    "tests/test_s4b2_learning.py::test_T05_public_read_child_updates_components_and_joint_moments"
+   ],
+   "mutation_ids": [
+    "S4B2-M41"
+   ],
+   "coverage": "production_patch"
+  },
+  {
+   "id": "S4B2-M42",
+   "error": "区切り3:精密化の残差をセルの包絡全幅で積み区間を縮められなくする",
+   "public_functions": [
+    "sui.rate.evaluate_rate"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "_C1Information.cell",
+     "line": 1718,
+     "old": "        error = (right - left)**5 * max(abs(fourth.lower), abs(fourth.upper)) / 2880"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_refinement.py::test_v010_standard_budget_narrows_probability_and_agrees_with_independent_integral"
+   ],
+   "mutation_ids": [
+    "S4B2-M42"
+   ],
+   "coverage": "production_patch",
+   "limit": "保守的全幅を積むため実行が300秒を超える可能性がある。TIMEOUTはKILLEDとして数えない。"
+  },
+  {
+   "id": "S4B2-M43",
+   "error": "T03:到着演算子が前の指数剰余を増幅するノルム因子を落とす",
+   "public_functions": [
+    "sui.rate.fixed_likelihood"
+   ],
+   "production_targets": [
+    {
+     "file": "src/sui/rate.py",
+     "function": "fixed_likelihood.rescale",
+     "line": 271,
+     "old": "        error *= norm\n        for key in source_errors: source_errors[key] *= norm"
+    }
+   ],
+   "must_fail_tests": [
+    "tests/test_s4b2_rate.py::test_T03_public_density_is_not_clipped_and_error_includes_arrival_operators"
+   ],
+   "mutation_ids": [
+    "S4B2-M43"
+   ],
+   "coverage": "production_patch",
+   "limit": "M24の未知率密度の事前尾とは別の実装済み誤り。"
+  }
+ ],
+ "not_yet_covered": [
+  {
+   "id": "S4B2-M08",
+   "reason": "C1はexact時計だけ。コピーされた時刻欄の整合検査はあるが、共有潜在時計を積分する本体はない。source_id重複除去M31をこの独立化の代用にしない。",
+   "evidence": [
+    "src/sui/rate.py:759",
+    "src/sui/rate_entry.py:247"
+   ],
+   "related_tests": [
+    "tests/test_s4b2_integration.py::test_T18_M31_transport_and_shared_clock_do_not_add_evidence"
+   ]
+  },
+  {
+   "id": "S4B2-M09",
+   "reason": "C1は恒等作用だけで、Bと自然遷移の共同十分統計量を更新する本体は未実装。T19の実在するs4b2試験もない。",
+   "evidence": [
+    "src/sui/rate.py:774",
+    "src/sui/rate_entry.py:453"
+   ],
+   "related_tests": []
+  },
+  {
+   "id": "S4B2-M24",
+   "reason": "fixed_likelihoodはtheta固定の密度を扱うが、未知Gamma到着率を積分する密度経路はない。C1積分は有限記録のmassのみ。T03の演算子増幅を落とす変異は別の要件M43とする。",
+   "evidence": [
+    "src/sui/rate.py:197",
+    "src/sui/rate.py:828",
+    "src/sui/rate.py:1040"
+   ],
+   "related_tests": [
+    "tests/test_s4b2_rate.py::test_M24_exact_density_tail_cannot_be_bounded_by_prior_mass"
+   ]
+  },
+  {
+   "id": "S4B2-M28",
+   "reason": "既知thetaのM0定規はあるが相関した未知率の共同事前・モデル比較の計算経路がない。R03固定率成功を相関の変異の合格と数えない。T17の実在s4b2試験もない。",
+   "evidence": [
+    "src/sui/rate.py:762",
+    "src/sui/rate.py:779"
+   ],
+   "related_tests": [
+    "tests/test_s4b2_rate.py::test_R03_public_common_rate_matches_independent_M0_factorization"
+   ]
+  },
+  {
+   "id": "S4B2-M29",
+   "reason": "C1以外のQ=0・DP仕事・到着情報を保った静的橋は未認証。新経路で1bへ戻す本体分岐がない。現存試験はscope停止だけ。",
+   "evidence": [
+    "specs/S4b2_変わる速さと届き方を学ぶ.md:1296",
+    "src/sui/rate.py:779"
+   ],
+   "related_tests": [
+    "tests/test_s4b2_integration.py::test_R01_point_rates_stop_explicitly_outside_initial_certifier"
+   ]
+  },
+  {
+   "id": "S4B2-M30",
+   "reason": "C1の一モデルだけを評価しておりM0/M1のモデル事後・混合予測・混合評価の本体も独立有限モデル平均試験も未実装。",
+   "evidence": [
+    "src/sui/rate.py:747",
+    "src/sui/rate.py:1438"
+   ],
+   "related_tests": [
+    "tests/test_s4b2_learning.py::test_T13_outside_C1_stops_with_typed_reason"
+   ]
+  },
+  {
+   "id": "S4B2-M34",
+   "reason": "全点事前の情報評価はC1外でrate_prior_scope停止。現存R02は独立数学定規で本体を呼ばず、状態情報を計算する点事前本体がない。",
+   "evidence": [
+    "src/sui/rate.py:762",
+    "tests/test_s4b2_learning.py:591"
+   ],
+   "related_tests": [
+    "tests/test_s4b2_learning.py::test_R02_all_point_parameters_leave_state_information_in_counts",
+    "tests/test_s4b2_integration.py::test_R01_point_rates_stop_explicitly_outside_initial_certifier"
+   ]
+  },
+  {
+   "id": "S4B2-M35",
+   "reason": "C1は固定Gamma(2,2)、空の費用だけ。一般の集中事前と禁止特徴の保証つき期待費用は未実装。現存R06は独立数学定規で公開費用計算を呼ばない。M27の小確率丸めと区別する。",
+   "evidence": [
+    "src/sui/rate.py:802",
+    "src/sui/rate_entry.py:372",
+    "tests/test_s4b2_learning.py:605"
+   ],
+   "related_tests": [
+    "tests/test_s4b2_learning.py::test_R06_concentrating_gamma_prior_and_positive_forbidden_counterexample"
+   ]
+  }
+ ],
+ "pending_public_contracts": [],
+ "aliases": [
+  {
+   "error": "精密化の記録を学習の証拠へ足す",
+   "requirements": [
+    "S4B2-M21"
+   ]
+  },
+  {
+   "error": "保存traceを再実行せず区間の重なりで認める",
+   "requirements": [
+    "S4B2-M19",
+    "S4B2-M38"
+   ]
+  }
+ ],
+ "test_node_note": "must_fail_testsはparametrize前のpytest関数node ID。expectはtest_<expect>_で当該関数を選ぶ接頭辞。成功した数学定規は本体変異のKILLEDの代わりに数えない。",
+ "spec_reference": {
+  "file": "specs/S4b2_変わる速さと届き方を学ぶ.md",
+  "version": "0.15",
+  "sections": [
+   "6-1",
+   "6-2",
+   "6-3",
+   "7",
+   "15"
+  ],
+  "read_scope": "該当部分"
+ },
+ "exempted": [
+  {
+   "id": "S4B2-M25",
+   "error": "保証つきの Simpson の剰余 h^5 M4/2880 を、隣の求積 (2 パネル) との差にすり替える",
+   "patch": {
+    "id": "S4B2-M25",
+    "file": "src/sui/rate.py",
+    "edits": [
+     [
+      "        error = (right - left)**5 * max(abs(fourth.lower), abs(fourth.upper)) / 2880",
+      "        quarter = (left + middle) / 2\n        three_quarter = (middle + right) / 2\n        adjacent = work.scale(work.add(work.add(work.add(integrand(left), work.scale(integrand(quarter), 4)), work.scale(integrand(middle), 2)), work.add(work.scale(integrand(three_quarter), 4), integrand(right))), (right-left)/12)\n        error = abs(adjacent.upper - simpson.upper)"
+     ]
+    ],
+    "expect": [
+     "v010_standard_budget_narrows_probability_and_agrees_with_independent",
+     "T07_M25_certificate_trace_is_deterministic_and_records_rational"
+    ],
+    "paths": [
+     "tests/test_s4b2_refinement.py",
+     "tests/test_s4b2_selection.py"
+    ]
+   },
+   "decision": "Claude 2026-10-06 16:0x: 見送り (前の節の T02 の前例)。C1 の公開の入口では、Simpson の粗い−細かいの差がなめらかな被積分関数で細かい側の真の誤差のおよそ 15 倍 (Richardson) になり安全側に外れるため、試験の係 sui-s4b2-test5 が 152 評価・38 段の許容幅・項数 8〜800・秒/ms・独立区間の両側 1e-9 の u を探しても包含の違反を作れなかった。差は保証ではない (x^4 on [0,1]: 1 パネル 5/24・2 パネル 77/384・真 1/5、差 1/128 < 真の誤差 1/120) ので、なめらかでない被積分関数・粗いセル (認証の範囲を広げた時) で保証が壊れうる。試験で見張れない代わりに commit の前のレビューで rate.py の剰余のコードを目で確かめる。認証の範囲を広げる区切りで、反例を作れる公開の入力が出たら mutants.json に戻す",
+   "evidence": [
+    "~/.claude/codex-dialogues/sui-s4b2-mut.md",
+    "~/.claude/codex-dialogues/sui-s4b2-test5.md",
+    "src/sui/rate.py の 'error = (right - left)**5 * max(abs(fourth.lower), abs(fourth.upper)) / 2880'"
+   ]
+  }
+ ]
+}

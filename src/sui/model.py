@@ -263,13 +263,13 @@ class ProgressModel(GenerativeModel):
 
 
 def _joint_model(model):
-    if _is_action_model(model):
+    if _is_action_model(model) or _is_rate_model(model):
         return False
     return isinstance(model, ProgressModel) or bool(model.duration_priors and (model.Q is not None or model.measures))
 
 
 def _work_timed(model):
-    if _is_action_model(model):
+    if _is_action_model(model) or _is_rate_model(model):
         return False
     return isinstance(model, ProgressModel) or bool(model.duration_priors)
 
@@ -277,6 +277,11 @@ def _work_timed(model):
 def _is_action_model(model):
     from .action_model import ActionModel
     return isinstance(model, ActionModel)
+
+
+def _is_rate_model(model):
+    from .rate_model import RateModel
+    return isinstance(model, RateModel)
 
 
 @_dataclass(frozen=True, slots=True)
@@ -289,7 +294,7 @@ class EvaluationTiming:
 
 def evaluation_timing(model):
     """採用したモデルの時間の条件を返す（台帳の最新を読まない）。"""
-    if _is_action_model(model):
+    if _is_action_model(model) or _is_rate_model(model):
         return EvaluationTiming(True, True, True)
     work_timed = _work_timed(model)
     receipt = bool(model.durations) or work_timed
@@ -327,6 +332,9 @@ def _has_unreachable(model: GenerativeModel) -> bool:
 
 def model_json(model: GenerativeModel) -> bytes:
     """モデルの全入力を、参照の材料となる正準 JSON にする。"""
+    from .rate_model import RateModel, rate_model_json
+    if isinstance(model, RateModel):
+        return rate_model_json(model)
     if _is_action_model(model):
         from .action_model import action_model_json
         return action_model_json(model)
@@ -383,6 +391,9 @@ def model_from_json(data: bytes) -> GenerativeModel:
         if not isinstance(data, bytes):
             raise ValueError("model: expected bytes")
         value = _json.loads(data)
+        if isinstance(value, dict) and value.get("scheme") == "sui.model.9":
+            from .rate_model import rate_model_from_json
+            return rate_model_from_json(data)
         if isinstance(value, dict) and value.get("scheme") == "sui.model.8":
             from .action_model import action_model_from_json
             return action_model_from_json(data)
@@ -436,6 +447,9 @@ def model_from_json(data: bytes) -> GenerativeModel:
             raise ValueError("model: expected canonical encoding")
         return model
     except (TypeError, KeyError, AttributeError, OverflowError, ValueError) as exc:
+        from .rate import RateInputError, RateSpecificationMissing, RateOutsideEvaluationType
+        if isinstance(exc, (RateInputError, RateSpecificationMissing, RateOutsideEvaluationType)):
+            raise
         from .action_types import _ActionFailure
         if isinstance(exc, _ActionFailure):
             raise
