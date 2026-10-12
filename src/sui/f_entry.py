@@ -24,7 +24,7 @@ from .f import (
     FContinuation,
     FiniteObservation, KnowledgeHistory, LegacyComparison, MeasurementId, NoDecision,
     NormalizationCertificate, Reservation, ReservationDue, ResumePoint, RouteConfig,
-    Selected, TailCertificate, Unavailable, VerifiedResult, _FValue,
+    Selected, TailCertificate, Unavailable, _FValue,
     limit_problem_from_json,
 )
 from .f_model import FModel
@@ -626,7 +626,7 @@ def f_from_json(data: bytes, *, contract: _ContractRef) -> FPublicValue:
     available/unavailable を使い、None は null。自身の kind/op を持つ型を二重包装しない。
     VALUE.type は公開名のみ。未知札/型/二重包装 FInputError(shape)、未知版 FInputError(unknown_version)。
     schema/noncanonical/rational 等も FInputError。proof/外部参照/発行元は認証しない。
-    JSON の VerifiedResult は構造値であり、再検査せずハンドルに戻さない。ROOT は restore_f_root。
+    JSON の VerifiedMathResult は構造値であり、再検査せずハンドルに戻さない。ROOT は f_facts.restore_f_root。
     資源・callable・未確定 F-b 型を自動受理しない。"""
     from . import f as core, f_contracts as fc
     table, public = _wire_types()

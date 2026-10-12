@@ -13,7 +13,7 @@ from .f_model import FModel, FModel11, _parts, _model_ref as f_model_ref
 from ._f_handles import issue, require_issued, attached_world
 from .f_entry import build_histories, f_from_json
 from .f import FContext, CandidateSet, FContinuation, FResources
-from ._f_invariants import (NO_AVAILABILITY_EDGES, STRUCTURAL_INVARIANTS, EVENT_INVARIANTS,
+from ._f_invariants import (MEASURING, NO_AVAILABILITY_EDGES, STRUCTURAL_INVARIANTS, EVENT_INVARIANTS,
                            GENERATION_INVARIANT, RELATION_INVARIANTS)
 
 
@@ -1006,6 +1006,10 @@ class _FactsOrder:
         for item in rule.times:
             if item.types and type(node.get('value')).__name__ not in item.types:
                 continue
+            if item.kinds and getattr(node.get('value'), 'kind', None) not in item.kinds:
+                continue
+            if item.contracts and getattr(node.get('value'), 'contract', None) not in item.contracts:
+                continue
             unknown = tuple(v for path in item.unavailable_paths for v in self.select(node, path)
                             if isinstance(v, core.Unavailable))
             if unknown:
@@ -1106,9 +1110,12 @@ class _FactsOrder:
         # A terminal sequence field denotes all its members, whereas a clock
         # triple is only read by constraints, never by the reference resolver.
         values = tuple(v for value in values for v in (value if isinstance(value, (tuple, list)) else (value,)))
-        if link.kind == 'used_ref':
+        if link.kind in ('ref', 'used_ref'):
+            # A-03: a Ref the owner used names a Record that may have several
+            # CIDs; the ones in the owner's real ancestry are the use. Uniqueness
+            # over the whole range is not required (R02, 2026-10-12).
             return tuple(p for v in values for p in self.used_points(cid, v, '/chronology/' + link.name))
-        return tuple(self.ref_point(v, '/chronology/' + link.name) if link.kind == 'ref' else v for v in values)
+        return tuple(values)
 
     def used_points(self, owner, ref, field):
         """A-03: a Ref the owner used names a Record that may have several CIDs.
@@ -1502,15 +1509,17 @@ class _FactsOrder:
         record = self.compiler.point(cid)
         if type(record.body) is not Decided:
             raise core.FInputError('shape', field=field)
-        expected = tuple(self.compiler.point(p).id for p in points)
+        expected = {self.compiler.point(p).id for p in points}
         core._unique(record.body.inputs, field)
-        # A-04: Decided.inputs is an order-free set without repeats.
-        matches = len(record.body.inputs) == len(expected) and set(record.body.inputs) == set(expected)
+        # A-04: Decided.inputs is an order-free set without repeats (several
+        # CIDs of one Record are one input).
+        matches = set(record.body.inputs) == expected
         if not matches:
             raise core.FInputError('proof_mismatch', 'body Points and Decided.inputs disagree', field)
         for point in points:
             self.reference(cid, point, field)
-        self.event(cid, boundary=None if self.context is None or not self.enforce_boundary else self.context.now_ns, field=field)
+        bounded = self.context is not None and self.enforce_boundary and not self.unused(cid, self.node(cid))
+        self.event(cid, boundary=self.context.now_ns if bounded else None, field=field)
 
     def clock(self, cid):
         node = self.validate(cid, '/clock')
@@ -1960,7 +1969,13 @@ class FactsCompiler(_WorldCompiler):
                 raw=by_id[ref]
                 if raw.body.contract==fc.COVERAGE:
                     value=f_from_json(raw.body.content.data,contract=fc.COVERAGE)
-                    if isinstance(value,core.CoverageClaim) and value not in coverage: coverage.append(value)
+                    if isinstance(value,core.CoverageClaim):
+                        # 今の約束 A-15 (表の最終行): an undeclared kind / inner contract
+                        # is held and authenticated, but using it as coverage of the
+                        # evidence history needs a generation meaning F-a does not declare.
+                        if value.kind not in ('closed','no_arrival') or value.contract!=MEASURING:
+                            raise core.FSpecificationMissing('missing_contract','coverage claim generation meaning is not declared in F-a','/measurement/coverage')
+                        if value not in coverage: coverage.append(value)
                     elif isinstance(value,core.Gap) and value not in gaps: gaps.append(value)
                     continue
                 frame=f_from_json(raw.body.content.data,contract=fc.MEASUREMENT)
@@ -1973,7 +1988,7 @@ class FactsCompiler(_WorldCompiler):
         E=core.EvidenceHistory(key=core._digest(values),**values)
         available=tuple(m for m,link in links.items() if any(cid in self.acquired for ref in link.records for cid in self.image._by_id[ref]))
         obs_by_ref={o.binding:o for o in observations}
-        completed={}; computed={}; normalization=[]; queries=[]; pending=[]; proved_normalization=set()
+        completed={}; computed={}; normalization=[]; pending=[]; proved_normalization=set()
         all_requests={cid:self.content(cid,fc.COMPUTATION_REQUESTED) for cid in sorted(self.visible_cids)
             if getattr(self.point(cid).body,'contract',None)==fc.COMPUTATION_REQUESTED}
         requests={cid:value for cid,value in all_requests.items() if value.origin==self.origin_point}
@@ -2046,10 +2061,22 @@ class FactsCompiler(_WorldCompiler):
             for point in completion.proofs:
                 proof=self.content(point,fc.COMPUTATION_PROOF)
                 proof_record=self.point(point)
-                if set(proof_record.body.about)!={request_record.id,result_record.id} or set(proof_record.body.basis)!={request_record.id,result_record.id,self.point(self.source).id}:
+                if set(proof_record.body.about)!={request_record.id,result_record.id} or proof.request!=request_point or proof.result!=completion.result:
+                    raise core.FInputError('proof_mismatch',field='/proof')
+                if proof.role!='normalization':
+                    # 今の約束 A-04 (query): F-a declares no query/certificate proof
+                    # contract. Held unused, the proof keeps only its outer form
+                    # (A-04: basis ⊇ {request, result}); acquired into K it is a
+                    # missing meaning. K.query_proofs stays empty either way.
+                    if not {request_record.id,result_record.id}<=set(proof_record.body.basis):
+                        raise core.FInputError('proof_mismatch',field='/proof/basis')
+                    if point in self.acquired:
+                        raise core.FSpecificationMissing('missing_contract','query proof contract is not declared in F-a','/proof/role')
+                    continue
+                if set(proof_record.body.basis)!={request_record.id,result_record.id,self.point(self.source).id}:
                     raise core.FInputError('proof_mismatch',field='/proof/basis')
                 expected_statement=core.FiniteUpdateStatement(model=self.source,request=request_point,result=completion.result)
-                if (proof.request!=request_point or proof.result!=completion.result or proof.statement.contract!=fc.FINITE_UPDATE_STATEMENT
+                if (proof.statement.contract!=fc.FINITE_UPDATE_STATEMENT
                     or core._dumps(proof.statement.value)!=core._dumps(expected_statement)):
                     raise core.FInputError('proof_mismatch',field='/proof')
                 if proof.checker.name==fc.FINITE_UPDATE_REPLAY.name and proof.checker.version!=fc.FINITE_UPDATE_REPLAY.version:
@@ -2058,9 +2085,9 @@ class FactsCompiler(_WorldCompiler):
                     raise core.FIncomplete('certificate_incomplete',field='/proof/checker')
                 # Equality was independently established by replay above;
                 # no boolean assertion in the supplied proof is trusted.
-                if proof.role=='normalization':proved_normalization.add(request_point)
+                proved_normalization.add(request_point)
                 if point in self.acquired:
-                    (normalization if proof.role=='normalization' else queries).append(self.point(point).id)
+                    normalization.append(self.point(point).id)
             computed[request_point]=belief
             visiting.remove(request_point)
             return belief
@@ -2137,7 +2164,7 @@ class FactsCompiler(_WorldCompiler):
             pending.append(core.DependencyRef(key=core._digest(description),basis=(self.point(point).id,)))
         values=dict(available=available,incorporated=incorporated,belief=belief_ref,
             kernel_basis=tuple(sorted(obs_by_ref,key=str)),normalization_proofs=tuple(dict.fromkeys(normalization)),
-            query_proofs=tuple(dict.fromkeys(queries)),pending=tuple(pending))
+            query_proofs=(),pending=tuple(pending))
         K=core.KnowledgeHistory(key=core._digest(values),**values)
         descriptor=issue(core._handle(core.FFiniteUpdateModel,authority=FiniteModelAuthority(self.model,self.source,self.resources),
             source=self.source,model_ref=self.model_key,compiler=fc.PREPARE_FACTS,

@@ -26,6 +26,7 @@ from hashlib import sha256
 import json
 from pathlib import Path
 
+from copy import deepcopy
 from sui import f, f_contracts as fc, f_entry as fe, f_facts as ff, f_model as fm
 from gate_f_facts_cases import (FactsCase as _FactsCase, assemble as _facts_assemble, prepare as _facts_prepare,
     histories as _facts_histories, add_draw as _facts_add_draw, add_computation as _facts_add_computation,
@@ -400,41 +401,6 @@ def make_case(case_id, variant='default', *, H=None, scope_name=None, style='f',
     return case
 
 
-def _old_make_case(case_id, variant='default', *, H=None, scope_name=None, style='f', gamma=F(1)):
-    """Assembly only: no F loader, registry, history, evaluator or factory handle."""
-    clock = FakeClock(run=Ref(RefKind.RUN, 'gate-f-fixture'))
-    ids = SequentialIds(prefix='gate-f')
-    ledger = Ledger(salts=SequentialSalts(), contents=MemoryContents())
-    document, actions = finite_world(case_id, variant)
-    if case_id == 'FA07' and H is None:
-        H = 0
-    if case_id == 'FA21' and scope_name is None:
-        scope_name = 'one_step'
-    scope = f.EvaluationScope(name=scope_name or ('finite_horizon' if H is not None else 'unbounded_total'),
-                             version='1', H_ns=H, source=None)
-    case = Case(case_id, variant, document, FModel(declaration=canonical(document)), actions,
-        ledger, (), (), (), clock, ids, context_for(ledger, clock), scope, None)
-    case.continuation = continuation_for(actions,
-        policy_id='afterW' if case_id == 'FA16' and variant == 'split' else None)
-    if case_id in ('FA02', 'FA03', 'FA05', 'FA06', 'FA07', 'FA18'):
-        add_observations(case)
-    if H is not None or scope_name is not None or style == 'legacy':
-        if style == 'legacy':
-            value = {'kind': 'style', 'H_ns': H, 'gamma': float(gamma)}
-            contract = LEGACY_PREFERENCE
-        else:
-            value = {'kind': 'style', 'scope': {'name': scope.name, 'version': '1', 'H_ns': H},
-                     'gamma': plain(F(gamma))}
-            contract = fc.STYLE
-        case.raw_style = add_preference(case, value, contract)
-        case.scope = replace(scope, source=case.raw_style.id)
-    if case_id == 'FA04' and variant == 'nonzero':
-        add_preference(case, FIXED['FA04_nonzero_path_cost']['preference_item'])
-    if case_id == 'FA07' and variant == 'first_action_cost':
-        add_preference(case, first_action_item())
-    return case
-
-
 def add_observations(case, *, coalesced=False, missing=False, mismatch=False, closed=False):
     """Raw -> plan -> opportunity -> bindings. No belief or root injection."""
     ledger, clock, ids = case.ledger, case.clock, case.ids
@@ -593,18 +559,6 @@ def _raise_no_decision(value):
     raise exc(value.reason, value.detail or '', value.field)
 
 
-def _old_make_problem(case, *, available=(), incorporated=(), action_list=None, measure=None,
-                 generation_draws=(), resource=None):
-    resource = resource if resource is not None else resources(case)
-    E, K = histories(case, available=available, incorporated=incorporated, resource=resource)
-    cs = candidates(case, actions=action_list, measure=measure, draws=generation_draws, registry=resource.registry)
-    continuation = case.continuation if action_list is None else continuation_for(cs.candidates)
-    resolved = fe.resolve_f_preferences(from_ledger(case.ledger, case.ledger.heads()), resources=resource)
-    raise RetiredEntrance('prepare_f_problem')
-    return fe.prepare_f_problem(model=case.model, parents=case.ledger.heads(), records=case.records,
-        E=E, K=K, context=case.context, resolved=resolved, candidates=cs, continuation=continuation, method=METHOD, resources=resource, budget=BUDGET)
-
-
 class ScriptedSource:
     """A test input source, not an evaluator; calls expose consumption, not randomness."""
     def __init__(self, values):
@@ -617,6 +571,12 @@ class ScriptedSource:
         return value
 
 
+def f_model_digest(case):
+    # Model declaration canonical bytes, independent from the model loader.
+    return digest(case.document)
+
+
+
 def draw_request(problem_key, *, purpose='selection', ordinal=0):
     return f.DrawRequest(purpose=purpose, context_key=problem_key, ordinal=ordinal,
                           law=ContractRef('uniform_unit', '1'), args={})
@@ -627,13 +587,6 @@ def make_root(case, *, u=F(1, 2), **kwargs):
     prepared = _facts_prepare(case)
     draw = _facts_add_draw(case, prepared.value.problem_key, u=F(u))
     return ff.bind_f_draw(prepared, draw, reader=case.reader, budget=BUDGET).value
-
-
-def _old_make_root(case, *, u=F(1, 2), **kwargs):
-    problem = make_problem(case, **kwargs)
-    source = ScriptedSource(({'u': plain(F(u))},))
-    draw = draw_book({'selection': source}).for_selection(problem, request_id='fixture-root')
-    raise RetiredEntrance('freeze_root')
 
 
 def first_action_item():
@@ -782,19 +735,6 @@ def continuation_for(actions, *, policy_id=None):
             name='finite_policy', version='1', args={'id': policy_id})) for a in actions))
 
 
-def draw_binding(purpose, source):
-    # Test-owned deterministic source identity; not a claim of statistical independence.
-    raise RetiredEntrance('DrawSourceBinding')
-    return fr.DrawSourceBinding(generator=ContractRef('fixture.draw.' + purpose, '1'),
-                                stream_id='fixture-stream-' + purpose, source=source)
-
-
-def draw_book(sources):
-    raise RetiredEntrance('DrawBook')
-    return fr.DrawBook(sources={purpose: draw_binding(purpose, source)
-                               for purpose, source in sources.items()})
-
-
 # Transcribed from spec §3-10-13-3 table (2233-2260), snake names per §13-補.
 # Seven columns, including every dependency/condition; never imported from src.
 BUILTIN_ROWS = """
@@ -914,18 +854,6 @@ def union_case(name):
         wire = {**plain(value), 'trigger': {'kind': 'at' if isinstance(trigger, f.At) else 'when', 'value': plain(trigger)}}
     elif name == 'context_preflight':
         raise RetiredEntrance('FResultContext')
-        value = fe.FResultContext(attempt=None, input=f.FPreflight(parents=frozenset(), model_ref=None,
-            required_records=(), required_capabilities=()))
-        wire = plain(value)
-    elif name.startswith('status_'):
-        raise RetiredEntrance('Status')
-        value = fr.Status(frontier=frozenset(), pending=(), awaiting=(), queued=(), thinking=0,
-                          waiting=0, used={}, capacity={}, computations=() if name.endswith('_available') else unavailable)
-        wire = plain(value)
-        for key in ('belief', 'perception', 'computations', 'routes', 'schedules', 'pledges'):
-            part = getattr(value, key)
-            wire[key] = {'kind': 'unavailable' if isinstance(part, f.Unavailable) else 'available', 'value': plain(part)}
-        auxiliary, contract = False, fc.STATUS
     elif name == 'policy_own_kind':
         value = f.FinitePolicy(id='p', entry='arbitrary-end', nodes=(f.EndNode(id='arbitrary-end', kind='end'),))
         wire = plain(value)
@@ -1076,25 +1004,6 @@ def union_case(name):
 # (Obsidian/Knowledge/変異が生き残ったら同値か試験の穴かを分ける.md), applied.
 # Written only the two gate_f test files. Obsidian Sessions/Projects/Heat remain
 # unmodified under this request's explicit scope; this local record awaits integration.
-
-
-def world_request(case, *, resource=None, action_list=None, measure=None):
-    """v0.11 request DTO from public histories/preferences, before certification."""
-    resource = resource or resources(case)
-    E, K = histories(case, resource=resource)
-    resolved = fe.resolve_f_preferences(from_ledger(case.ledger, case.ledger.heads()), resources=resource)
-    cs = candidates(case, actions=action_list, measure=measure, registry=resource.registry)
-    raise RetiredEntrance('FWorldRequest')
-    return f.FWorldRequest(model_ref=f_model_digest(case), parents=case.ledger.heads(),
-        records=tuple(r.id for r in case.records), E=E, K=K, context=case.context,
-        resolved=f.FWorldResolved(**{field.name: getattr(resolved, field.name) for field in fields(resolved)}),
-        candidates=cs, continuation=case.continuation if action_list is None else continuation_for(cs.candidates),
-        method=METHOD)
-
-
-def f_model_digest(case):
-    # Model declaration canonical bytes, independent from the model loader.
-    return digest(case.document)
 
 
 def prepare_case(case, **kwargs):

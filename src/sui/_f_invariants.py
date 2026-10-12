@@ -18,6 +18,9 @@ from .clock_contracts import SOURCE
 from .s4_contracts import BOOT
 from .rate_entry import RATE_REPORT
 from .s4b_contracts import RATE_ARRIVAL, RATE_JOB
+from .contracts import ContractRef as _ContractRef
+
+MEASURING = _ContractRef('sui.f.finite_measurement', '1')
 
 
 @dataclass(frozen=True)
@@ -31,6 +34,10 @@ class TimeField:
     unavailable_paths: tuple[str, ...] = ()
     # Union branches (value DTO class names) where this field has this meaning.
     types: tuple[str, ...] = ()
+    # Inner kinds / inner contracts (value.kind, value.contract) that give the
+    # field this meaning (A-15: generation class is not inferred from the label).
+    kinds: tuple[str, ...] = ()
+    contracts: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -208,9 +215,11 @@ EVENT_INVARIANTS = (
                # The window end is not a generation bound for every branch (A-15):
                # named apart so a Binding's raw.end means a measurement frame only.
                TimeField('interval_end', 'value.interval.clock', 'value.interval.end_ns', nullable=True),
-               # A-15: a CoverageClaim is a whole-window claim, observed from its start.
+               # A-15: only the builtin closed/no_arrival claim of the finite
+               # measurement contract is a whole-window claim (Attempt <= start);
+               # an undeclared kind/contract is held without inferring generation.
                TimeField('window_start', 'value.interval.clock', 'value.interval.start_ns', nullable=True,
-                         types=('CoverageClaim',)),
+                         types=('CoverageClaim',), kinds=('closed', 'no_arrival'), contracts=(MEASURING,)),
                TimeField('requested_start', 'value.requested_interval.clock', 'value.requested_interval.start_ns', nullable=True),
                TimeField('requested_end', 'value.requested_interval.clock', 'value.requested_interval.end_ns', nullable=True),
                # §3-10-17-12 D1: CoverageClaim and Gap report a completed window;

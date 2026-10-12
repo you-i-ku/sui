@@ -3051,3 +3051,127 @@ def test_auth_17_12_D1_frame_gap_is_part_of_the_completed_window():
             with pytest.raises(f.FInputError) as err:
                 ff.check_f_preflight_from_facts(case.reader,request,registry=f.builtin_f_registry(),budget=BUDGET)
             assert err.value.reason=='shape'
+
+
+# ---------------------------------------------------------------------------
+# 2026-10-12 review4: regression pairs for review3 R01〜R04, reproduced at the
+# public entrances the way the reviewer did (今の約束 A-04 query, A-03, A-18, A-15).
+def _review4_case(name):
+    doc, actions = finite_world('FA08')
+    case = FactsCase(doc, name=name); case.candidate([a.id for a in actions])
+    return case
+
+
+@pytest.mark.parametrize('stage', ['held', 'acquired'])
+def test_review4_R01_undeclared_query_proof_is_held_unused_and_rejected_when_used(stage):
+    # A-04 (query): a role=query proof with an undeclared statement/checker is a
+    # legal record while unused (K.query_proofs empty); acquiring it into K is a
+    # missing meaning, never proof_mismatch.
+    from sui.contracts import ContractRef as _Ref
+    case = assemble('FA06'); case.acquire(case.raw)
+    inputs = tuple(dict.fromkeys((case.points['origin'], case.points['model'], case.points['boot'],
+        case.points['clock_source'], case.points['route'], *case.plans, *case.raw, *case.bindings,
+        *(p for k, p in case.points.items() if k.startswith(('measure-request', 'measure-job', 'measure-attempt'))))))
+    started = case.reading('q-start'); finished = case.reading('q-finish')
+    request = case.decide('q-request', fc.COMPUTATION_REQUESTED,
+        dict(origin=case.points['origin'], purpose='belief', method=plain(fc.FINITE_UPDATE),
+             args=dict(model=case.points['model'], previous_result=None, observations=list(case.bindings)),
+             inputs=list(inputs), algorithm_draws=[], output_contract=plain(fc.FINITE_UPDATE_RESULT)), inputs=inputs)
+    result = case.predict('q-result', fc.COMPUTATION_RESULT,
+        dict(request=request, output=dict(contract=plain(fc.FINITE_UPDATE_RESULT), value=dict(joint=plain((F(3, 4), F(1, 4))), evidence_mass=plain(F(1, 2))))),
+        about=(request,), basis=(request, *inputs))
+    proof = case.predict('q-proof', fc.COMPUTATION_PROOF,
+        dict(request=request, result=result, role='query',
+             statement=dict(contract=plain(_Ref('review.query_statement', '1')), value={}),
+             checker=dict(name='review.query_checker', version='1', args={})),
+        about=(request, result), basis=(request, result))
+    case.observe('q-completed', fc.COMPUTATION_COMPLETED,
+        dict(request=request, result=result, proofs=[proof], started_clock=started, finished_clock=finished))
+    if stage == 'acquired':
+        case.acquire((result, proof))
+    case.context()
+    if stage == 'held':
+        read = histories(case)
+        assert read.K.query_proofs == () and result not in read.K.available
+        assert isinstance(prepare(case).value, f.FProblem)
+    else:
+        with pytest.raises(f.FSpecificationMissing) as caught: histories(case)
+        assert caught.value.reason == 'missing_contract'
+        assert_no_decision(prepare(case).value, 'rejected', 'missing_contract')
+
+
+def test_review4_R02_decided_inputs_resolve_to_the_ancestral_cid_among_several():
+    # A-03: a second CID of the same Record outside the user's ancestry does not
+    # make the use ambiguous; the ancestral instance is the use.
+    from sui.contracts import ContractRef as _Ref
+    from sui.records import Observed, Decided
+    unknown = _Ref('review4.unknown', '1')
+    case = _review4_case('r4-cids')
+    b = case.put('b', Observed(route='membrane', content=Payload.json({}), contract=unknown, received_ns=case.clock.mono_ns()))
+    a = case.put('a', Decided(inputs=(case.ref(b),), content=Payload.json({}), contract=unknown))
+    branch = FactsCase(finite_world('FA08')[0], name='r4-branch').ledger
+    branch.append(case.ledger.record(b), frozenset()); case.ledger.merge(branch)
+    assert len(case.ledger.entries_of(case.ref(b))) == 2
+    case.context()
+    preflight = ff.check_f_preflight_from_facts(case.reader, f.FPreflightFacts(fixed_parents=case.fixed_parents,
+        model=None, required_records=case.fixed_parents, required_capabilities=()), registry=f.builtin_f_registry(), budget=BUDGET)
+    assert isinstance(preflight.value, f.PreflightReady), preflight.value
+    assert isinstance(histories(case), f.FHistoriesFromFacts)
+    assert isinstance(prepare(case).value, f.FProblem)
+
+
+def test_review4_R03_unused_request_of_another_origin_is_not_bounded_by_the_selected_context():
+    # A-18: a computation request of another origin, saved after the selected
+    # context's j, is legal in the fixed range because the fixed problem does not use it.
+    case = _review4_case('r4-origin')
+    origin2 = case.observe('origin2', fc.KNOWLEDGE_ORIGIN, f.KnowledgeOrigin(model=case.points['model']))
+    case.clock.advance(20)
+    case.decide('request2', fc.COMPUTATION_REQUESTED,
+        dict(origin=origin2, purpose='belief', method=plain(fc.FINITE_UPDATE),
+             args=dict(model=case.points['model'], previous_result=None, observations=[]),
+             inputs=[origin2, case.points['model']], algorithm_draws=[], output_contract=plain(fc.FINITE_UPDATE_RESULT)),
+        inputs=(origin2, case.points['model']))
+    case.context(observed_ns=9, judgment_ns=9)
+    assert isinstance(prepare(case).value, f.FProblem)
+    assert isinstance(histories(case), f.FHistoriesFromFacts)
+
+
+@pytest.mark.parametrize('kind,contract,attempt_after_start,accepted', [
+    ('custom_report', ('review.report', '1'), True, True),
+    ('custom_report', ('review.report', '1'), False, True),
+    ('closed', ('sui.f.finite_measurement', '1'), True, False),
+    ('closed', ('sui.f.finite_measurement', '1'), False, True),
+], ids=['unknown-after-start', 'unknown-at-start', 'builtin-after-start', 'builtin-at-start'])
+def test_review4_R04_whole_window_bound_only_for_the_builtin_claim(kind, contract, attempt_after_start, accepted):
+    # A-15: Attempt <= start is the builtin closed/no_arrival claim's meaning; an
+    # undeclared kind/contract is held at EF without inferring its generation.
+    import test_gate_f_auth as auth
+    from copy import deepcopy
+    from dataclasses import replace as _replace
+    from gate_f_facts_cases import auth_copy_primary
+    case = auth.coverage_case('claim')
+    late = 2 * SECOND  # the report and everything after it are received well after the window
+    def edit(key, record):
+        if key in ('raw-0', 'auth-coverage'):  # the same claim record under either key
+            value = deepcopy(record.body.content.as_json())
+            value['value']['kind'] = kind; value['value']['contract'] = {'name': contract[0], 'version': contract[1]}
+            record = _replace(record, body=_replace(record.body, content=Payload.json(value)))
+        generating = isinstance(record.body, (JobOpened, AttemptStarted)) or (
+            isinstance(record.body, Decided) and record.body.contract == fc.MEASUREMENT_REQUESTED)
+        if generating:  # the whole request -> Job -> Attempt chain moves together (A-05)
+            record = _replace(record, at=_replace(record.at, mono_ns=10 if attempt_after_start else 0))
+        if key in ('raw-0', 'auth-coverage', 'binding-0', 'candidates', 'context', 'observed_clock', 'judgment_clock'):
+            record = _replace(record, at=_replace(record.at, mono_ns=late))
+            if hasattr(record.body, 'received_ns'):
+                record = _replace(record, body=_replace(record.body, received_ns=late))
+            if key in ('observed_clock', 'judgment_clock'):
+                value = deepcopy(record.body.content.as_json()); value['reading']['time_ns'] = late
+                record = _replace(record, body=_replace(record.body, content=Payload.json(value)))
+        return record
+    case = auth_copy_primary(case, edit=edit)
+    case.clock.advance(late - case.clock.mono_ns()); case.context()
+    value, exc = auth.call_observed(lambda: auth.invoke('EF', case))
+    if accepted:
+        assert exc is None and isinstance(value.value, f.PreflightReady), auth.diagnostic(value, exc)
+    else:
+        assert auth.diagnostic(value, exc)[:2] == ('FInputError', 'shape'), auth.diagnostic(value, exc)

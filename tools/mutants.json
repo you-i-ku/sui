@@ -7524,7 +7524,7 @@
    ]
   ],
   "expect": [
-   "FA02_no_arrival",
+   "FA02_FA03_FA05",
    "FA02_FA03_FA05_finite_update"
   ],
   "paths": [
@@ -7543,7 +7543,7 @@
    ]
   ],
   "expect": [
-   "FA02_no_arrival",
+   "FA02_FA03_FA05",
    "FA02_FA03_FA05_finite_update"
   ],
   "paths": [
@@ -7661,7 +7661,7 @@
    ]
   ],
   "expect": [
-   "FA06_compute",
+   "FA06_knowledge",
    "FA06_knowledge_progress",
    "facts_mutation_01"
   ],
@@ -7719,9 +7719,10 @@
    ]
   ],
   "expect": [
-   "FA21_FA07_bridge",
    "FA21_one_step",
-   "review5_GF_M13"
+   "review5_GF_M13",
+   "v014_legacy_bridge",
+   "contract_FA21"
   ],
   "paths": [
    "tests/test_gate_f_contract.py",
@@ -7739,7 +7740,7 @@
    ]
   ],
   "expect": [
-   "FA08_aliases",
+   "FA08_primary",
    "FA08_primary_aliases"
   ],
   "paths": [
@@ -7774,7 +7775,7 @@
    ]
   ],
   "expect": [
-   "FA08_uncertified",
+   "FA08_primary",
    "FA08_primary_aliases"
   ],
   "paths": [
@@ -8100,7 +8101,7 @@
    ]
   ],
   "expect": [
-   "v010_01_policy_end",
+   "structure_B1_B2",
    "FA11_FA12_scope",
    "facts_mutation_04"
   ],
@@ -8147,11 +8148,12 @@
    ]
   ],
   "expect": [
-   "extra04_scope_and",
+   "relation",
    "FA11_FA12_scope",
    "FA21_one_step"
   ],
   "paths": [
+   "tests/test_gate_f_auth_rel.py",
    "tests/test_gate_f_contract.py",
    "tests/test_gate_f_facts.py"
   ],
@@ -8171,7 +8173,7 @@
    ]
   ],
   "expect": [
-   "extra03_problem_draw",
+   "review5_closure_draw",
    "structure_A4_B2_uncertified"
   ],
   "paths": [
@@ -8190,8 +8192,9 @@
    ]
   ],
   "expect": [
-   "FA21_FA07_bridge",
-   "FA21_one_step"
+   "FA21_one_step",
+   "v014_legacy_bridge",
+   "contract_FA21"
   ],
   "paths": [
    "tests/test_gate_f_contract.py",
@@ -8248,7 +8251,7 @@
    ]
   ],
   "expect": [
-   "extra01_indistinguishable",
+   "review5_R08_generation",
    "FA02_FA03_FA05_finite_update",
    "structure_C1_C2_unobservable",
    "facts_mutation_06"
@@ -8326,10 +8329,11 @@
    ]
   ],
   "expect": [
-   "review_F09_unobservable",
+   "relation",
    "structure_C1_C2_unobservable"
   ],
   "paths": [
+   "tests/test_gate_f_auth_rel.py",
    "tests/test_gate_f_contract.py",
    "tests/test_gate_f_facts.py"
   ],
@@ -8346,10 +8350,11 @@
   ],
   "expect": [
    "structure_C4_aliases",
-   "review_F11",
+   "relation",
    "structure_C4_aliases"
   ],
   "paths": [
+   "tests/test_gate_f_auth_rel.py",
    "tests/test_gate_f_contract.py",
    "tests/test_gate_f_facts.py"
   ],
@@ -8365,10 +8370,11 @@
    ]
   ],
   "expect": [
-   "review_F13",
+   "relation",
    "structure_C6_zero"
   ],
   "paths": [
+   "tests/test_gate_f_auth_rel.py",
    "tests/test_gate_f_contract.py",
    "tests/test_gate_f_facts.py"
   ],
@@ -8731,7 +8737,6 @@
   ],
   "expect": [
    "review5_R08_generation",
-   "review5_R08_legacy",
    "review5_R13_GF_T01_foreign_job_cannot_start_local_clock_source",
    "review5_closure_preflight_GF_edges_without_selected",
    "review5_closure_draw_GF_edges_after"
@@ -8756,7 +8761,6 @@
   ],
   "expect": [
    "review5_R08_generation",
-   "review5_R08_legacy",
    "review5_GF_T02"
   ],
   "paths": [
@@ -8764,8 +8768,9 @@
    "tests/test_gate_f_contract.py"
   ],
   "note": "2026-10-10 不変条件の表への変異 (table_edge)。measurement の試行開始≤実測 (cause.at≤measured) の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
-  "equivalent": false,
-  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の導出は無い = 識別する入力が試験に無い。試験の係 sui-gate-f-auth-rel 3 通目に識別の対を依頼: 測定の実測時刻が原因の Attempt より前 (measured < cause.at) で、窓の終端は Attempt の後 (cause.at ≤ end は守る) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 15:4x Claude (scratchpad/diagnose_survivors.py: 変異を入れた写しで、試験の係の識別の対の違反側の公開の診断を取った): cause.at ≤ measured の辺を外しても、違反側は参照の辺の『使える時刻』の確かめ (reference_times、A-08: 使った Attempt の at ≤ 使う側の出来事の時刻) が /measurement/cause/available で拒む (基準は /measurement/cause/record.at.mono_ns)。C-06 ①成功の集合は同値 (全 9 入口で合法側は同じ結果)、②診断は reason 'shape' で同じ・field だけ違う、③予算は同じ (同じ関係を 1 度余分に比べるだけ)",
+  "equivalence_scope": "success_set + diagnosis (field may differ); probe 2026-10-12"
  },
  {
   "id": "GF-T03",
@@ -8778,7 +8783,6 @@
   ],
   "expect": [
    "review5_R08_generation",
-   "review5_R08_legacy",
    "review5_closure_preflight_GF_edges_without_selected",
    "review5_closure_draw_GF_edges_after",
    "review5_GF_T03_unavailable"
@@ -8799,8 +8803,7 @@
    ]
   ],
   "expect": [
-   "review5_R08_generation",
-   "review5_R08_legacy"
+   "review5_R08_generation"
   ],
   "paths": [
    "tests/test_gate_f_facts.py",
@@ -8821,8 +8824,7 @@
    ]
   ],
   "expect": [
-   "review5_R08_generation",
-   "review5_R08_legacy"
+   "review5_R08_generation"
   ],
   "paths": [
    "tests/test_gate_f_facts.py",
@@ -8844,7 +8846,6 @@
   ],
   "expect": [
    "review5_R08_generation",
-   "review5_R08_legacy",
    "review5_table_independent_generation"
   ],
   "paths": [
@@ -8863,9 +8864,7 @@
    ]
   ],
   "expect": [
-   "review5_R08_generation",
-   "review5_R08_legacy",
-   "generation_class"
+   "review5_R08_generation"
   ],
   "paths": [
    "tests/test_gate_f_facts.py",
@@ -8888,7 +8887,6 @@
   ],
   "expect": [
    "review5_R08_generation",
-   "review5_R08_legacy",
    "review5_table_T08_standalone_request_still_requires_plan"
   ],
   "paths": [
@@ -8907,8 +8905,7 @@
    ]
   ],
   "expect": [
-   "review5_R08_generation",
-   "review5_R08_legacy"
+   "review5_R08_generation"
   ],
   "paths": [
    "tests/test_gate_f_facts.py",
@@ -8929,8 +8926,7 @@
    ]
   ],
   "expect": [
-   "review5_R08_generation",
-   "review5_R08_legacy"
+   "review5_R08_generation"
   ],
   "paths": [
    "tests/test_gate_f_facts.py",
@@ -8952,7 +8948,6 @@
   ],
   "expect": [
    "review5_R08_generation",
-   "review5_R08_legacy",
    "review5_table_independent_generation"
   ],
   "paths": [
@@ -8972,7 +8967,6 @@
   ],
   "expect": [
    "review5_R08_generation",
-   "review5_R08_legacy",
    "review5_table_independent_generation"
   ],
   "paths": [
@@ -8991,8 +8985,7 @@
    ]
   ],
   "expect": [
-   "review5_R08_generation",
-   "review5_R08_legacy"
+   "review5_R08_generation"
   ],
   "paths": [
    "tests/test_gate_f_facts.py",
@@ -9010,8 +9003,7 @@
    ]
   ],
   "expect": [
-   "review5_R08_generation",
-   "review5_R08_legacy"
+   "review5_R08_generation"
   ],
   "paths": [
    "tests/test_gate_f_facts.py",
@@ -9029,8 +9021,7 @@
    ]
   ],
   "expect": [
-   "review5_R08_generation",
-   "review5_R08_legacy"
+   "review5_R08_generation"
   ],
   "paths": [
    "tests/test_gate_f_facts.py",
@@ -9052,7 +9043,6 @@
   ],
   "expect": [
    "review5_R08_generation",
-   "review5_R08_legacy",
    "review5_table_independent_generation"
   ],
   "paths": [
@@ -9182,8 +9172,9 @@
    "tests/test_gate_f_facts.py"
   ],
   "note": "2026-10-10 不変条件の表への変異 (table_edge)。context の observation.reading≤judgment.reading の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
-  "equivalent": false,
-  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の導出は無い = 識別する入力が試験に無い。試験の係 sui-gate-f-auth-rel 3 通目に識別の対を依頼: context の observation.reading > judgment.reading で、両方の読みが互いに祖先でない / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 15:4x Claude (scratchpad/diagnose_survivors.py: 変異を入れた写しで、試験の係の識別の対の違反側の公開の診断を取った): observation.reading ≤ judgment.reading の辺を外しても、違反側は context の observation の辺の使える時刻の確かめ (reading ≤ 判断の読み j) が /chronology/observation/available で拒む (基準は /chronology/observation/value.reading.time_ns)。①同値 ②field だけ違う ③同じ",
+  "equivalence_scope": "success_set + diagnosis (field may differ); probe 2026-10-12"
  },
  {
   "id": "GF-T23",
@@ -9259,8 +9250,7 @@
    ]
   ],
   "expect": [
-   "review5_R08_generation",
-   "review5_R08_legacy"
+   "review5_R08_generation"
   ],
   "paths": [
    "tests/test_gate_f_facts.py",
@@ -9290,8 +9280,9 @@
   ],
   "note": "R11後のcachedの意味を移植。context確定前に認証済みの未知Observedだけ、確定後の再認証を省略。CID初回の構造検査は維持。同contextのcache命中は本来も再検査しない。",
   "branch": "cached",
-  "equivalent": false,
-  "equivalence_reason": "2026-10-10 Claude. No distinguishing input found by mut2 5 nor review5 5-6 (asked explicitly; no objection). Deferred as equivalent for success authentication. / 2026-10-12 Claude: 独立の関係の試験 (rel) でも生き残り。識別の対を試験の係 3 通目に依頼 (context の確定前後の cache・閉包の列挙) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 15:4x Claude (scratchpad/diagnose_survivors.py: 変異を入れた写しで、試験の係の識別の対の違反側の公開の診断を取った): context の確定前に認証した未知契約の Observed の再認証を省いても、公開の結果は全対・全入口で同じ (違反側は閉包の集合の述語 /closure/judgment/record.body.received_ns が拒む)。certify_closure は閉じた点を全部 context の鍵で validate し直し、境界は集合の述語で課すので、確定前の結果の流用は結果に影響しない。①同値 ②診断も同じ ③予算は再認証 1 回分だけ少ない (公開結果は同じ)",
+  "equivalence_scope": "success_set + diagnosis (field may differ); probe 2026-10-12"
  },
  {
   "id": "GF-C01",
@@ -9312,8 +9303,9 @@
    "tests/test_gate_f_facts.py"
   ],
   "note": "R11/R12 の実際の欠陥の系統。context確定後に所有ノードは検査するが、確定前に読んだ参照先は再訪しない。",
-  "equivalent": false,
-  "equivalence_reason": "2026-10-10 Claude. No distinguishing input found by mut2 5 (17 entrances, 1406 observations) nor by review5 5-6 (asked explicitly; no objection). Deferred as equivalent for success authentication. / 2026-10-12 Claude: 独立の関係の試験 (rel) でも生き残り。識別の対を試験の係 3 通目に依頼 (context の確定前後の cache・閉包の列挙) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 15:4x Claude (scratchpad/diagnose_survivors.py: 変異を入れた写しで、試験の係の識別の対の違反側の公開の診断を取った): 確定前に読んだ参照先の再訪を省いても、公開の結果は全対・全入口で同じ (T27 と同じ理由: 閉包の集合の述語が全点を確定後の鍵で確かめる)。①同値 ②診断も同じ ③上と同じ",
+  "equivalence_scope": "success_set + diagnosis (field may differ); probe 2026-10-12"
  },
  {
   "id": "GF-C02",
@@ -9334,8 +9326,9 @@
    "tests/test_gate_f_facts.py"
   ],
   "note": "R11/R12 の実際の欠陥の系統。検査済みの鍵からcontextの同一性を外し、確定前の認証を確定後へ流用する。",
-  "equivalent": false,
-  "equivalence_reason": "2026-10-10 Claude. No distinguishing input found by mut2 5 nor review5 5-6 (asked explicitly; no objection). Deferred as equivalent for success authentication. / 2026-10-12 Claude: 独立の関係の試験 (rel) でも生き残り。識別の対を試験の係 3 通目に依頼 (context の確定前後の cache・閉包の列挙) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 15:4x Claude (scratchpad/diagnose_survivors.py: 変異を入れた写しで、試験の係の識別の対の違反側の公開の診断を取った): 検査済みの鍵から context の同一性を外しても、公開の結果は全対・全入口で同じ (T27 と同じ理由)。①同値 ②診断も同じ ③上と同じ",
+  "equivalence_scope": "success_set + diagnosis (field may differ); probe 2026-10-12"
  },
  {
   "id": "GF-C03",
@@ -9499,8 +9492,9 @@
    "tests/test_gate_f_facts.py"
   ],
   "note": "閉包認証の変異。過去contextのcheck_eventsのPointを、DTO参照の閉包列挙から外す。",
-  "equivalent": false,
-  "equivalence_reason": "2026-10-10 Claude. Logically redundant; differs only at the finite budget boundary (review5 5 R19: max_cells 324-325). Equivalent in meaning, not in budget consumption. / 2026-10-12 Claude: 独立の関係の試験 (rel) でも生き残り。識別の対を試験の係 3 通目に依頼 (context の確定前後の cache・閉包の列挙) / 2026-10-12 Claude: 試験の係 4 通目 = 単独の到達の形は適用外 (A-17 により check_events の参照先には実祖先の経路もある)。有限予算の規範は F-a に無く、C-06 ①だけを主張、②③は未確認 / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 15:4x Claude (scratchpad/diagnose_survivors.py: 変異を入れた写しで、試験の係の識別の対の違反側の公開の診断を取った): check_events の Point を閉包の列挙から外しても、A-17 により check_events の参照先は context の実祖先なので、祖先の列挙で同じ点に届く (試験の係 4 通目 #11: 単独の到達の形は合法の側が無く適用外)。①同値 (導出)、②診断は同じ、③予算は到達の順で変わりうる (10/10 の記録: max_cells 324-325 の境界) = 公開の結果は同じで消費量だけ違う / 2026-10-12 16:4x review4 R07 の実測で訂正: ③有限の予算では公開の結果が違う (同じ合法入力・max_cells=147/148 で基準は NoDecision/budget_exhausted、変異は FProblem; 成功の境界は基準 149・K03 147・K04 148) → ③は非同値。主張は ①十分な予算での成功の集合の同値だけ",
+  "equivalence_scope": "success_set only (sufficient budget); finite budget differs (measured 2026-10-12); diagnosis: K04 reason differs in the double-fault case"
  },
  {
   "id": "GF-K04",
@@ -9526,8 +9520,9 @@
    "tests/test_gate_f_auth.py"
   ],
   "note": "閉包認証の変異。候補宣言generation.basisのPointを閉包列挙から外す。",
-  "equivalent": false,
-  "equivalence_reason": "2026-10-11 Claude: 今の約束 A-04 で候補宣言の外側の Prediction.basis は generation.basis の Ref を全部含む。閉包は外側の basis の Ref を辿るので、generation.basis の Point は point_fields が無くても閉包に入る (変異の写しで A-06 の違反 18 件が _check_contract_version 等で同じく拒まれるのを確かめた: scratchpad/k04work/probe.py)。外側の basis が欠けていれば A-04 の proof_mismatch で拒む。成功の集合は同じ。違うのは「basis の記録が不正で、しかも外側の basis にも無い」二重の不正の時の診断の理由だけ (C-06 の ② は同値と主張しない) / 2026-10-12 Claude: 独立の関係の試験 (rel) でも生き残り。識別の対を試験の係 3 通目に依頼 (context の確定前後の cache・閉包の列挙) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 15:4x Claude (scratchpad/diagnose_survivors.py: 変異を入れた写しで、試験の係の識別の対の違反側の公開の診断を取った): generation.basis の Point を閉包の列挙から外しても、A-04 で外側の Prediction.basis が generation.basis を含むので外側の basis から同じ点に届く (typed_point_alias の対は両方 result_mismatch /ledger で同じ)。①同値 ②二重の不正の時だけ診断の理由が違う (10/11 の記録) ③同じ / 2026-10-12 16:4x review4 R07 の実測で訂正: ③有限の予算では公開の結果が違う (同じ合法入力・max_cells=147/148 で基準は NoDecision/budget_exhausted、変異は FProblem; 成功の境界は基準 149・K03 147・K04 148) → ③は非同値。主張は ①十分な予算での成功の集合の同値だけ",
+  "equivalence_scope": "success_set only (sufficient budget); finite budget differs (measured 2026-10-12); diagnosis: K04 reason differs in the double-fault case"
  },
  {
   "id": "GF-K05",
@@ -9614,8 +9609,9 @@
    "tests/test_gate_f_facts.py"
   ],
   "note": "閉包認証の変異。Observedの原因Attempt開始≤受信の辺だけを外す(R15)。 (2026-10-11 Claude: 認証器の作り直しの後のコードに合わせて書き直した、意味は同じ)",
-  "equivalent": false,
-  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の導出は無い = 識別する入力が試験に無い。試験の係 sui-gate-f-auth-rel 3 通目に識別の対を依頼: Observed の received が記録の at より前で、原因の Attempt の at が received より後・at より前 (cause.at ≤ at は守る) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 15:4x Claude (scratchpad/diagnose_survivors.py: 変異を入れた写しで、試験の係の識別の対の違反側の公開の診断を取った): cause.at ≤ received の辺を外しても、違反側は reference_times (A-08) が /chronology/cause/available で拒む (基準は /chronology/cause/record.at.mono_ns)。①同値 ②field だけ違う ③同じ",
+  "equivalence_scope": "success_set + diagnosis (field may differ); probe 2026-10-12"
  },
  {
   "id": "GF-K09",

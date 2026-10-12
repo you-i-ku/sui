@@ -26,9 +26,9 @@ from sui.records import (Record, Payload, Observed, Decided, JobOpened,
     AttemptStarted, Prediction, Interpretation, Preference, Intention, IntentionStatus, Role)
 from gate_f_facts_cases import (FactsCase, Reader, BUDGET, PRODUCER, SECOND,
     finite_world, add_observations, add_draw, plain, canonical, auth_copy_primary,
-    assemble_limit, prepare, histories)
+    assemble_limit, prepare, histories, digest)
 from gate_f_auth_inventory import (NEW_RELATION_PAIRS, FIELD_TARGETS, BODY_FIELDS,
-    FINITE, relation_counts, relation_surfaces, relation_bad_outcome, relation_rules,
+    FINITE, relation_counts, relation_surfaces, relation_bad_outcome, relation_good_outcome, relation_rules,
     INDEPENDENT_RELATIONS, SURVIVOR_RELATION_PAIRS, SURVIVOR_EXCLUSIONS)
 import test_gate_f_auth as old
 
@@ -168,7 +168,7 @@ def leaf_case(pair, entry, bad):
 
 def computation(case, label, *, stage, observations=None, extra_inputs=(), joint=(Q(3,4), Q(1,4)),
                 mass=Q(1,2), target="result", acquisition_ns=None, wrong_outer=False,
-                separate_acquisition=False):
+                separate_acquisition=False, extra_query=None):
     """Independent, stoppable primary calculation. No later completion is in C.
 
     Stages: generated = result plus completion, no proof/acquisition;
@@ -199,8 +199,19 @@ def computation(case, label, *, stage, observations=None, extra_inputs=(), joint
                                 value=dict(model=case.points["model"], request=request, result=result)),
                  checker=dict(name=fc.FINITE_UPDATE_REPLAY.name, version="1", args={})),
             about=(request,result), basis=(case.points["model"],request,result))
+    query = None
+    if extra_query:
+        finite = extra_query=="finite_statement_reuse"
+        statement = (dict(contract=plain(fc.FINITE_UPDATE_STATEMENT),
+                          value=dict(model=case.points["model"],request=request,result=result))
+                     if finite else dict(contract=dict(name="auth.unpublished.query_statement",version="1"),value={}))
+        checker = (dict(name=fc.FINITE_UPDATE_REPLAY.name,version="1",args={})
+                   if finite else dict(name="auth.unpublished.query_checker",version="1",args={}))
+        query = case.predict(label+"-query",fc.COMPUTATION_PROOF,
+            dict(request=request,result=result,role="query",statement=statement,checker=checker),
+            about=(request,result),basis=(case.points["model"],request,result) if finite else (request,result))
     completed = case.observe(label+"-completed", fc.COMPUTATION_COMPLETED,
-        dict(request=request, result=result, proofs=[] if proof is None else [proof],
+        dict(request=request, result=result, proofs=([proof] if proof is not None else [])+([query] if query else []),
              started_clock=started, finished_clock=finished))
     acquired = None
     if stage != "generated":
@@ -216,7 +227,7 @@ def computation(case, label, *, stage, observations=None, extra_inputs=(), joint
         case.decide(label+"-adopted", fc.KNOWLEDGE_ADOPTED,
             dict(origin=case.points["origin"], previous=None, completion=completed),
             inputs=(case.points["origin"], completed))
-    return dict(request=request, result=result, proof=proof, completed=completed, acquired=acquired)
+    return dict(request=request, result=result, proof=proof, completed=completed, acquired=acquired, query=query)
 
 
 def calculation_base(name, seqs=(1,)):
@@ -540,13 +551,165 @@ def typed_point_alias_case(pair, entry, bad):
     return case
 
 
+def query_unpublished_case(pair, entry, bad):
+    case = calculation_base("query-retention")
+    made = computation(case,"query-retention",stage="generated" if pair.stage=="adopted" else pair.stage,
+                       target="proof",extra_query=pair.variant)
+    if pair.stage=="adopted":
+        # Adopt a different, fully acquired normalization derivation. Adopting
+        # the query's own completion would use its unacquired proof (A-10).
+        computation(case,"independent-adoption",stage="adopted")
+    proof = case.ledger.record(made["query"]).body
+    assert set(proof.about)=={case.ref(made["request"]),case.ref(made["result"])}
+    assert set(proof.about)<=set(proof.basis)
+    if bad:
+        case.acquire((made["query"],))
+    # The completion's proofs edge already reaches this held leaf (A-06).
+    return finish(case,entry)
+
+
+def origin_boundary_case(pair, entry, bad):
+    adopt = pair.variant=="adoption"
+    case=FactsCase(finite_world("FA06" if adopt else "FA08")[0],name="origin-boundary-"+pair.variant)
+    selected=case.points["origin"]
+    other=case.observe("other-origin",fc.KNOWLEDGE_ORIGIN,dict(model=case.points["model"]))
+    case.points["origin"]=selected if bad else other
+    if adopt:
+        add_observations(case)
+        case.acquire(case.raw)
+        made=computation(case,"earlier",stage="verified")
+    before=case.clock.mono_ns()
+    case.clock.advance(10)
+    if pair.variant=="request":
+        inputs=tuple(case.points[k] for k in ("origin","model","boot","clock_source"))
+        case.decide("late-request",fc.COMPUTATION_REQUESTED,
+            dict(origin=case.points["origin"],purpose="belief",method=plain(fc.FINITE_UPDATE),
+                 args=dict(model=case.points["model"],previous_result=None,observations=[]),
+                 inputs=list(inputs),algorithm_draws=[],output_contract=plain(fc.FINITE_UPDATE_RESULT)),inputs=inputs)
+    elif pair.variant=="acquisition":
+        case.acquire((case.points["model"],))
+    else:
+        case.decide("late-adopted",fc.KNOWLEDGE_ADOPTED,
+            dict(origin=case.points["origin"],previous=None,completion=made["completed"]),
+            inputs=(case.points["origin"],made["completed"]))
+    case.points["origin"]=selected
+    case.candidate(("Compute",) if adopt else ("Q",))
+    case.context(observed_ns=before+9,judgment_ns=before+9)
+    if entry=="EL": return finish(case,entry)
+    if entry=="EP": old.add_predicate(case)
+    return case
+
+
+def coverage_generation_contract_case(pair, entry, bad):
+    case=old.coverage_case("claim")
+    mode,_,stop=pair.stage.partition(".")
+    classification=mode in ("retained","classification")
+    unknown = not bad if classification else bad
+    if unknown and pair.variant=="kind":
+        # A-04/M-04: keep the Plan cell and finite kernel's observation value
+        # consistent. A mismatching cell would mask the missing claim meaning.
+        case.document=deepcopy(case.document)
+        for kernel in case.document["kernels"]:
+            for outcome in kernel["outcomes"]:
+                evidence=outcome["evidence"]
+                if evidence and evidence["kind"]=="coverage" and evidence["value"]=="closed":
+                    evidence["value"]="custom_report"
+    def edit(key,record):
+        if unknown and pair.variant=="kind" and key=="model":
+            record=old.content(record,document=case.document)
+        if unknown and pair.variant=="kind" and key=="plan":
+            payload=deepcopy(record.body.content.as_json())
+            payload["model_ref"]=digest(case.document)
+            for cell in payload["cells"]:
+                if cell["observation"]["kind"]=="coverage" and cell["observation"]["value"]=="closed":
+                    cell["observation"]["value"]="custom_report"
+            record=replace(record,body=replace(record.body,content=Payload.json(payload)))
+        if classification and key.startswith(("measure-request","measure-job","measure-attempt")):
+            record=replace(record,at=replace(record.at,mono_ns=3*SECOND//4))
+        if key in ("auth-coverage","raw-0") and unknown:
+            payload=deepcopy(record.body.content.as_json())
+            if pair.variant=="kind": payload["value"]["kind"]="custom_report"
+            else: payload["value"]["contract"]=dict(name="auth.unpublished.coverage",version="1")
+            record=replace(record,body=replace(record.body,content=Payload.json(payload)))
+        return record
+    case=auth_copy_primary(case,edit=edit)
+    raw=case.ledger.record(case.points["auth-coverage"])
+    interval=raw.body.content.as_json()["value"]["interval"]
+    attempt=case.ledger.record(case.points["measure-attempt-1"])
+    assert interval["start_ns"]<=interval["end_ns"]<=raw.body.received_ns
+    assert attempt.at.mono_ns<=raw.body.received_ns
+    assert (attempt.at.mono_ns>interval["start_ns"]) == classification
+    # Make semantic use explicit at EN/EH/EP: this Binding is applied by a
+    # completed finite update, stopping at the requested stage. The closed
+    # kernel is diag(1,1), so
+    # its declared model yields the unchanged (1/2,1/2) prior and mass 1.
+    # Intrinsic-only entries still authenticate this unused calculation locally.
+    if mode!="retained":
+        case.acquire(case.raw)
+        computation(case,"claim-use",stage=stop or "adopted",joint=(Q(1,2),Q(1,2)),mass=Q(1))
+    return finish(case,entry)
+
+
+def cid_alias_use_case(pair, entry, bad):
+    """Authentic aliases via public append/merge, never forged Entry headers.
+
+    A fresh salt stream on the copied public Ledger gives the second CID. Both
+    records are identical; only membership in the consumer's real ancestry
+    varies. One Ref stays one Ref even when both CIDs are actual ancestors.
+    """
+    case=old.base_case(entry if entry in ("EC","EB") else "EN")
+    decision=put(case,"alias-decision",body(case,"Decided"))
+    job=put(case,"alias-job",body(case,"JobOpened",decision=decision))
+    put(case,"alias-attempt",body(case,"AttemptStarted",job=job))
+    confirmed=put(case,"alias-confirmed",body(case,"Intention",decision=decision))
+    before=case.ledger.heads()
+    name,field,count=pair.variant.split(".")
+    target_name={"inputs":"Observed","basis":"Observed","decision":"Decided","job":"JobOpened",
+                 "caused_by":"AttemptStarted","decided_in":"Decided","supersedes":"Intention",
+                 "via":"AttemptStarted"}[field]
+    alternate=old.Ledger(salts=old.SequentialSalts(),contents=old.MemoryContents())
+    alternate.merge(case.ledger)
+    first=put(case,"alias-first",body(case,target_name,decision=decision,job=job),parents=before)
+    second=alternate.append(case.ledger.record(first),before).cid
+    case.ledger.merge(alternate)
+    case.points["alias-second"]=second
+    assert first!=second and case.ledger.record(first)==case.ledger.record(second)
+    parents=before if bad else frozenset((first,)) if count=="one" else frozenset((first,second))
+    consumer=body(case,name,decision=decision,job=job)
+    if name=="Preference" and entry in ("EN","EB"):
+        consumer=Preference(basis=(),content=Payload.json(
+            {"kind":"style","H_ns":None,"gamma":1.0} if entry=="EB" else
+            {"kind":"style","scope":{"name":"unbounded_total","version":"1","H_ns":None},"gamma":[1,1]}),
+            contract=ContractRef("sui.s4d.preference","1") if entry=="EB" else fc.STYLE)
+    updates={field:(case.ref(first),) if field in ("inputs","basis") else case.ref(first)}
+    if field=="supersedes": updates["status"]=IntentionStatus.WITHDRAWN
+    if field=="via": updates.update(status=IntentionStatus.EXECUTED,supersedes=case.ref(confirmed))
+    used=put(case,"alias-consumer",replace(consumer,**updates),parents=parents)
+    explicit=[first,second,used]
+    if name in ("Prediction","Interpretation"):
+        used=put(case,"alias-event-consumer",Decided(inputs=(case.ref(used),),content=EMPTY,contract=UNKNOWN),parents=parents)
+        explicit.append(used)
+    if name=="Preference" and entry in ("EN","EB"):
+        case.preferences.append(used)
+        if entry=="EN": case.scope=replace(case.scope,source=case.ref(used))
+    actual=case.ledger.ancestors((used,))
+    assert len({first,second}&actual)==(0 if bad else 1 if count=="one" else 2)
+    case.ledger.verify()
+    case=finish(case,entry,explicit=explicit)
+    assert {first,second}<=case.ledger.ancestors(case.fixed_parents)|set(case.fixed_parents)
+    case.preserve_cids=True
+    return case
+
+
 BUILDERS = dict(parent_child=parent_case, body_use=body_use_case, leaf_use=leaf_case,
     target_witness=witness_case, generation_class=generation_case,
     closed_window_receipt=closed_window_receipt_case,
     sequence_set=sequence_case, check_order=order_case, stage_boundary=boundary_case,
     survivor_generation=survivor_generation_case,cause_receipt=cause_receipt_case,
     sibling_clock=sibling_clock_case,context_revisit=context_revisit_case,
-    typed_point_alias=typed_point_alias_case)
+    typed_point_alias=typed_point_alias_case,query_unpublished=query_unpublished_case,
+    origin_boundary=origin_boundary_case,coverage_generation_contract=coverage_generation_contract_case,
+    cid_alias_use=cid_alias_use_case)
 
 
 def draw_subject(subject, *, evaluate=False, replay_root=False, bad=False):
@@ -561,12 +724,20 @@ def draw_subject(subject, *, evaluate=False, replay_root=False, bad=False):
     if replay_root and bad and not hasattr(subject,"alias_reader"):
         seed_draw=add_draw(prefix,prepared.value.problem_key)
         seed=ff.bind_f_draw(prepared,seed_draw,reader=prefix.reader,budget=BUDGET)
-    old.append_independent_primary_closure(prefix,subject,next(iter(subject.points)))
+    if getattr(subject,"preserve_cids",False):
+        # Re-appending coalesces duplicate Records. Public merge retains both
+        # already authenticated CIDs and the exact ancestry under test.
+        prefix.ledger.merge(subject.ledger)
+        for key in ("alias-first","alias-second","alias-consumer"):
+            assert prefix.ledger.entry(subject.points[key])==subject.ledger.entry(subject.points[key])
+    else:
+        old.append_independent_primary_closure(prefix,subject,next(iter(subject.points)))
     if hasattr(subject,"alias_reader"):
         prefix.reader=old.Review4CombinedReader(prefix.reader,subject.alias_reader)
     # Authenticate leaves too, via a real event with all event ancestors.
     by_ref={str(prefix.ledger.record(e.cid).id):e.cid for e in prefix.ledger.entries()}
-    points=tuple(by_ref[str(subject.ref(p))] for p in subject.fixed_parents)
+    points=(tuple(subject.fixed_parents) if getattr(subject,"preserve_cids",False) else
+            tuple(by_ref[str(subject.ref(p))] for p in subject.fixed_parents))
     now=max(prefix.clock.mono_ns(),*(subject.ledger.record(e.cid).at.mono_ns for e in subject.ledger.entries()))+1
     prefix.clock.advance(now-prefix.clock.mono_ns())
     # The actual consumer lives in the subject's run. A prefix-run consumer
@@ -574,7 +745,9 @@ def draw_subject(subject, *, evaluate=False, replay_root=False, bad=False):
     use_at=Instant(run=subject.clock.run,run_index=0,
         seq=max(subject.ledger.record(e.cid).at.seq for e in subject.ledger.entries())+1,
         mono_ns=now,wall_ns=0)
-    put(prefix,"suffix-use",Decided(inputs=tuple(prefix.ref(p) for p in points),
+    suffix_inputs=tuple(prefix.ref(p) for p in points)
+    if getattr(subject,"preserve_cids",False): suffix_inputs=tuple(dict.fromkeys(suffix_inputs))
+    put(prefix,"suffix-use",Decided(inputs=suffix_inputs,
         content=EMPTY,contract=UNKNOWN),at=use_at)
     draw=add_draw(prefix,prepared.value.problem_key)
     if replay_root:
@@ -643,8 +816,53 @@ def replay_selected_relation(pair, bad, surface):
     return replay(saved,reader=case.reader,registry=f.builtin_f_registry(),budget=BUDGET)
 
 
+REVIEW_USE_KINDS=("query_unpublished","origin_boundary","coverage_generation_contract")
+
+
+def replay_review_use(pair,bad,surface):
+    """Real EN issuance, then primary-input replay; never fake an issued handle."""
+    case=BUILDERS[pair.kind](pair,"EN",bad)
+    outcome=(relation_bad_outcome if bad else relation_good_outcome)(pair,"ER",surface)
+    if outcome in ("missing_contract","verified_missing_contract"):
+        # Missing semantics is a legitimate upper-level NoDecision. Replaying
+        # a stale successful claim adds a second fault, so issue and replay the
+        # actual rejected artifact instead. Verify must authenticate that claim.
+        issued,exc=old.call_observed(lambda:prepare(case))
+        assert old.diagnostic(issued,exc)[:2]==("NoDecision:rejected","missing_contract"),old.diagnostic(issued,exc)
+        replay=ff.verify_f_math_result if surface=="selected_verify" else ff.restore_f_math_result
+        return replay(issued.canonical_bytes,reader=case.reader,registry=f.builtin_f_registry(),budget=BUDGET)
+    seed_pair=pair
+    if pair.kind=="coverage_generation_contract":
+        _,separator,stop=pair.stage.partition(".")
+        seed_pair=replace(pair,stage="meaning"+separator+stop)
+    seed=case if outcome=="accept" else BUILDERS[pair.kind](seed_pair,"EN",False)
+    issued,exc=old.call_observed(lambda:prepare(seed))
+    old.assert_legal(issued,exc,"EN")
+    if surface=="selected_restore_root":
+        draw=add_draw(seed,issued.value.problem_key)
+        if seed is not case: add_draw(case,issued.value.problem_key)
+        issued=ff.bind_f_draw(issued,draw,reader=seed.reader,budget=BUDGET)
+    saved=issued.canonical_bytes
+    if outcome!="accept":
+        points={p:case.points[k] for k,p in seed.points.items() if k in case.points}
+        def remap(value):
+            if isinstance(value,str): return points.get(value,value)
+            if isinstance(value,list): return [remap(x) for x in value]
+            if isinstance(value,dict): return {k:remap(v) for k,v in value.items()}
+            return value
+        envelope=json.loads(saved)
+        envelope["input"]=remap(envelope["input"])
+        envelope["input"]["value"]["fixed_parents"]=list(case.fixed_parents)
+        envelope["calls"]=remap(envelope["calls"])
+        saved=canonical(envelope)
+    replay={"selected_restore_math":ff.restore_f_math_result,"selected_verify":ff.verify_f_math_result,
+            "selected_restore_root":ff.restore_f_root}[surface]
+    return replay(saved,reader=case.reader,registry=f.builtin_f_registry(),budget=BUDGET)
+
+
 def invoke_relation(pair, entry, bad, surface="default"):
     if entry == "ER" and surface.startswith("selected_"):
+        if pair.kind in REVIEW_USE_KINDS: return replay_review_use(pair,bad,surface)
         return replay_selected_relation(pair,bad,surface)
     independent = entry in ("EC","EB") and pair.kind in INDEPENDENT_RELATIONS
     construction_entry = "EL" if surface.startswith("limit_") else (
@@ -679,7 +897,9 @@ def invoke_relation(pair, entry, bad, surface="default"):
             artifact=old.invoke("EF",legal)
             replay=ff.verify_f_math_result if surface=="verify" else ff.restore_f_math_result
             return replay(artifact.canonical_bytes,reader=case.reader,registry=f.builtin_f_registry(),budget=BUDGET)
-        unused_numerical_result = pair.kind in ("sequence_set","context_revisit")
+        unused_numerical_result = pair.kind in ("sequence_set","context_revisit") or (
+            pair.kind in REVIEW_USE_KINDS and
+            (relation_bad_outcome if bad else relation_good_outcome)(pair,entry,surface)=="accept")
         if surface=="restore_root":
             return draw_subject(case,replay_root=True,bad=bad and not unused_numerical_result)
         replay=ff.verify_f_math_result if surface.endswith("verify") else ff.restore_f_math_result
@@ -714,7 +934,7 @@ def test_relation_pair(pair,entry,surface,bad,record_property,monkeypatch):
     record_property("surface",surface)
     record_property("member","bad" if bad else "good")
     if pair.mutation_checks: record_property("mutation_checks",",".join(map(str,pair.mutation_checks)))
-    outcome = relation_bad_outcome(pair,entry,surface) if bad else "accept"
+    outcome = (relation_bad_outcome if bad else relation_good_outcome)(pair,entry,surface)
     record_property("expected_outcome",outcome)
     numerical_calls=[]
     if pair.kind in ("stage_boundary","closed_window_receipt") and bad:
@@ -736,11 +956,19 @@ def test_relation_pair(pair,entry,surface,bad,record_property,monkeypatch):
         record_property("boundary","Ledger.append; facts entry not reached")
         from sui.clock import ClockError
         assert isinstance(exc,ClockError),old.diagnostic(value,exc)
-    elif bad and outcome != "accept": old.assert_bad(value,exc,pair,entry)
+    elif outcome=="verified_missing_contract":
+        assert exc is None and old.diagnostic(value,exc)[0]=="VerifiedMathResult",old.diagnostic(value,exc)
+    elif outcome=="missing_contract":
+        kind,reason,field,fields=old.diagnostic(value,exc)
+        assert kind in ("FSpecificationMissing","NoDecision:rejected") and reason==outcome,old.diagnostic(value,exc)
+        old.assert_pointer(field,fields)
+    elif outcome != "accept": old.assert_bad(value,exc,replace(pair,reason=outcome),entry)
     elif entry=="ED" and surface=="evaluate":
         assert exc is None,old.diagnostic(value,exc)
         assert isinstance(value.value,f.Selected),old.diagnostic(value,exc)
     else: old.assert_legal(value,exc,entry)
+    if not bad and entry=="EH" and pair.kind=="query_unpublished":
+        assert value.K.query_proofs==(), "A-04:166: retaining an unacquired query proof must not populate K"
     if not bad and entry=="EH" and pair.kind in ("sequence_set","stage_boundary"):
         n=2 if pair.variant=="distinct_measurement" else 1
         assert len(value.K.available)==n
@@ -752,7 +980,8 @@ def test_relation_pair(pair,entry,surface,bad,record_property,monkeypatch):
 
 
 def test_relation_inventory_has_separate_rows_and_complete_parameter_pairs():
-    assert set(BUILDERS) == {p.kind for p in NEW_RELATION_PAIRS}
+    assert set(BUILDERS) == {p.kind for p in NEW_RELATION_PAIRS if not p.not_applicable
+                            and any(e not in p.pending_entries for e in p.entries)}
     assert len({p.id for p in NEW_RELATION_PAIRS}) == len(NEW_RELATION_PAIRS)
     expected = {(p.id,e,s,b) for p in NEW_RELATION_PAIRS if not p.not_applicable for e in p.entries if e not in p.pending_entries
                 for s in relation_surfaces(p,e) for b in (False,True)}
@@ -770,7 +999,7 @@ def test_relation_inventory_has_separate_rows_and_complete_parameter_pairs():
     query = [d for d in report["dispositions"] if d["target"] in {r.id for r in QUERY_ROWS}]
     assert len(query) == 54 and all(d["status"] == "not_applicable" for d in query)
     assert not report["unexpanded_field_entries"], report["unexpanded_field_entries"]
-    assert not report["unexpanded_relation_entries"], report["unexpanded_relation_entries"]
+    assert not report["unexpanded_relation_entries"],report["unexpanded_relation_entries"]
 
 
 BOOT_ROW=next(r for r in FIELD_TARGETS if r.contract=="sui.s4.boot" and r.field=="$contract")
@@ -1413,3 +1642,126 @@ def test_unpublished_draft_versions_are_not_upgraded(name,version,entry,draft_wi
 # Obsidian Sessions/Projects/Knowledge/Heat remain UNREFLECTED; heat.py not run.
 # The explicit test-file allowlist takes precedence; this allowed local comment
 # is the fallback session record, not a completed vault update.
+
+# --- 2026-10-12 / sixth request / four missing use relations ---
+# date: 2026-10-12
+# project: sui
+# tool: codex
+# tags: [session, sui, gate-f, independent-auth, relation-coverage]
+# [[Projects/sui]]
+# Codex session: 01a12d14-28a7-70f3-8b04-a69d4e4c494e
+# Artifacts: C:/Users/you11/Desktop/iku/sui/tests/gate_f_auth_inventory.py and
+# C:/Users/you11/Desktop/iku/sui/tests/test_gate_f_auth_rel.py (2026-10-12 turn6).
+# No src/specs, other tests or fixture helper semantics changed; no commit.
+# Authority read: relevant portions of specs/関所F_今の約束.md (A-03/04/05/10,
+# A-14/15/18/19/21, M-01/02/04, E-01/E-06), our own tests and allowed fixtures.
+# Did NOT read _f implementation bodies, f/f_facts/f_entry function bodies,
+# test_gate_f_facts.py review4 regressions, mutation definitions or external Web.
+# Public FReader method signature only was read in f.py. The fixture's runtime
+# Ledger/Entry public call signatures were inspected without getsource/source
+# access. An earlier request to read ledger.py declarations became unnecessary:
+# public Ledger.merge solved authentic multi-CID construction; ledger.py was NOT
+# read and no unanswered permission was treated as approval. No question remains.
+#
+# Added 49 relation rows / 1394 tests, all 9 entry identifiers represented:
+# A-04/A-10 query_unpublished: 8 rows, 256 pass. Unknown query statement/checker
+# and finite-statement role reuse are separate; generated/acquired/verified/
+# adopted surrounding histories keep the query unacquired on the legal side.
+# A normal independent calculation is adopted in the adopted-history case.
+# The negative acquires the query with valid completion evidence. Selected K
+# boundaries require missing_contract; intrinsic-only branches retain it. Legal
+# EH members assert K.query_proofs==(). The old query54 semantic-success N/A
+# obligations are not reclassified as published query contracts.
+# A-03/A-04 cid_alias_use: 20 rows, 480 pass. Ten use edges, including unknown
+# Bodies and Prediction/Interpretation basis via an event consumer. Same Record,
+# two authentic CIDs, zero/one/two in the consumer's actual ancestors. The one
+# row is the nearest legal pair; two adds an acceptance control sharing the
+# negative. A fresh Ledger salt stream plus public merge preserves exact CIDs;
+# public verify succeeds. ED/ER merge rather than re-append the tested DAG.
+# A-18/A-05 origin_boundary: 3 rows, 102 pass. Uncompleted request, acquisition,
+# adoption; the sole event after j switches from another unused origin to the
+# selected origin. Earlier evidence remains before j and intrinsically valid.
+# A-15/A-14/A-05/A-21 coverage_generation_contract: 18 rows, 476 pass / 80 fail.
+# Classification compares late built-in closed with late unknown kind/inner
+# contract; a second pair isolates semantic use with Attempt==start. Plan cell
+# and kernel observations agree, and raw is acquired, finitely applied and
+# adopted. The closed diag(1,1) kernel has joint (1/2,1/2) and evidence mass 1.
+# Two additional retained-only rows stop before acquisition, calculation and
+# adoption (44 pass at EF/EL/EC/EB/ED/ER); their selected semantic uses are covered
+# by the classification/meaning rows, with exclusions recorded explicitly.
+# Twelve further rows stop the measurement-using calculation at generated,
+# acquired or verified (384 tests: 324 pass / 60 fail). M-02 requires the selected
+# origin's completed calculations to be checked even before their adoption.
+# All held/intrinsic members pass. EN/EH/EP accept undeclared measurement meaning
+# where A-15:228 and A-21:251 require missing_contract: 48 direct failures.
+# The remaining 32 failures stop at EN issuance of the expected rejected artifact;
+# ER is NOT reached. These are not independently reproduced ER defects.
+# Direct public EH probes for both unknown forms returned an adopted belief
+# prediction:facts-auth-coverage-claim000021 with kernel_basis length 1.
+# Expected semantic rejection was NOT weakened to match those successful values.
+#
+# ER for semantic missing_contract uses a genuinely issued NoDecision math
+# artifact; verify authenticates that rejected claim. It does not reuse a stale
+# successful claim whose result_mismatch would add another fault. Selected-root
+# pairs for query/coverage are explicitly N/A (24 row/surface pairs): NoDecision
+# cannot issue FRoot. Six more exclusions separate the retained-only rows from
+# selected semantic artifacts. Math restore/verify and intrinsic suffix-root
+# still apply; 30 new row/surface exclusions in total.
+# All other new ER/ED uses are in entry_members/entry_exclusions in the inventory.
+# Final inventory: 907 = fields 686 + relations 196 + supplements 25. Unexpanded
+# field and relation entry pairs: 0. No new specification question was invented.
+#
+# Exploratory corrections, not implementation findings: the first 511-case
+# probe had 395 pass / 116 fail. An unacquired query included in an adopted
+# completion was a second A-10 fault; use a separate adopted normal calculation.
+# Explicitly rooting a held query leaf broke draw-parent equality; completion
+# already reaches the leaf, so no extra fixed root is needed. An unknown claim
+# whose Plan cell was still 'closed' had an M-04 mismatch; align cell/kernel.
+# Replaying a stale success for a semantic NoDecision tested claim mismatch,
+# not the missing-contract artifact; issue the rejected artifact itself.
+# Probe-b: 467 pass / 20 fail (487 cases). Explicit acquired/applied/adopted
+# coverage probe-c: 109 pass / 20 fail (129 cases, including inventory).
+#
+# Verification (PYTHONPATH=src;tests, PYTHONDONTWRITEBYTECODE=1,
+# PYTHONIOENCODING=utf-8, PYTEST_ADDOPTS='', Python -B, --tb=no,
+# -p no:cacheprovider -o junit_family=legacy; no pytest exceeded -n 2):
+# .venv/Scripts/python -B -m pytest tests/test_gate_f_auth_rel.py -n 2 -q
+#   --basetemp=$env:TEMP/sui-rel-six-all
+#   --junitxml=$env:TEMP/gate-f-rel-six-all.xml
+# -> then-current 3120: 3100 pass / 20 fail, 461.90s, exit 1.
+# .venv/Scripts/python -B -m pytest tests/test_gate_f_auth_rel.py -n 2 -q
+#   -k 'cid_alias_use or test_relation_inventory'
+#   --basetemp=$env:TEMP/sui-rel-six-cid
+#   --junitxml=$env:TEMP/gate-f-rel-six-cid.xml
+# -> 481 pass, 53.38s, exit 0 (480 added CID tests plus updated inventory).
+# .venv/Scripts/python -B -m pytest tests/test_gate_f_auth_rel.py -n 2 -q
+#   -k '(coverage_generation_contract and retained) or test_relation_inventory'
+#   --basetemp=$env:TEMP/sui-rel-six-retained
+#   --junitxml=$env:TEMP/gate-f-rel-six-retained.xml
+# -> 45 pass, 5.83s, exit 0 (44 added retention tests plus updated inventory).
+# .venv/Scripts/python -B -m pytest tests/test_gate_f_auth_rel.py -n 2 -q
+#   -k test_relation_inventory
+#   --basetemp=$env:TEMP/sui-rel-six-inventory
+#   --junitxml=$env:TEMP/gate-f-rel-six-inventory.xml
+# -> 1 pass, 1.57s, exit 0 (A-21 metadata included explicitly).
+# .venv/Scripts/python -B -m pytest tests/test_gate_f_auth_rel.py -n 2 -q
+#   -k '(coverage_generation_contract and (generated or acquired or verified)) or test_relation_inventory'
+#   --basetemp=$env:TEMP/sui-rel-six-stops
+#   --junitxml=$env:TEMP/gate-f-rel-six-stops.xml
+# -> 325 pass / 60 fail, 62.59s, exit 1 (384 stage tests plus inventory).
+# .venv/Scripts/python -B -m pytest tests/test_gate_f_auth_rel.py --collect-only -q
+# -> final 4028. Latest XML result per node equals this exact final collection:
+# 3948 pass / 80 fail, zero errors/skips/xfails. Previous 2634 all pass;
+# new 1394 = 1314 pass / 80 fail. No overlapping inventory result is double counted.
+# Output files: C:/Users/you11/AppData/Local/Temp/gate-f-rel-six-{all,cid,retained,inventory,stops}.xml
+# and gate-f-rel-six-{all,cid,retained,stops}.txt,
+# and gate-f-rel-six-final-collected.txt. The two edited files passed AST parsing.
+# Not run: mutation execution, diagnostic/finite-budget equivalence, other test
+# files/F-wide suite, implementation inspection. Thirty-two ER cases were not reached.
+# Next: Claude reviews A-15 semantic acceptance of unknown claim kind/contract;
+# after EN returns the required rejected artifact, the 32 ER cases can run.
+# Reused knowledge/result: primary graph copy, public merge, stoppable computation
+# and genuine-artifact replay were useful; constructor/draw/claim errors must not
+# be counted as the intended relation's rejection.
+# Obsidian Sessions/Projects/Knowledge/Heat remain UNREFLECTED; heat.py not run.
+# This allowed local comment is the fallback record under the test-only allowlist.

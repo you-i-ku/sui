@@ -446,7 +446,7 @@ class FContext:
 
 @_dataclass(frozen=True, slots=True, kw_only=True, init=False)
 class FRoot(_FactoryHandle):
-    """freeze_root / restore_f_root が返す検査済みハンドル。
+    """bind_f_draw / restore_f_root (f_facts) が返す検査済みハンドル。
     F-a で検査する: 問題・資源・continuation・selection draw の全欄の結合。
     一度の発火は同根/uを再使用し、別発火は帳面が別 ordinal を受付する。
     手組み・構造復号だけを認証せず、後着事実を根に取り込まない。"""
@@ -1064,7 +1064,7 @@ class FResolved(_FactoryHandle):
 
 @_dataclass(frozen=True, slots=True, kw_only=True, init=False)
 class FProblem(_FactoryHandle):
-    """prepare_f_problem が返す検査済みハンドル。F-a で検査する: draw を除く凍結問題。
+    """prepare_f_from_facts が返す検査済みハンドル。F-a で検査する: draw を除く凍結問題。
     continuation.after は正準候補と同じ順/件数で一候補一項。問題 digest に含める。
     scope は resolved に一本化。予算・再開・表示を含めず手組みを認証しない。"""
     contract: _ContractRef
@@ -1313,19 +1313,6 @@ class C1Read:
     untouched_records: tuple[_Ref, ...]
 
 
-@_dataclass(frozen=True, slots=True, kw_only=True, init=False)
-class VerifiedResult(_FactoryHandle):
-    """検査係の factory が返すハンドル。F-a で検査する: 内容・入力 digest と方法の結合。
-    f_from_json の構造復号・手作り DTO を検査済みとして評価・保存へ受け入れない。"""
-    kind: _Literal["evaluation", "derive", "records"]
-    input_key: str
-    root_key: str | None
-    input_digest: str
-    method: _ContractRef
-    result_digest: str
-    certificate: ContractValue
-
-
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class FBeliefContent:
     """F-a で検査する: BELIEF の全保存欄、共同核・反映範囲・認証と未完了を区別。"""
@@ -1505,7 +1492,7 @@ class RequiredCapability:
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class FPreflight:
-    """F-a で検査する: 前提検査だけの明示入力。prepare_f_problem 全体の失敗を認証しない。
+    """F-a で検査する: 前提検査だけの明示入力。prepare_f_from_facts 全体の失敗を認証しない。
     不足の主理由はモデル、Ref 辞書順、能力 kind/name/version 順。不足全件は検査証明へ。"""
     parents: frozenset[str]
     model_ref: str | None
@@ -2005,7 +1992,7 @@ _FValue: _TypeAlias = (
     | FFrontierRow | FNodeValue | TailPrefix | MeasureCell | MeasurePartition | AtomMass | MeasureCheck
     | LimitProcess | LimitProcessArgs | LimitObservations | BlankLimitCost | PrefixLogLoss | LimitScope
     | FLimitProblem | LinearSequenceArgs | ExactSequence | LimitInformation | LimitCost
-    | LimitCertificate | C1Probe | C1Read | VerifiedResult | FBeliefContent
+    | LimitCertificate | C1Probe | C1Read | FBeliefContent
     | C1MeasurementContent | FModelDependency | FRecordDependency | FCapabilityDependency | FResourceSnapshot | FPreferencePoint | FPreferenceCausality
     | ModelInput | TailInput | EvaluationInput | ComputationInput | EnclosureInput | ChoiceInput | ChoiceOutput | ProofCheck | SimulationBinding | ObservationInput | GenerationInput | GenerationOutput | ClockInput | CursorInput | CandidateInput | DrawRequest | RequiredCapability | FPreflight | PreflightReady | ContinuationAfter | FContinuation
 )
@@ -2017,7 +2004,7 @@ def canonical_candidates(actions: tuple[ActionSpec, ...], *,
                          draws: tuple[DrawRecord, ...], registry: FRegistry) -> CandidateSet:
     """F-a で registry を使って族を正準化し入力の最初の代表順を保持する。
     表示別名で質量を増やさず、候補/測度が未認証でも消さない。
-    モデル参照や操作全体の評価可能性は prepare_f_problem が検査する。
+    モデル参照や操作全体の評価可能性は prepare_f_from_facts が検査する。
     宣言欠落 FSpecificationMissing(missing_contract)、実装欠落 FIncomplete(algorithm_unavailable)、
     不正入力/衝突 FInputError。正準化だけを認証とせず、selection を隠れて引かない。"""
     _require(registry, FRegistry)

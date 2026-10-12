@@ -142,6 +142,8 @@ class AuthTarget:
     # Entry membership alone does not mean the same semantic use at that entry.
     entry_uses: tuple[tuple[str, str, str], ...] = ()
     entry_rules: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    entry_members: tuple[tuple[str, str, str, str], ...] = ()
+    entry_exclusions: tuple[tuple[str, str, str], ...] = ()
     mutation_checks: tuple[int, ...] = ()
     discrimination_limits: str = ""
 
@@ -656,11 +658,57 @@ SURVIVOR_RELATION_PAIRS = tuple(replace(p,
     if p.mutation_checks[0] in (2,3,4) else p for p in SURVIVOR_RELATION_PAIRS)
 NEW_RELATION_PAIRS = (*NEW_RELATION_PAIRS, *SURVIVOR_RELATION_PAIRS)
 
+# Sixth request: use-sensitive obligations found after the earlier inventory.
+# The rules/expectations below come from the paper and the explicit user table,
+# not from the implementation's review4 regression tests.
+REVIEW_RELATION_PAIRS = (
+    *(relation("query_unpublished", form, ("A-04","A-10","A-21","C-01","C-07"),
+        stage=stage, reason="missing_contract", exception="FSpecificationMissing", line=166,
+        negative="add the query proof to this origin's ContentAcquired.contents; collect no invented query semantics",
+        legal="same query proof, valid about/basis and completion evidence, remains unacquired; K.query_proofs is empty")
+      for form in ("unknown_statement", "finite_statement_reuse")
+      for stage in ("generated", "acquired", "verified", "adopted")),
+    *(relation("cid_alias_use", edge+"."+count, ("A-03","A-04","C-01","C-07"),
+        stage="consumer", reason="unresolved_reference", line=150,
+        negative="same Ref has two authentic CIDs in scope, neither an actual ancestor of the using event",
+        legal="one Ref, "+count+" authentic CID(s) among actual ancestors; the other in-scope CID cannot manufacture ambiguity")
+      for edge in ("Decided.inputs","JobOpened.decision","AttemptStarted.job","Observed.caused_by",
+                   "Intention.decided_in","Intention.supersedes","Intention.via","Preference.basis",
+                   "Prediction.basis","Interpretation.basis")
+      for count in ("one","two")),
+    *(relation("origin_boundary", event, ("A-18","A-05","C-01","C-07"),
+        stage=stage, line=234,
+        negative="the sole event after j belongs to the selected origin",
+        legal="same late event belongs to a different unused origin; earlier prerequisites and intrinsic chronology remain valid")
+      for event,stage in (("request","requested"),("acquisition","acquired"),("adoption","adopted"))),
+    *(relation("coverage_generation_contract", form, ("A-15","A-14","A-05","A-21","C-01","C-07"),
+        stage=stage, line=228,
+        negative=("built-in closed claim with Attempt > start" if stage=="classification" else
+                  "undeclared claim kind/inner contract used as a measurement, with otherwise valid window generation"),
+        legal=("undeclared claim at Attempt > start is legal to retain; semantic use still reports missing_contract"
+               if stage=="classification" else "built-in closed claim with Attempt == start and declared measurement semantics"))
+      for form in ("kind", "inner_contract") for stage in ("classification","meaning")),
+    *(relation("coverage_generation_contract", form, ("A-15","A-14","A-05","A-21","M-02","C-01","C-03","C-07"),
+        stage=mode+"."+stop, line=228,
+        negative=("built-in closed claim with Attempt > start" if mode=="classification" else
+                  "undeclared claim kind/inner contract used by a completed finite update"),
+        legal=("undeclared claim at Attempt > start is legal intrinsically; selected K requires its missing meaning"
+               if mode=="classification" else "built-in closed claim with Attempt == start and declared measurement semantics"))
+      for form in ("kind","inner_contract") for mode in ("classification","meaning")
+      for stop in ("generated","acquired","verified")),
+    *(relation("coverage_generation_contract", form, ("A-15","A-14","A-05","A-21","C-01","C-07"),
+        entries=("EF","EL","EC","EB","ED","ER"),stage="retained",line=228,
+        negative="built-in closed with Attempt > start; stop before acquisition/computation/adoption",
+        legal="undeclared claim kind/inner contract with Attempt > start, retained only; end and Attempt remain <= receipt")
+      for form in ("kind","inner_contract")),
+)
+NEW_RELATION_PAIRS = (*NEW_RELATION_PAIRS, *REVIEW_RELATION_PAIRS)
+
 # A-18:234 now closes all 86 EC/EB obligations. The independent finite branch
 # keeps its own context; it is not numerical input to the selected C1/bridge.
 # M-02:267 limits numerical replay to selected-origin K, unlike A-19 intrinsic
 # authentication. Acceptance controls remain in the denominator and entry map.
-INDEPENDENT_RELATIONS = ("target_witness", "generation_class", "sequence_set", "stage_boundary", "survivor_generation", "context_revisit", "typed_point_alias", "closed_window_receipt")
+INDEPENDENT_RELATIONS = ("target_witness", "generation_class", "sequence_set", "stage_boundary", "survivor_generation", "context_revisit", "typed_point_alias", "closed_window_receipt", "query_unpublished", "origin_boundary", "coverage_generation_contract")
 
 
 def relation_rules(pair, entry):
@@ -671,13 +719,28 @@ def relation_surfaces(pair, entry):
     if entry == "ED":
         return ("bind", "evaluate")
     if entry == "ER":
+        if pair.kind=="coverage_generation_contract" and pair.stage=="retained":
+            return ("restore_math","verify","restore_root","limit_restore_math","limit_verify")
+        if pair.kind in ("query_unpublished","coverage_generation_contract"):
+            # Missing meaning can issue a genuine NoDecision math artifact,
+            # but cannot issue a selected FRoot. Keep that exclusion in the row.
+            return ("restore_math","verify","restore_root","limit_restore_math","limit_verify",
+                    "selected_restore_math","selected_verify")
         return ("restore_math", "verify", "restore_root") + (
             ("limit_restore_math", "limit_verify", "selected_restore_math",
-             "selected_verify", "selected_restore_root") if pair.kind in ("sequence_set","context_revisit") else ())
+             "selected_verify", "selected_restore_root") if pair.kind in ("sequence_set","context_revisit","query_unpublished","origin_boundary","coverage_generation_contract") else ())
     return ("default",)
 
 
 def relation_bad_outcome(pair, entry, surface="default"):
+    selected = entry in ("EN","EH","EP") or (entry=="ER" and surface.startswith("selected_"))
+    if pair.kind == "query_unpublished":
+        return ("verified_missing_contract" if surface=="selected_verify" else "missing_contract") if selected else "accept"
+    if pair.kind == "origin_boundary":
+        return "shape" if selected else "accept"
+    if pair.kind == "coverage_generation_contract":
+        return "shape" if pair.stage.split(".")[0] in ("retained","classification") else (
+            ("verified_missing_contract" if surface=="selected_verify" else "missing_contract") if selected else "accept")
     if pair.kind == "sequence_set":
         uses_k = entry in ("EN", "EH", "EP") or (entry == "ER" and surface.startswith("selected_"))
         return "proof_mismatch" if uses_k else "accept"
@@ -685,6 +748,23 @@ def relation_bad_outcome(pair, entry, surface="default"):
         bound = entry in ("EN","EH","EP") or (entry=="ER" and surface.startswith("selected_"))
         return "shape" if bound else "accept"
     return pair.reason
+
+
+def relation_good_outcome(pair, entry, surface="default"):
+    if pair.kind=="coverage_generation_contract" and pair.stage.split(".")[0]=="classification":
+        selected = entry in ("EN","EH","EP") or (entry=="ER" and surface.startswith("selected_"))
+        return ("verified_missing_contract" if surface=="selected_verify" else "missing_contract") if selected else "accept"
+    return "accept"
+
+
+def relation_surface_exclusions(pair, entry):
+    if entry=="ER" and pair.kind=="coverage_generation_contract" and pair.stage=="retained":
+        return tuple((entry,s,"This row stops at intrinsic retention; selected-origin semantic use is covered by classification/meaning rows.")
+                     for s in ("selected_restore_math","selected_verify","selected_restore_root"))
+    if entry=="ER" and pair.kind in ("query_unpublished","coverage_generation_contract"):
+        return ((entry,"selected_restore_root",
+            "The missing-contract member issues NoDecision, not FProblem, so no authentic selected FRoot exists. Replay/verify of its rejected math artifact and draw-suffix root authentication remain applicable."),)
+    return ()
 
 
 FIELD_TARGETS = tuple(replace(r,
@@ -702,11 +782,25 @@ NEW_RELATION_TARGETS = tuple(replace(target("relation", "F-a relational authenti
         if p.mutation_checks==(1,) else
         "Only public local/bound authentication and repeated Point uses are observable; internal encounter order and individual mutant killing are unverified."
         if p.kind=="context_revisit" else
+        "The one-ancestor row is the nearest legal pair; the two-ancestor row adds the required acceptance control with the same negative. CID identity and ancestry are preserved through public merge, including ED/ER. These repeats are not independent mutant kills."
+        if p.kind=="cid_alias_use" else
         "Single-fault pair authored from the spec; mutant execution and finite-budget equivalence unverified."
         if "C-06" in p.rules else ""),
     entry_uses=tuple((e,s,"not_applicable" if p.not_applicable else relation_bad_outcome(p,e,s)) for e in p.entries for s in relation_surfaces(p,e)),
     entry_rules=tuple((e,relation_rules(p,e)) for e in p.entries),
+    entry_members=tuple((e,s,"not_applicable" if p.not_applicable else relation_good_outcome(p,e,s),
+        "not_applicable" if p.not_applicable else relation_bad_outcome(p,e,s))
+        for e in p.entries for s in relation_surfaces(p,e)) + tuple(
+            (e,s,"not_applicable","not_applicable") for entry in p.entries
+            for e,s,_ in relation_surface_exclusions(p,entry)),
+    entry_exclusions=tuple(item for e in p.entries for item in relation_surface_exclusions(p,e)),
     not_applicable=((p.not_applicable or p.pending_reason) if p.not_applicable or p.pending_entries else
+        "Retention-only stop: EN/EH/EP selected measurement interpretation and ER selected-origin artifacts are exercised by the separate classification/meaning rows. EC/EB are unused branches; EF/EL/ED and their ER envelopes retain/authenticate without deriving this origin's K."
+        if p.kind=="coverage_generation_contract" and p.stage=="retained" else
+        "A-04/A-18/A-15: semantic/selected-origin rejection applies at EN/EH/EP and ER selected_*; EF/EL, EC/EB unused branch, ED suffix and ER preflight/limit/suffix are intrinsic retention controls. EH/EP have no standalone artifact issuer (E-01:350,352). For missing_contract, ER replays a genuinely issued NoDecision artifact; selected_root is N/A because NoDecision cannot issue FRoot (suffix-root remains covered). EX syntax cannot authenticate these relations."
+        if p.kind in ("query_unpublished","origin_boundary","coverage_generation_contract") else
+        "A-03: Prediction/Interpretation basis is exercised through an event consumer. Unknown Preference is intrinsic-only; selected EN/EB use the declared style contract. EX syntax cannot authenticate actual ancestry."
+        if p.kind=="cid_alias_use" else
         "M-02:267: numerical rejection EN/EH/EP and ER selected_* only; EF/EL, EC/EB independent branch, ED suffix, ER preflight/limit/suffix are acceptance controls. EH/EP have no standalone artifact issuer (E-01:350,352)."
         if p.kind=="sequence_set" else
         "Ledger.append rejects seq/run_index before a facts graph exists; construction pair only, no bypass"
@@ -715,6 +809,7 @@ NEW_RELATION_TARGETS = tuple(replace(target("relation", "F-a relational authenti
         if p.kind in ("parent_child","body_use") and p.variant.startswith("Preference.") else
         "only the listed entry uses; EX decoding cannot authenticate a relation"),
     representative="not_applicable; no legal F-a pair" if p.not_applicable else
+        "pending; public construction declaration requested" if p.pending_entries else
         "test_gate_f_auth_rel.test_relation_pair["+p.id+"]") for p in NEW_RELATION_PAIRS)
 
 # Retain the old denominator and its obligations; do not rename supplemental

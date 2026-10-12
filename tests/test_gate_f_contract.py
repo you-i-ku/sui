@@ -29,9 +29,9 @@ from gate_f_cases import (
     METHOD, ScriptedSource, action, candidates, canonical, histories, observations,
     make_case, make_root, make_problem, plain, predicate, resources, context_for, finite_world,
     observation_case, append_record, all_records, add_preference, digest,
-    mixed_measure, draw_request, draw_binding, draw_book, continuation_for,
+    mixed_measure, draw_request, continuation_for,
     bit_kernel, execute, policy, declaration, idle_kernel, outcome, diagonal,
-    world_request, prepare_case,
+    prepare_case,
     review5_primary_generation_legacy,
     limit_document, c1_case, legacy_case, legacy_input,
     builtin_declarations, callback_declaration, policy_end_case, UNION_CASES, union_case,
@@ -696,16 +696,6 @@ def test_FA19_resume_retains_root_and_u():
     assert selected.root.selection_draw == root.selection_draw
 
 
-def begin_attempt(case, *, root=None, problem=None):
-    return fe.begin_f_attempt(request_id='request-1', firing_id='firing-1', policy_generation='generation-1',
-        parents=case.ledger.heads(), evidence=tuple(r.id for r in case.records if r.body.contract == fc.MEASUREMENT), problem=problem, root=root,
-        clock=case.clock, ids=case.ids, membrane=PRODUCER)
-
-
-
-
-
-
 @pytest.mark.parametrize('variant', ['10', '01'])
 @pytest.mark.parametrize('label', ['y0', 'y1'])
 @pytest.mark.parametrize('delay', [0, 123456789])
@@ -962,28 +952,6 @@ def test_v010_02_builtin_seven_fields_exact():
     assert all(callable(i.implementation) for i in registry.implementations)
 
 
-def assert_records_verification(checked, result_verification):
-    verification = checked.verification
-    assert verification.kind == 'records'
-    assert verification.method == ContractRef('sui.f.verify_records', '2')
-    assert verification.input_key == checked.ticket.attempt_id
-    assert verification.input_digest == digest(checked.ticket)
-    # The public wire representation is the hashed input here, never a math oracle.
-    encoded = json.loads(fe.f_json(checked))
-    assert encoded['type'] == 'PreparedFRecords'
-    direct = encoded['value']
-    assert set(direct) == {'root_key', 'parents', 'records', 'dependencies', 'ticket', 'verification'}
-    direct.pop('verification')
-    expected_digest = digest(direct)
-    assert verification.result_digest == expected_digest
-    assert plain(verification.certificate) == {
-        'contract': {'name': 'sui.f.records_verification', 'version': '2'},
-        'value': {'ticket': plain(checked.ticket), 'prepared_digest': expected_digest,
-                  'result_verification': plain(result_verification)}}
-
-
-
-
 def test_v010_06_process_digest_input_assembly():
     from hashlib import sha256
     doc = limit_document()
@@ -1177,38 +1145,6 @@ def test_FA14_quiet_selected_constant_false(u, chosen):
         assert_quantity(result.evaluation.q_star[i], FIXED['FA14']['q'][i])
 
 
-def assert_commit_keeps_prepared_parents(case, prepared, *, phase):
-    # GF-M41; §3-10-12-9: after orders storage, parents are already frozen.
-    frozen_parents = {item.record.id: item.parents for item in prepared.records}
-    assert frozen_parents
-    case.clock.advance(1)
-    late = append_record(case.ledger, case.clock, case.ids, Observed(
-        route='fixture-late-fact', content=Payload.json({'arrived_after_preparation': phase}),
-        contract=ContractRef('fixture.late_fact', '1'), received_ns=case.clock.mono_ns()))
-    late_entry, = case.ledger.entries_of(late.id)
-    assert late.category is Category.FACT
-    assert case.ledger.heads() == frozenset({late_entry.cid})
-    assert all(late_entry.cid not in parents and parents != case.ledger.heads()
-               for parents in frozen_parents.values())
-    fe.commit_f(prepared, ledger=case.ledger)
-    for item in prepared.records:
-        saved, = case.ledger.entries_of(item.record.id)
-        assert saved.parents == frozen_parents[item.record.id]
-        assert late_entry.cid not in saved.parents
-        assert late_entry.cid not in case.ledger.ancestors((saved.cid,))
-        assert case.ledger.record(saved.cid) == item.record
-    assert {item.record.id: item.parents for item in prepared.records} == frozen_parents
-    before_retry = case.ledger.entries()
-    fe.commit_f(prepared, ledger=case.ledger)
-    assert case.ledger.entries() == before_retry
-
-
-
-
-
-
-
-
 def test_review_F05_choice_uses_the_frozen_draw_and_accepts_equal_float():
     root = make_root(make_case('FA19'), u=F(1, 2))
     evaluation = f.evaluate_f_recursive(root, budget=BUDGET)
@@ -1372,28 +1308,6 @@ def test_review_F14_conflicting_count_with_same_measurement_is_rejected():
         f.update_c1_summary(summary, frame=frame)
     assert caught.value.reason == 'measurement_conflict'
     assert (summary.N, summary.T_s) == (1, F(2))
-
-
-
-def structure_rootless_context(case, *, name='fixture.absent'):
-    request = f.FPreflight(parents=case.ledger.heads(), model_ref=None, required_records=(),
-        required_capabilities=(f.RequiredCapability(kind='predicate', ref=ContractRef(name, '1'),
-                                                    implementation_required=True),))
-    resource = resources(case)
-    context = fe.FResultContext(attempt=None, input=request)
-    result = f.check_f_preflight(request, resources=resource)
-    verification = fe.verify_f_result(result, context=context, resources=resource, budget=BUDGET)
-    return context, result, verification
-
-
-def structure_firing(case):
-    return fr.Firing(policy_generation='g-structure', firing_id='f-structure', reply_index=0,
-                     source='internal', basis=(), detected=f.ClockReading(run=case.clock.run, time_ns=0))
-
-
-
-
-
 
 
 
@@ -1609,34 +1523,6 @@ def structure_assert_causality(case, causality):
     assert causality.before == tuple(sorted(view.before, key=lambda edge: tuple(map(str, edge))))
 
 
-def structure_conflicting_styles():
-    case = make_case('FA08'); request = world_request(case)
-    resolved = fe.resolve_f_preferences(from_ledger(case.ledger, case.ledger.heads()), resources=resources(case))
-    add_preference(case, STRUCTURE_STYLE, fc.STYLE, parents=())
-    add_preference(case, {**STRUCTURE_STYLE, 'gamma': [2, 1]}, fc.STYLE, parents=())
-    return case, replace(request, parents=case.ledger.heads(), records=tuple(r.id for r in case.records),
-                         context=case.context), resolved
-
-
-def structure_saved_selection():
-    case = make_case('FA08'); root = make_root(case); started = begin_attempt(case, root=root)
-    fe.commit_f(fe.verify_f_records(started, resources=resources(case), budget=BUDGET), ledger=case.ledger)
-    case.records = all_records(case.ledger); resource = resources(case)
-    result = f.evaluate_f(root, budget=BUDGET)
-    context = fe.FResultContext(attempt=started.ticket, input=root)
-    verification = fe.verify_f_result(result, context=context, resources=resource, budget=BUDGET)
-    prepared = fe.make_f_records(result, attempt=started.ticket, verification=verification,
-        clock=case.clock, ids=case.ids, producer=PRODUCER, membrane=PRODUCER)
-    fe.commit_f(fe.verify_f_records(prepared, resources=resource, budget=BUDGET), ledger=case.ledger)
-    decided, = [r.record for r in prepared.records if isinstance(r.record.body, Decided)]
-    return case, result, context, verification, prepared, case.ledger.entries_of(decided.id)[0].cid
-
-
-
-
-
-
-
 # §3-10-14-11 audit map. Existing FA tests are retained and are part of coverage.
 # A: test_structure_A_*; B: test_structure_B_* plus review_F10/F11/F12/F14/F15/F16,
 # review_F05 (other u), extra09/v010_05 commit parents, preference_*.
@@ -1650,45 +1536,6 @@ def review3_roundtrip(value, through_json, contract=fc.VALUE_FACTS):
     return fe.f_from_json(fe.f_json(value), contract=contract) if through_json else value
 
 
-def review3_freeze(problem, u=F(1, 4)):
-    source = ScriptedSource(({'u': plain(u)},))
-    draw = draw_book({'selection': source}).for_selection(problem, request_id='review3')
-    root = fe.freeze_root(problem, selection_draw=draw)
-    assert len(source.calls) == 1
-    return root
-
-
-def review3_rebase_root(root, request, *, records=None):
-    """Construct a structural root from a legitimate numerical control world.
-
-    Rebase only the claimed ledger frontier/context. Digest formulas are checked
-    against an unchanged public root first; no evaluator/factory state is injected.
-    The forged value remains unissued and is submitted only to restore/verify.
-    """
-    wire = json.loads(fe.f_json(root))
-    # 今の約束 E-05 (2026-10-11): drop the root-only fields and restore the
-    # problem contract (root/2 -> problem/2) to recover the problem's key.
-    assert root.problem_key == digest({**{k: v for k, v in wire.items()
-        if k not in ('problem_key', 'root_key', 'selection_draw', 'draw_point', 'draw_record_digest')},
-        'contract': {'name': 'sui.f.problem', 'version': '2'}})
-    assert root.root_key == digest({'problem_key': root.problem_key, 'selection_draw': wire['selection_draw']})
-    wire['world_manifest']['request'] = plain(request)
-    if records is not None:
-        material={str(record.id):review4_record_digest(record) for record in records}
-        for dependency in wire['world_manifest']['dependencies']['records']:
-            dependency['digest']=material[dependency['ref']]
-    for field in ('parents', 'context', 'E', 'K', 'candidates', 'continuation'):
-        wire[field] = plain(getattr(request, field))
-    wire['world_key'] = digest({'domain': 'sui.f.world/1', 'manifest': wire['world_manifest']})
-    wire['problem_key'] = digest({**{k: v for k, v in wire.items()
-        if k not in ('problem_key', 'root_key', 'selection_draw', 'draw_point', 'draw_record_digest')},
-        'contract': {'name': 'sui.f.problem', 'version': '2'}})
-    wire['selection_draw']['context_key'] = wire['problem_key']
-    wire['selection_draw']['request']['context_key'] = wire['problem_key']
-    wire['root_key'] = digest({'problem_key': wire['problem_key'], 'selection_draw': wire['selection_draw']})
-    return fe.f_from_json(canonical(wire), contract=fc.ROOT_FACTS)
-
-
 def review3_rebase_result(result, root):
     old = result.root
     substitutions = {old.root_key: root.root_key, old.problem_key: root.problem_key, old.world_key: root.world_key}
@@ -1700,53 +1547,6 @@ def review3_rebase_result(result, root):
         if isinstance(value, list): return [rewrite(item) for item in value]
         return substitutions.get(value, value) if isinstance(value, str) else value
     return fe.f_from_json(canonical(rewrite(json.loads(fe.f_json(result)))), contract=fc.VALUE_FACTS)
-
-
-@pytest.fixture(scope='module')
-def review3_fact_worlds():
-    original = make_case('FA05'); resource = resources(original)
-    request = world_request(original, resource=resource)
-    root = review3_freeze(make_problem(original)); selected = f.evaluate_f(root, budget=BUDGET)
-    assert isinstance(selected, f.Selected) and len(root.E.links) == 1
-    variants = {}
-    for fault in ('omitted-facts', 'substituted-records'):
-        records = []
-        for record in original.records:
-            if fault == 'omitted-facts' and record.category is Category.FACT: continue
-            if fault == 'substituted-records' and record.body.contract in (fc.MEASUREMENT, fc.OBSERVATION_BINDING):
-                data = record.body.content.as_json()
-                if record.body.contract == fc.MEASUREMENT: data['value']['value'] = 1
-                else: data['cell'] = 'cell-1'
-                record = replace(record, body=replace(record.body, content=Payload.json(data)))
-            records.append(record)
-        # A separate, honest ledger supplies a positive numerical control with
-        # precisely these measurements. The attack pairs its claim with the OLD ledger.
-        ledger = make_case('FA08').ledger
-        for record in sorted(records, key=lambda r: r.at.seq): ledger.append(record, ledger.heads())
-        witness = replace(original, ledger=ledger, records=tuple(records), context=context_for(ledger, original.clock))
-        witness_root = review3_freeze(make_problem(witness))
-        witness_result = f.evaluate_f(witness_root, budget=BUDGET)
-        assert isinstance(witness_result, f.Selected)
-        claimed_context = (replace(request.context, fact_ancestors={cid: frozenset() for cid in request.context.fact_ancestors})
-                           if fault == 'omitted-facts' else request.context)
-        witness_request = world_request(witness)
-        forged_request = replace(witness_request, parents=request.parents, context=claimed_context)
-        forged_root = review3_rebase_root(witness_root, forged_request)
-        variants[fault] = (tuple(records), forged_request, forged_root, review3_rebase_result(witness_result, forged_root))
-    return original, resource, request, root, selected, variants
-
-
-def review3_missing_kernel():
-    case = make_case('FA08'); current = resources(case); base = current.registry
-    registry = f.make_f_registry(declarations=base.declarations,
-        implementations=tuple(i for i in base.implementations if i.kind != 'kernel'))
-    old = fe.make_f_resources(models=(case.model,), records=case.records, registry=registry, ledger=case.ledger)
-    preparation, result = fe.prepare_f_request(world_request(case), resources=old, budget=BUDGET)
-    assert isinstance(result, f.NoDecision) and (result.outcome, result.reason) == ('incomplete', 'algorithm_unavailable')
-    assert result.root_key is None
-    kernel, = [d for d in preparation.dependencies.capabilities if d.kind == 'kernel']
-    assert kernel.declaration is not None and kernel.implemented is False
-    return case, old, current, preparation, result
 
 
 # Review 4 / §3-10-14-補2: same labels do not authenticate contents.
@@ -1766,128 +1566,9 @@ def review4_record_digest(record):
 from functools import lru_cache
 
 
-@lru_cache(maxsize=None)
-def review4_seed(*, through_json=False, reply_index=0, firing_id='review4-firing', rootless=False):
-    case = make_case('FA08'); book = fr.FiringBook()
-    firing = fr.Firing(policy_generation='review4-generation', firing_id=firing_id, reply_index=reply_index,
-        source='internal', basis=(), detected=f.ClockReading(run=case.clock.run, time_ns=0))
-    receipt = book.accept(firing)
-    root = None
-    if not rootless:
-        problem = make_problem(case)
-        receipt = book.bind(receipt, problem=problem)
-        source = ScriptedSource(({'u': [1, 4]},))
-        root = book.select(receipt, draws=draw_book({'selection': source}))
-        assert len(source.calls) == 1
-    started = fe.begin_f_attempt(request_id=receipt.request_id, firing_id=firing.firing_id,
-        policy_generation=firing.policy_generation, parents=case.ledger.heads(), evidence=(),
-        problem=None, root=root, clock=case.clock, ids=case.ids, membrane=PRODUCER)
-    start_record, = [item.record for item in started.records]
-    assert started.ticket.started_digest == review4_record_digest(start_record)
-    started = review3_roundtrip(started, through_json)
-    checked_start = fe.verify_f_records(started, resources=resources(case), budget=BUDGET)
-    fe.commit_f(checked_start, ledger=case.ledger)
-    case.records = all_records(case.ledger); resource = resources(case)
-    if rootless:
-        input_value = f.FPreflight(parents=started.ticket.parents, model_ref=None, required_records=(),
-            required_capabilities=(f.RequiredCapability(kind='predicate', ref=ContractRef('review4.absent', '1'),
-                                                       implementation_required=True),))
-        result = f.check_f_preflight(input_value, resources=resource)
-        assert isinstance(result, f.NoDecision) and result.reason == 'missing_contract'
-    else:
-        input_value = root; result = f.evaluate_f(root, budget=BUDGET)
-        assert_selected(result, root, 'Q', F(1, 4))
-    context = review3_roundtrip(fe.FResultContext(attempt=started.ticket, input=input_value), through_json)
-    if through_json and not rootless:
-        restored = fe.restore_f_root(fe.f_json(context.input), resources=resource, budget=BUDGET)
-        assert plain(restored) == plain(context.input)
-        context = replace(context, input=restored)
-    result = review3_roundtrip(result, through_json)
-    verification = fe.verify_f_result(result, context=context, resources=resource, budget=BUDGET)
-    prepared = fe.make_f_records(result, attempt=context.attempt, verification=verification,
-        clock=case.clock, ids=case.ids, producer=PRODUCER, membrane=PRODUCER)
-    prepared = review3_roundtrip(prepared, through_json)
-    if through_json:
-        # Decoding preserves data, but does not issue a live verification handle.
-        renewed = fe.verify_f_result(result, context=context, resources=resource, budget=BUDGET)
-        assert plain(prepared.verification) == plain(renewed)
-        prepared = replace(prepared, verification=renewed)
-    checked = fe.verify_f_records(prepared, resources=resource, budget=BUDGET)
-    return dict(case=case, book=book, firing=firing, receipt=receipt, root=root, started=started,
-        start_record=start_record, resource=resource, context=context, result=result,
-        verification=verification, prepared=prepared, checked=checked, problem=None if rootless else problem)
-
-
-def review4_flow(**options):
-    # Share immutable public certificates; every test gets fresh mutable ledger,
-    # firing book, clock and ID source, including the positive ledger-copy path.
-    from copy import deepcopy
-    seed = review4_seed(**options)
-    case = make_case('FA08'); case.ledger.merge(seed['case'].ledger)
-    case.clock = deepcopy(seed['case'].clock); case.ids = deepcopy(seed['case'].ids)
-    case.records = all_records(case.ledger)
-    book = fr.FiringBook(); receipt = book.accept(seed['firing'])
-    if seed['problem'] is not None:
-        receipt = book.bind(receipt, problem=seed['problem'])
-        source = ScriptedSource(({'u': [1, 4]},))
-        root = book.select(receipt, draws=draw_book({'selection': source}))
-        assert plain(root) == plain(seed['root']) and len(source.calls) == 1
-    return dict(seed, case=case, book=book, receipt=receipt, resource=resources(case))
-
-
-def review4_pair(through_json=False):
-    a = review4_flow(through_json=through_json)
-    b = review4_flow(through_json=through_json, reply_index=1)
-    ta, tb = a['started'].ticket, b['started'].ticket
-    assert ta.started == tb.started and ta.attempt_id == tb.attempt_id
-    assert ta.request_id != tb.request_id and ta.firing_id == tb.firing_id
-    assert ta.started_digest != tb.started_digest
-    assert a['root'].root_key == b['root'].root_key
-    assert a['start_record'].id == b['start_record'].id
-    return a, b
-
-
 def review4_mixed_resources(a, b):
     return fe.make_f_resources(models=(a['case'].model,), records=(b['start_record'],),
         registry=f.builtin_f_registry(), ledger=a['case'].ledger)
-
-
-def review4_wrong_finished(flow, through_json):
-    case = flow['case']; other = make_case('FA08').ledger
-    other.merge(case.ledger)
-    start_entry, = other.entries_of(flow['started'].ticket.started)
-    prepared = review3_roundtrip(flow['checked'], through_json)
-    finished = None
-    for item in sorted(prepared.records, key=lambda item: item.record.at.seq):
-        if item.record.body.contract == fc.DECISION_ATTEMPTED:
-            assert item.parents == flow['started'].ticket.parents == frozenset()
-            finished = other.append(item.record, (start_entry.cid,))
-            assert other.record(finished.cid) == item.record
-            assert finished.parents != item.parents
-        else:
-            other.append(item.record, item.parents)
-    assert finished is not None
-    resource = fe.make_f_resources(models=(case.model,), records=all_records(other),
-        registry=f.builtin_f_registry(), ledger=other)
-    return other, finished, resource
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # Mathematics retained when storage/receipt tests moved to tests_fb (v0.14).
@@ -1904,3 +1585,211 @@ def test_v010_03_predicate_unknown_retains_requested_work():
     assert result.value == 'unknown' and result.work is not None
 
 
+
+
+# ---------------------------------------------------------------------------
+# 2026-10-12 review3 R05: confirmations that the retired old-entrance tests
+# carried and the facts/auth/rel tests did not; rebuilt on the facts entrance.
+from sui import f_facts as ff
+from sui.records import Preference
+from gate_f_facts_cases import (FactsCase, finite_world as facts_world, prepare as facts_prepare,
+                                add_draw as facts_add_draw,
+                                LEGACY_PREFERENCE as FACTS_LEGACY_PREFERENCE)
+
+
+@pytest.mark.parametrize('mode', ['valid', 'invalid_args', 'invalid_input', 'invalid_output', 'source_exception', 'declaration_only'])
+def test_review3_R05_callback_wire_validation_and_implementation_distinction(mode):
+    # V-11: an external implementation's args/input/output are checked at the
+    # wire and its own exception passes through; declaration-only is unavailable.
+    case = make_case('FA01')
+    calls = []; failure = RuntimeError('fixture callback failure')
+    def callback(*, args, input, context):
+        calls.append(plain(args))
+        assert plain(args) == {'value': True}
+        if mode == 'source_exception':
+            raise failure
+        return {'unexpected': True} if mode == 'invalid_output' else {
+            'value': 'true', 'basis': [], 'missing': [], 'work': None}
+    declaration = callback_declaration()
+    implementation = f.CapabilityImplementation(kind='predicate', ref=declaration.ref,
+                                                implementation=callback, identity='fixture.callback/1')
+    builtin = f.builtin_f_registry()
+    registry = f.make_f_registry(declarations=builtin.declarations + (declaration,),
+        implementations=builtin.implementations + (() if mode == 'declaration_only' else (implementation,)))
+    pred = f.PredicateRef(name=declaration.ref.name, version='1',
+                          args={'value': 'true' if mode == 'invalid_args' else True})
+    point = case.predict('r05-predicate', fc.PREDICATE, pred, basis=(case.points['model'],)); case.context()
+    def run():
+        prepared = ff.prepare_f_predicate_from_facts(case.reader, fixed_parents=case.fixed_parents,
+            model_ref=case.points['model'], context_ref=case.points['context'], predicate_ref=point,
+            quantity_refs=(), registry=registry, budget=BUDGET)
+        snapshot = replace(prepared.snapshot, quantities=[]) if mode == 'invalid_input' else prepared.snapshot
+        return f.check_predicate(prepared.predicate, snapshot=snapshot, resources=prepared.resources)
+    if mode in ('invalid_args', 'invalid_input', 'invalid_output'):
+        with pytest.raises(f.FInputError) as caught: run()
+        if mode == 'invalid_output': assert caught.value.reason == 'capability_output_shape'
+        assert len(calls) == (1 if mode == 'invalid_output' else 0)
+    elif mode == 'source_exception':
+        with pytest.raises(RuntimeError) as caught: run()
+        assert caught.value is failure and len(calls) == 1
+    elif mode == 'declaration_only':
+        with pytest.raises(f.FIncomplete) as caught: run()
+        assert caught.value.reason == 'algorithm_unavailable' and calls == []
+    else:
+        assert run().value == 'true' and len(calls) == 1
+
+
+def test_review3_R05_all_evaluators_use_the_compiled_world_after_resolvers_are_disabled(monkeypatch):
+    # M-19 / C-05: after issue, no math entry re-enters a registry resolver or a
+    # fresh reader; the certified world carries everything it needs.
+    import sui.f_model as model_api
+    case = make_case('FA08'); base = f.builtin_f_registry()
+    calls = []; disabled = [False]
+    def guarded(implementation):
+        def call(**kwargs):
+            assert not disabled[0], 'evaluation re-entered a registry resolver'
+            calls.append(implementation.kind)
+            return implementation.implementation(**kwargs)
+        return call
+    implementations = tuple(replace(i, implementation=guarded(i), identity='fixture.guarded/1')
+                            if i.kind in ('kernel', 'policy') else i for i in base.implementations)
+    registry = f.make_f_registry(declarations=base.declarations, implementations=implementations)
+    prepared = facts_prepare(case, registry=registry)
+    assert isinstance(prepared.value, f.FProblem)
+    draw = facts_add_draw(case, prepared.value.problem_key)
+    root = ff.bind_f_draw(prepared, draw, reader=case.reader, budget=BUDGET).value
+    assert {'kernel', 'policy'} <= set(calls)
+    count = len(calls); disabled[0] = True
+    def forbidden(*args, **kwargs): raise AssertionError('raw reader or fresh registry used after certification')
+    monkeypatch.setattr(model_api, 'f_model_from_json', forbidden)
+    monkeypatch.setattr(model_api, 'f_model_json', forbidden)
+    monkeypatch.setattr(f, 'builtin_f_registry', forbidden)
+    assert f.certify_f_scope(root, budget=BUDGET).status == 'certified'
+    paths = f.enumerate_f_paths(root, budget=BUDGET)
+    prefix = f.enumerate_f_prefix(root, steps=1, budget=BUDGET)
+    for evaluation in (f.evaluate_f_recursive(root, budget=BUDGET),
+                       f.evaluate_f_enumerated(root, paths, budget=BUDGET), f.evaluate_f_prefix(root, steps=1, budget=BUDGET)):
+        for q in evaluation.q_star: assert_quantity(q, F(1, 2))
+        selected = f.certify_f_choice(evaluation, u=F(1, 2))
+        assert isinstance(selected, f.Selected) and selected.choice.id == 'M'
+    for candidate in ('Q', 'M'):
+        assert_quantity(f.certify_f_tail(root, candidate=candidate, prefix=prefix, budget=BUDGET).information_remaining, 0)
+    assert isinstance(f.evaluate_f(root, budget=BUDGET), f.Selected)
+    assert len(calls) == count
+
+
+@pytest.mark.parametrize('wrong_outcome,wrong_reason', [
+    ('incomplete', 'prerequisite_unavailable'), ('rejected', 'missing_contract')])
+def test_review3_R05_rootless_reason_is_rechecked_on_restore(wrong_outcome, wrong_reason):
+    # E-06: a rootless NoDecision's outcome/reason is reproduced, never self-reported.
+    case = make_case('FA01')
+    declaration = callback_declaration(); builtin = f.builtin_f_registry()
+    registry = f.make_f_registry(declarations=builtin.declarations + (declaration,), implementations=builtin.implementations)
+    request = f.FPreflightFacts(fixed_parents=case.fixed_parents, model=None, required_records=(),
+        required_capabilities=(f.RequiredCapability(kind='predicate', ref=declaration.ref, implementation_required=True),))
+    artifact = ff.check_f_preflight_from_facts(case.reader, request, registry=registry, budget=BUDGET)
+    assert isinstance(artifact.value, f.NoDecision)
+    assert (artifact.value.outcome, artifact.value.reason) == ('incomplete', 'algorithm_unavailable')
+    same = ff.restore_f_math_result(artifact.canonical_bytes, reader=case.reader, registry=registry, budget=BUDGET)
+    assert same.value == artifact.value
+    forged = json.loads(artifact.canonical_bytes)
+    forged['claim']['value']['outcome'] = wrong_outcome; forged['claim']['value']['reason'] = wrong_reason
+    with pytest.raises(f.FReplayMismatch) as caught:
+        ff.restore_f_math_result(canonical(forged), reader=case.reader, registry=registry, budget=BUDGET)
+    assert caught.value.reason == 'result_mismatch'
+
+
+def test_review3_R05_unproved_computation_is_not_silently_ignored():
+    # M-09: unproved information in a hidden branch's available.computation stops the problem.
+    from gate_f_facts_cases import declaration as facts_declaration, outcome as fo, diagonal as fdiag, idle_kernel as fidle, action as fact, policy as fpol
+    hidden = {'id': 'hidden', 'outcomes': [fo('hidden-0', fdiag((1, 0))), fo('hidden-1', fdiag((0, 1)))]}
+    for i, part in enumerate(hidden['outcomes']): part['available']['computation'] = {'bit': i}
+    quiet = fidle('quiet')
+    document = facts_declaration([hidden, quiet], [fact('H', 'hidden'), fact('Q', 'quiet')], [fpol('H', hidden), fpol('Q', quiet)])
+    _, result = prepare_case(make_case('FA08', document=document, order=['H', 'Q']))
+    assert isinstance(result, f.NoDecision)
+    assert (result.outcome, result.reason) == ('incomplete', 'certificate_incomplete')
+
+
+def _r05_preference_case():
+    doc, actions = facts_world('FA08')
+    case = FactsCase(doc, name='r05-pref'); case.candidate([a.id for a in actions])
+    return case
+
+
+def _r05_paper(case, key, value, contract, *, parents=None):
+    point = case.put(key, Preference(basis=(), content=Payload.json(plain(value)), contract=contract), parents=parents)
+    case.preferences.append(point)
+    return point
+
+
+@pytest.mark.parametrize('mode', ['styles', 'withdraw'])
+def test_review3_R05_preference_multiple_papers_and_withdraw_roundtrip(mode):
+    # E-03: several papers resolve by causal order (later style wins, withdraw
+    # removes an item); the causality is issued with the problem and restores byte-equal.
+    case = _r05_preference_case()
+    if mode == 'styles':
+        first = _r05_paper(case, 'style-1', STRUCTURE_STYLE, fc.STYLE)
+        second = _r05_paper(case, 'style-2', {**STRUCTURE_STYLE, 'gamma': [2, 1]}, fc.STYLE)
+        case.scope = replace(case.scope, source=case.ref(second)); gamma = F(2)
+    else:
+        first = _r05_paper(case, 'item-1', STRUCTURE_ITEM, FACTS_LEGACY_PREFERENCE)
+        second = _r05_paper(case, 'item-2', STRUCTURE_ITEM, FACTS_LEGACY_PREFERENCE)
+        withdraw = _r05_paper(case, 'withdraw', {'kind': 'withdraw', 'items': [str(case.ref(first))]}, FACTS_LEGACY_PREFERENCE)
+        gamma = F(1)
+    case.context()
+    prepared = facts_prepare(case)
+    assert isinstance(prepared.value, f.FProblem), prepared.value
+    causality = prepared.value.world_manifest.preference_causality
+    assert (case.ref(first), case.ref(second)) in causality.before
+    if mode == 'withdraw': assert (case.ref(first), case.ref(withdraw)) in causality.before
+    root = ff.bind_f_draw(prepared, facts_add_draw(case, prepared.value.problem_key), reader=case.reader, budget=BUDGET)
+    restored = ff.restore_f_root(root.canonical_bytes, reader=case.reader, registry=f.builtin_f_registry(), budget=BUDGET)
+    assert fe.f_json(restored) == fe.f_json(root.value) and restored.root_key == root.value.root_key
+    expected_items = (case.ref(second),) if mode == 'withdraw' else ()
+    for actual in (root.value, restored):
+        assert actual.gamma == gamma and actual.world_manifest.preference_causality == causality
+        assert actual.preferences == expected_items  # the resolved papers: the withdrawn item is gone
+        for q in f.evaluate_f_recursive(actual, budget=BUDGET).q_star: assert_quantity(q, F(1, 2))
+
+
+def test_review3_R05_preference_conflict_saved_preparation_replays_same_rejection():
+    # E-03 / E-06: two concurrent styles are a conflict, and the saved NoDecision
+    # restores to the same rejection; a tampered claim is a mismatch.
+    case = _r05_preference_case(); parents = case.ledger.heads()
+    _r05_paper(case, 'style-a', STRUCTURE_STYLE, fc.STYLE, parents=parents)
+    b = _r05_paper(case, 'style-b', {**STRUCTURE_STYLE, 'gamma': [2, 1]}, fc.STYLE, parents=parents)
+    case.scope = replace(case.scope, source=case.ref(b)); case.context()
+    artifact = facts_prepare(case)
+    assert isinstance(artifact.value, f.NoDecision), artifact.value
+    assert (artifact.value.outcome, artifact.value.reason) == ('rejected', 'missing_contract')  # style_conflict
+    registry = f.builtin_f_registry()
+    same = ff.restore_f_math_result(artifact.canonical_bytes, reader=case.reader, registry=registry, budget=BUDGET)
+    assert same.value == artifact.value
+    forged = json.loads(artifact.canonical_bytes); forged['claim']['value']['field'] = '/tampered'
+    with pytest.raises(f.FReplayMismatch) as caught:
+        ff.restore_f_math_result(canonical(forged), reader=case.reader, registry=registry, budget=BUDGET)
+    assert caught.value.reason == 'result_mismatch'
+
+
+def test_review3_R05_preference_duplicate_Record_CIDs_do_not_invent_transitive_ancestry():
+    # A-03 / E-03: a second CID of the same paper with no item ancestor does not
+    # give a withdraw built on it a path to the item.
+    case = _r05_preference_case()
+    item = _r05_paper(case, 'item', STRUCTURE_ITEM, FACTS_LEGACY_PREFERENCE)
+    bridge = _r05_paper(case, 'bridge', STRUCTURE_STYLE, fc.STYLE)
+    case.scope = replace(case.scope, source=case.ref(bridge))
+    branch = FactsCase(facts_world('FA08')[0], name='r05-branch').ledger
+    branch.append(case.ledger.record(bridge), frozenset())
+    case.ledger.merge(branch)
+    independent, = [e.cid for e in case.ledger.entries_of(case.ref(bridge)) if e.cid != bridge]
+    case.context()
+    prepared = facts_prepare(case)
+    assert isinstance(prepared.value, f.FProblem), prepared.value
+    points = prepared.value.world_manifest.preference_causality.points
+    assert {p.cid for p in points if p.record == case.ref(bridge)} == {bridge, independent}
+    _r05_paper(case, 'withdraw', {'kind': 'withdraw', 'items': [str(case.ref(item))]}, FACTS_LEGACY_PREFERENCE,
+               parents=frozenset({independent}))
+    case.context()
+    with pytest.raises(f.FInputError) as caught: facts_prepare(case)
+    assert caught.value.reason == 'unresolved_reference'
