@@ -332,6 +332,9 @@ def _has_unreachable(model: GenerativeModel) -> bool:
 
 def model_json(model: GenerativeModel) -> bytes:
     """モデルの全入力を、参照の材料となる正準 JSON にする。"""
+    from .f_model import FModel, f_model_json
+    if isinstance(model, FModel):
+        return f_model_json(model)
     from .rate_model import RateModel, rate_model_json
     if isinstance(model, RateModel):
         return rate_model_json(model)
@@ -391,6 +394,9 @@ def model_from_json(data: bytes) -> GenerativeModel:
         if not isinstance(data, bytes):
             raise ValueError("model: expected bytes")
         value = _json.loads(data)
+        if isinstance(value, dict) and value.get("scheme") == "sui.model.10":
+            from .f_model import f_model_from_json
+            return f_model_from_json(data)
         if isinstance(value, dict) and value.get("scheme") == "sui.model.9":
             from .rate_model import rate_model_from_json
             return rate_model_from_json(data)
@@ -447,6 +453,9 @@ def model_from_json(data: bytes) -> GenerativeModel:
             raise ValueError("model: expected canonical encoding")
         return model
     except (TypeError, KeyError, AttributeError, OverflowError, ValueError) as exc:
+        from .f import FInputError, FSpecificationMissing, FOutsideEvaluationType
+        if isinstance(exc, (FInputError, FSpecificationMissing, FOutsideEvaluationType)):
+            raise
         from .rate import RateInputError, RateSpecificationMissing, RateOutsideEvaluationType
         if isinstance(exc, (RateInputError, RateSpecificationMissing, RateOutsideEvaluationType)):
             raise

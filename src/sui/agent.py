@@ -141,6 +141,13 @@ def _read_jobs(model: _GenerativeModel, records: _Iterable[_Record]) -> dict[_Re
     return jobs
 
 
+def _reject_unconnected_f(model):
+    from .f_model import FModel
+    if isinstance(model, FModel):
+        from .f import FIncomplete
+        raise FIncomplete("runtime_unverified", "model.10 execution requires the F-b connection")
+
+
 def read(model: _GenerativeModel, records: _Iterable[_Record], *,
          unread_preferences: _Iterable[_UnreadPreference] = ()) -> Reading:
     """事実の集合から読む。順番待ちも pending、観測は約束を問わず終端。
@@ -152,6 +159,7 @@ def read(model: _GenerativeModel, records: _Iterable[_Record], *,
     所要ありは測定時刻順と試みの時刻の組を事実から作る (F1〜F3・J9・J15)。
     好みは別に持ち、本文が無い時も時刻だけは軸につなぐ (C2・C2b)。
     """
+    _reject_unconnected_f(model)
     if _is_rate_model(model):
         from .rate_entry import read_rate
         return read_rate(model, records, unread_preferences=unread_preferences)
@@ -510,6 +518,7 @@ def _derive_state(model, reading):
 
 def plan_s4c(view: View, candidates: _Iterable[str], *, u: float) -> Draft:
     """model.1〜3だけを旧の計算に渡す。contentはS4cと同じ (C5・P5)。"""
+    _reject_unconnected_f(view.model)
     if _is_rate_model(view.model):
         from .rate import RateInputError
         raise RateInputError("shape", "plan_s4c does not accept model.9", "model")
@@ -837,6 +846,7 @@ def _lattice_one_step(view, actions, pending, hand_pending, costs):
 
 def plan(view: View, candidates: _Iterable[str], *, u: float, rate_budget=None) -> Draft:
     """採用した好みだけで決める。白紙は知る価値だけ、モデルのC・γは読まない (C4)。"""
+    _reject_unconnected_f(view.model)
     if _is_rate_model(view.model):
         from .rate_entry import public_evaluate, candidate_names, resolve_budget
         return public_evaluate(view, candidate_names(view.model, candidates),
@@ -954,6 +964,7 @@ def _quantity_one_step(view, actions, resolved, *, u):
 
 def replay_decision(*, model: _GenerativeModel, ledger: _Ledger, decision: str) -> Draft:
     """約束とモデルの方式を確かめ、親から全欄とinputsを完全照合する (C8・P5)。"""
+    _reject_unconnected_f(model)
     if _is_rate_model(model):
         from .rate_entry import verify_rate_decision
         from .rate import default_rate_budget
@@ -1171,6 +1182,7 @@ class Agent:
 
     def __init__(self, *, model: _GenerativeModel, lineage: str,
                  component: str = "sui.agent", rate_budget=None) -> None:
+        _reject_unconnected_f(model)
         from .rate_entry import resolve_budget
         self._rate_budget = resolve_budget(model, rate_budget)
         if _is_rate_model(model):

@@ -7475,5 +7475,2815 @@
    "tests/test_s4b2_bytes.py"
   ],
   "note": "2026-10-06 Claude: 数の型の差し替え口 (§16)。境界で正確な分数に戻さず近い分数に丸める (値はほぼ同じで包含は通りうる、バイトが変わる)"
+ },
+ {
+  "id": "GF-M01",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "        cell_masses.append(mass * (cell.upper-cell.lower)/(high-low))",
+    "        cell_masses.append(_Fraction(1))"
+   ]
+  ],
+  "expect": [
+   "FA09_mixed_measure",
+   "FA09_primary_mixed"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。連続の候補を 2 セルに割り、各セルを質量 1 の点として数える (今 1/2 → 1/3)"
+ },
+ {
+  "id": "GF-M02",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "            immediate = _add(_entropy(self.target(state.joint)), _neg(_add(*projected)))",
+    "            immediate = _r(0) if all(o.elapsed_ns > 0 for o in kernel.outcomes) else _add(_entropy(self.target(state.joint)), _neg(_add(*projected)))"
+   ]
+  ],
+  "expect": [
+   "FA10_later_information",
+   "FA10_information"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。後で完全測定する候補と今の定数報告を、時刻だけで同点にする (2/3 → 1/2) 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M03",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "    joint = tuple(sum(o.matrix[i][j] * belief.joint[j] for o in selected for j in range(len(belief.joint))) for i in range(len(belief.joint)))",
+    "    joint = belief.joint if any(o.evidence is not None and (o.evidence.kind, o.evidence.value) == (\"coverage\", \"no_arrival\") for o in selected) else tuple(sum(o.matrix[i][j] * belief.joint[j] for o in selected for j in range(len(belief.joint))) for i in range(len(belief.joint)))"
+   ]
+  ],
+  "expect": [
+   "FA02_no_arrival",
+   "FA02_FA03_FA05_finite_update"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。見張れた区間の無到着の尤度を掛けない (事後 4/5 → 1/2)"
+ },
+ {
+  "id": "GF-M04",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "    joint = tuple(sum(o.matrix[i][j] * belief.joint[j] for o in selected for j in range(len(belief.joint))) for i in range(len(belief.joint)))",
+    "    if any(o.evidence is not None and (o.evidence.kind, o.evidence.value) == (\"coverage\", \"closed\") for o in selected):\n        selected = tuple(o for k in kernels.values() for o in k.outcomes if o.evidence is not None and (o.evidence.kind, o.evidence.value) == (\"coverage\", \"no_arrival\"))\n    joint = tuple(sum(o.matrix[i][j] * belief.joint[j] for o in selected for j in range(len(belief.joint))) for i in range(len(belief.joint)))"
+   ]
+  ],
+  "expect": [
+   "FA02_no_arrival",
+   "FA02_FA03_FA05_finite_update"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。閉じていた区間に無到着の尤度を掛ける (周辺化しない)"
+ },
+ {
+  "id": "GF-M05",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "    joint = tuple(sum(o.matrix[i][j] * belief.joint[j] for o in selected for j in range(len(belief.joint))) for i in range(len(belief.joint)))",
+    "    prior = _decode(_parts(model)[0][\"initial\"], tuple[_Fraction, ...])\n    joint = tuple(sum(o.matrix[i][j] * prior[j] for o in selected for j in range(len(prior))) for i in range(len(prior)))"
+   ]
+  ],
+  "expect": [
+   "FA03_shared_law",
+   "FA02_FA03_FA05_finite_update"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。未知の法則を区間ごとに引き直す・平均する (証拠 17/128 → 25/256)"
+ },
+ {
+  "id": "GF-M06",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "        A0=d0*summary.A0, A1=v*summary.A0+d1*summary.A1,",
+    "        A0=4*_Fraction(frame.end_ns-summary.origin_ns, 10**9)**(summary.N+n)/_math.factorial(summary.N+n),\n        A1=4*_Fraction(frame.end_ns-summary.origin_ns, 10**9)**(summary.N+n+1)*(2**(summary.N+n+1)-1)/_math.factorial(summary.N+n+1),"
+   ]
+  ],
+  "expect": [
+   "FA20_two_real",
+   "FA20_C1_windows"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。C1 の閉包を (N, T) だけで持つ ((1,0) と (0,1) が同じ値)"
+ },
+ {
+  "id": "GF-M07",
+  "file": "src/sui/f_entry.py",
+  "edits": [
+   [
+    "    return C1Read(frames=tuple(frames), pending=pending, untouched_records=tuple(untouched))",
+    "    if pending:\n        start = max((f.end_ns for f in frames), default=origin+int(unit_ns*_Fraction(*windows[ordered_windows[-1]][\"start\"])))\n        frames.append(core._handle(core.C1CountFrame, authority=ref,\n            measurement_id=core.MeasurementId(origin=context.run, route_epoch=\"pending\", sample_seq=len(frames), component=\"count\"),\n            source_record=pending[0].basis[0], run=context.run, origin_ns=origin,\n            start_ns=start, end_ns=context.now_ns, count=0, probe=None, generated_by=pending[0].basis))\n    return C1Read(frames=tuple(frames), pending=pending, untouched_records=tuple(untouched))"
+   ]
+  ],
+  "expect": [
+   "FA20_midwindow_clock",
+   "FA20_midwindow_clock"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。窓の途中で何も届かないことを count = 0 として足す"
+ },
+ {
+  "id": "GF-M08",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "    for applied in belief.applied:\n        if applied.transition_key == transition_key:",
+    "    for applied in ():\n        if applied.transition_key == transition_key:"
+   ]
+  ],
+  "expect": [
+   "FA05_redelivery",
+   "FA02_FA03_FA05_finite_update"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。同じ測定の再配送を別の測定として 2 回数える (3/4 → 9/10)"
+ },
+ {
+  "id": "GF-M09",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "    digest = _digest({\"kernel\": kernel, \"outcomes\": outcomes, \"measurements\": measurements})",
+    "    digest = _digest({\"kernel\": kernel, \"outcomes\": outcomes})"
+   ],
+   [
+    "        if applied.transition_key == transition_key:",
+    "        if applied.input_digest == digest or applied.transition_key == transition_key:"
+   ]
+  ],
+  "expect": [
+   "FA05_redelivery",
+   "FA02_FA03_FA05_finite_update"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。別の機会の同じ値を本文の一致で 1 回にまとめる (9/10 → 3/4)"
+ },
+ {
+  "id": "GF-M10",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "    return InformationParts(already_received=already, additional=work.world.quantity(_r(0), work.work), total_information=already)",
+    "    return InformationParts(already_received=already, additional=already, total_information=work.world.quantity(_add(work.already, work.already), work.work))"
+   ]
+  ],
+  "expect": [
+   "FA06_compute",
+   "FA06_knowledge_progress",
+   "facts_mutation_01"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。Compute (K を進める) が E に測定を足す / additional を増やす 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M11",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "        self.already = _kl(self.initial_target, self.target(self.prior_joint))",
+    "        self.already = _mul(_r(2), _kl(self.initial_target, self.target(self.prior_joint)))"
+   ]
+  ],
+  "expect": [
+   "FA07_H_zero",
+   "FA07_received_common"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。受信済みの O₀ を 2 回反映する (旧 G −ln2 → −2 ln2) 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M12",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "        self.already = _kl(self.initial_target, self.target(self.prior_joint))",
+    "        self.already = _r(0)"
+   ]
+  ],
+  "expect": [
+   "FA07_H_zero",
+   "FA07_received_common"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。O₀ の共通項を落とす (旧 G −ln2 → 0) 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M13",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            costs.append((BUILTINS[key], probability, table))",
+    "            feature_fn = BUILTINS[key]\n            if key == (\"feature\", \"started_actions\", \"1\") and request.E.links and \"P\" in declared_operations:\n                feature_fn = lambda value, feature_fn=feature_fn: feature_fn(replace(value, A=value.A+((0,(\"pending\",\"P\"),\"P\"),)))\n            costs.append((feature_fn, probability, table))"
+   ]
+  ],
+  "expect": [
+   "FA21_FA07_bridge",
+   "FA21_one_step",
+   "review5_GF_M13"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。進行中の P の報告を持つ旧橋で、宣言済み P を新しい started_actions に足す。費用表の支持が M/Q のみなので、誤った射影は本体の cost_certificate 拒否として検出される。例外を直接追加する変異ではない。 2026-10-09 構造の直しの後に書き換え元を移した。 2026-10-10 新入口から差し替えて届く review5 回帰試験を追加 (F4)。"
+ },
+ {
+  "id": "GF-M14",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "        if action.semantic_key in keys:",
+    "        if action.id in keys:"
+   ]
+  ],
+  "expect": [
+   "FA08_aliases",
+   "FA08_primary_aliases"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。表示の別名を足すと選ばれる確率が増える (1/2 → 2/3)"
+ },
+ {
+  "id": "GF-M15",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            if checked.status != 'proved':\n                raise core.FIncomplete('certificate_incomplete', field='/proof')",
+    "            if checked.status != 'proved':\n                return False"
+   ],
+   [
+    "            operation_proof(op)\n            operations[op.id] = canonical",
+    "            if operation_proof(op) is False:\n                return None\n            operations[op.id] = canonical"
+   ],
+   [
+    "            roots[candidate.id] = operation(declared)",
+    "            certified = operation(declared)\n            if certified is None:\n                continue\n            roots[candidate.id] = certified"
+   ],
+   [
+    "            if candidate != declared:\n                operation_proof(candidate)",
+    "            if candidate != declared:\n                if operation_proof(candidate) is False:\n                    roots.pop(candidate.id)\n                    continue"
+   ],
+   [
+    "        after = {}\n        for continuation in request.continuation.after:",
+    "        request = replace(request, candidates=replace(request.candidates, candidates=tuple(a for a in request.candidates.candidates if a.id in roots)),\n            continuation=replace(request.continuation, after=tuple(a for a in request.continuation.after if a.candidate in roots)))\n        self.request = request\n        values.update(candidates=request.candidates, continuation=request.continuation)\n        after = {}\n        for continuation in request.continuation.after:"
+   ]
+  ],
+  "expect": [
+   "FA08_uncertified",
+   "FA08_primary_aliases"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。未認証の候補を黙って除いて残りで正規化し直す (2026-10-08 15:1x Claude: レビュー F02 の直しで検査が _check_operation_contract に移ったので、書き換え元をそこに合わせた) 2026-10-09 構造の直しの後に書き換え元を移した。 2026-10-09 レビュー 3 通目の直しで proof 検査が operation_proof に分離されたため、未認証の返り値を operation と候補 alias に伝えて候補を削除する意味を維持した。"
+ },
+ {
+  "id": "GF-M16",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "            V = _add(*(_mul(q.exact, j.exact) for q, j in zip(choice.q_star, Js)))\n            self.nodes.append",
+    "            V = _neg(ExactReal(op=\"log\", arg=choice.Z.exact))\n            self.nodes.append"
+   ],
+   [
+    "            return _WalkValue(_add(*(_mul(q.exact, v.cost) for q, v in zip(choice.q_star, values))),\n                _add(*(_mul(q.exact, v.information) for q, v in zip(choice.q_star, values))),",
+    "            return _WalkValue(_add(*(_mul(q.exact, v.cost) for q, v in zip(choice.q_star, values))),\n                _add(*(_mul(q.exact, v.cost) for q, v in zip(choice.q_star, values)), ExactReal(op=\"log\", arg=choice.Z.exact)),"
+   ]
+  ],
+  "expect": [
+   "FA04_two_level",
+   "FA04_recursive"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。後続の値を softmax の平均でなく soft minimum (−ln Σ e^−J) にする 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M17",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "        return self.world.cost(state.O, state.A)",
+    "        return _r(0)"
+   ]
+  ],
+  "expect": [
+   "FA04_two_level",
+   "FA04_recursive"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。路全体の費用を捨てる (全て 0) 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M18",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "        return _WalkValue(cost=self.cost(state), information=_r(0), leaves=(_Leaf(_r(1), state, kind),))",
+    "        return _WalkValue(cost=_mul(_r(max(1, len(state.A))), self.cost(state)), information=_r(0), leaves=(_Leaf(_r(1), state, kind),))"
+   ]
+  ],
+  "expect": [
+   "FA04_two_level",
+   "FA04_recursive"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。路全体の費用を各段で数える (2 回) 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M19",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            projection = core._dumps(feature(value))\n            selected = next((v for k, v in table if k == projection), None)",
+    "            from .preference import BUILTINS\n            projection_value = feature(value)\n            if probabilities and feature is BUILTINS[(\"feature\", \"started_actions\", \"1\")]:\n                raw = tuple((core._load_json(k.encode(\"utf-8\")), v) for k,v in table)\n                firsts = tuple(dict.fromkeys(tuple(k[:1]) for k,v in raw))\n                table = tuple((core._dumps(list(first)), sum(v for k,v in raw if tuple(k[:1]) == first)) for first in firsts)\n                projection_value = projection_value[:1]\n            projection = core._dumps(projection_value)\n            selected = next((v for k, v in table if k == projection), None)"
+   ]
+  ],
+  "expect": [
+   "FA04_two_level"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。初手の周辺の確率だけで費用を評価する 2026-10-09 構造の直しの後に書き換え元を移した。 WorldData.cost の束縛済み started_actions 表を初手の周辺表へ潰し、路全体の費用を初手だけで評価する。"
+ },
+ {
+  "id": "GF-M20",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "                  pos.elapsed_ns if self.root.scope.name == \"finite_horizon\" else None)",
+    "                  pos.elapsed_ns if self.root.scope.name in (\"finite_horizon\", \"unbounded_total\") else None)"
+   ],
+   [
+    "            if self.root.scope.name == \"finite_horizon\" and pos.elapsed_ns + dt > self.root.scope.H_ns:",
+    "            if self.root.scope.name in (\"finite_horizon\", \"unbounded_total\") and pos.elapsed_ns + dt > (self.root.scope.H_ns if self.root.scope.name == \"finite_horizon\" else 10**9):"
+   ],
+   [
+    "        if not (self.root.scope.name == \"finite_horizon\" and all(pos.elapsed_ns+o.elapsed_ns > self.root.scope.H_ns for o in kernel.outcomes)):",
+    "        if not (self.root.scope.name in (\"finite_horizon\", \"unbounded_total\") and all(pos.elapsed_ns+o.elapsed_ns > (self.root.scope.H_ns if self.root.scope.name == \"finite_horizon\" else 10**9) for o in kernel.outcomes)):"
+   ]
+  ],
+  "expect": [
+   "FA11_scope_changes",
+   "FA11_FA12_scope"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。unbounded_total を隠れた有限 H で切る (q(W) 0.543 → 0.478、選択が逆) 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M21",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "    return _r(0), info, never_mass",
+    "    if never_mass:\n        work.permanent_candidate = operation.id\n    return _r(0), info, never_mass"
+   ],
+   [
+    "    choice = work.world.soft_choice(tuple(Js), tuple(_Fraction(1) for _ in Js), root.gamma, work.work)",
+    "    masses = tuple(_Fraction(a.id == work.permanent_candidate) for a in root.candidates.candidates) if hasattr(work, \"permanent_candidate\") else tuple(_Fraction(1) for _ in Js)\n    choice = work.world.soft_choice(tuple(Js), masses, root.gamma, work.work)"
+   ]
+  ],
+  "expect": [
+   "FA12_permanent_nonarrival",
+   "FA11_FA12_scope"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。永久未着の枝を含めば必ず待つ (到着 1/4 でも W) 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M22",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "        hi = tail.information_prefix.bounds.upper + tail.information_remaining.bounds.upper",
+    "        hi = tail.information_prefix.bounds.upper"
+   ]
+  ],
+  "expect": [
+   "FA13_prefix_joint",
+   "FA13_prefix_tail"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。尾 R_n を捨てて I_n を I∞ として選ぶ / 区間が u をまたぐ n = 1 で確定する 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M23",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "        if previous.upper <= u < current.lower:\n            return Selected(root=evaluation.root, evaluation=evaluation, index=i,",
+    "        if previous.upper <= u < current.lower:\n            op = evaluation.root.candidates.candidates[i]\n            if op.termination.name == \"constant\" and not op.termination.args[\"value\"]:\n                return _no_decision(evaluation.root, FIncomplete(\"certificate_incomplete\"), progress=evaluation)\n            return Selected(root=evaluation.root, evaluation=evaluation, index=i,"
+   ]
+  ],
+  "expect": [
+   "FA14_quiet_selected",
+   "FA14_quiet_selected"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。選んだ静けさ Q を NoDecision にする 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M24",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "            immediate = _add(_entropy(self.target(state.joint)), _neg(_add(*projected)))",
+    "            immediate = _add(_entropy(self.initial_target), _neg(_add(*projected)))"
+   ]
+  ],
+  "expect": [
+   "FA15_same_static",
+   "FA15_repeated_static"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。同じビットの完全測定を回数分足す (ln2 → 100 ln2) 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M25",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "        return NoDecision(attempt_id=None, root_key=None, outcome=\"incomplete\", reason=exc.reason,\n            detail=exc.detail, field=exc.field, proof=None, progress=None, resume=None)",
+    "        return NoDecision(attempt_id=None, root_key=None, outcome=\"rejected\", reason=\"information_divergent\",\n            detail=exc.detail, field=exc.field, proof=None, progress=None, resume=None)"
+   ]
+  ],
+  "expect": [
+   "FA15_FA17_limit",
+   "FA15_FA17_limit_Point",
+   "review5_GF_M25"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。有限回の計算の失敗を発散の証明と呼ぶ 2026-10-10 新入口から差し替えて届く review5 回帰試験を追加 (F4)。"
+ },
+ {
+  "id": "GF-M27",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "    if _dumps(proof.args) != _dumps(expected):\n        raise FInputError(\"proof_mismatch\", \"process or prefix slopes do not match the declared law\")",
+    "    expected = dict(proof.args)"
+   ]
+  ],
+  "expect": [
+   "v010_06_wrong_process",
+   "FA15_FA17_limit",
+   "FA15_FA17_limit_Point",
+   "v014_limit_false_certificate"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。GF-M27 の傾き・process_digest が違う proof を、宣言との一致を検査せず通す枝。bool だけの proof は構造検査で拒否されるので、この変異では既存の合法な ProofRef の誤った数式を受理する。"
+ },
+ {
+  "id": "GF-M28",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "                after = self.after[candidate]",
+    "                after = None"
+   ]
+  ],
+  "expect": [
+   "v010_08_FA16_four_information",
+   "FA16_scope_and_primary"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。評価の値が包み方 (1 枚の複合操作か 2 枚か) で変わる (unbounded) 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M29",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "                if self.root.scope.name != \"one_step\" and after is not None:",
+    "                if after is not None:"
+   ]
+  ],
+  "expect": [
+   "v010_08_FA16_four_information",
+   "FA16_scope_and_primary"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。one_step で FContinuation の後の方針も数える 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M30",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "            value = \"false\" if \"false\" in vals else (\"true\" if all(v == \"true\" for v in vals) else \"unknown\")",
+    "            value = \"false\" if any(v != \"true\" for v in vals) else \"true\""
+   ]
+  ],
+  "expect": [
+   "FA18_three_valued",
+   "FA18_cached_boolean"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。AND で Unknown を False にする / 片方の条件を無視する"
+ },
+ {
+  "id": "GF-M34",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "        u = _decode(root.selection_draw.value[\"u\"], _Fraction)",
+    "        u = _Fraction(__import__(\"random\").Random(root.root_key + \":resume\").random()) if resume is not None else _decode(root.selection_draw.value[\"u\"], _Fraction)"
+   ],
+   [
+    "    if u != _decode(evaluation.root.selection_draw.value[\"u\"], _Fraction):\n        raise FInputError(\"shape\", \"u differs from the root selection draw\")\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "FA19_resume_retains",
+   "FA14_quiet_selected",
+   "structure_B3_choice"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。再開時に frozen selection_draw を使わず、根のキーで初期化した別 RNG を一回消費して新しい u を採る。根の draw は更新しないため、戻り値と記録した u の不一致を狙う。 2026-10-09 構造の直しの後に書き換え元を移した。 再開時に別の u を生成し、根の u との二重の防御も外す。単に不一致例外で落とす変異にはしない。"
+ },
+ {
+  "id": "GF-M37",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "            value = \"true\" if isinstance(node, EndNode) else \"false\"",
+    "            value = \"true\" if node.id == \"end\" else \"false\""
+   ]
+  ],
+  "expect": [
+   "v010_01_policy_end",
+   "FA11_FA12_scope",
+   "facts_mutation_04"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。policy_end を節の名前で判断する (end という名の execute を終わりにする)"
+ },
+ {
+  "id": "GF-M38",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "                    stack=pos.stack+(PolicyReturn(policy=pos.policy, return_node=node.next[name], operation=pos.operation),))",
+    "                    stack=pos.stack+(PolicyReturn(policy=pos.policy, return_node=node.next[name], operation=pos.operation), PolicyReturn(policy=p.id, return_node=p.entry, operation=name)))"
+   ],
+   [
+    "                    caller_depths=state.caller_depths+(state.entry_depth,))",
+    "                    caller_depths=state.caller_depths+(state.entry_depth, state.depth))"
+   ]
+  ],
+  "expect": [
+   "FA04_two_level",
+   "FA04_recursive"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。choose.next で選んだ操作をもう一度実行する 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-M39",
+  "file": "src/sui/f_entry.py",
+  "edits": [
+   [
+    "        scope = EvaluationScope(name=\"unbounded_total\", version=\"1\", H_ns=None, source=None)",
+    "        scope = EvaluationScope(name=\"one_step\", version=\"1\", H_ns=None, source=None)"
+   ],
+   [
+    "        scope = EvaluationScope(name=\"one_step\" if style[\"H_ns\"] is None else \"finite_horizon\",",
+    "        scope = EvaluationScope(name=\"unbounded_total\" if style[\"H_ns\"] is None else \"finite_horizon\","
+   ]
+  ],
+  "expect": [
+   "extra04_scope_and",
+   "FA11_FA12_scope",
+   "FA21_one_step"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。旧の紙の H_ns = null を unbounded_total と読む / F の白紙に one_step を使う"
+ },
+ {
+  "id": "GF-M40",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "    object.__setattr__(obj, \"_authority\", (_ISSUER, authority))\n    return obj",
+    "    object.__setattr__(obj, \"_authority\", (_ISSUER, authority))\n    if cls is FRoot:\n        _handle._roots = {**getattr(_handle, \"_roots\", {}), _digest(obj): authority}\n    return obj"
+   ],
+   [
+    "def _require(obj, cls):\n    if type(obj) is not cls or getattr(obj, \"_authority\", (None,))[0] is not _ISSUER:",
+    "def _require(obj, cls):\n    if cls is FRoot and type(obj) is cls and _digest(obj) in getattr(_handle, \"_roots\", {}):\n        return _handle._roots[_digest(obj)]\n    if type(obj) is not cls or getattr(obj, \"_authority\", (None,))[0] is not _ISSUER:"
+   ]
+  ],
+  "expect": [
+   "extra03_problem_draw",
+   "structure_A4_B2_uncertified"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。GF-M40 の FRoot 枝。同じ JSON の生ハンドルを factory が発行した live FRoot と同じ digest だという理由だけで認証済みとして受け取る。権威は値の一致で借用し、構造復号後の再検査を省く。"
+ },
+ {
+  "id": "GF-M43",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "        if tree or root.scope.name == \"finite_horizon\":\n            value = work.walk(state, candidate.id)\n            cost, info = value.cost, value.information",
+    "        if tree or root.scope.name == \"finite_horizon\":\n            value = work.walk(state, candidate.id)\n            cost, info = value.cost, _r(0) if root.scope.name == \"one_step\" else value.information"
+   ]
+  ],
+  "expect": [
+   "FA21_FA07_bridge",
+   "FA21_one_step"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。F の one_step だけ未来の測定情報を 0 と評価し、旧 plan の一回完全測定の J/q/選択への帰着を壊す。 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-N01",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "        if previous.upper <= u < current.lower:",
+    "        if previous.upper < u <= current.lower:"
+   ]
+  ],
+  "expect": [
+   "FA19_exact_boundary",
+   "FA19_one_root"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。累積確率の半開区間を逆にし、厳密な境界 u=1/2 を前の候補へ入れる。 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-N02",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "    if type(u) is float and _math.isfinite(u):\n        u = _Fraction(u)",
+    "    if type(u) is float and _math.isfinite(u):\n        u = _Fraction(str(u))"
+   ]
+  ],
+  "expect": [
+   "FA19_exact_boundary",
+   "FA19_one_root",
+   "facts_mutation_05"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。選択の float を二進有理数として保持せず、表示の十進文字列を介して 0.1=1/10 に変える。 2026-10-09 構造の直しの後に書き換え元を移した。"
+ },
+ {
+  "id": "GF-N03",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "    joint = tuple(sum(o.matrix[i][j] * belief.joint[j] for o in selected for j in range(len(belief.joint))) for i in range(len(belief.joint)))",
+    "    joint = tuple(sum(o.matrix[i][j] * belief.joint[j] for o in selected[:1] for j in range(len(belief.joint))) for i in range(len(belief.joint)))"
+   ]
+  ],
+  "expect": [
+   "extra01_indistinguishable",
+   "FA02_FA03_FA05_finite_update",
+   "structure_C1_C2_unobservable",
+   "facts_mutation_06"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。同じ観測セルに写る隠れた outcome の核を周辺化せず、最初の一枝だけを採用する。"
+ },
+ {
+  "id": "GF-N04",
+  "file": "src/sui/f_entry.py",
+  "edits": [
+   [
+    "            run=context.run, origin_ns=origin, start_ns=value[\"window_start_ns\"], end_ns=value[\"window_end_ns\"],",
+    "            run=context.run, origin_ns=origin, start_ns=value[\"window_start_ns\"], end_ns=record.at.mono_ns,"
+   ]
+  ],
+  "expect": [
+   "FA20_two_real",
+   "FA20_C1_windows"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。C1 の窓の実際の終了時刻を原レポートの window_end_ns でなく配送・保存側の record.at にし、遅延を窓幅へ足す。"
+ },
+ {
+  "id": "GF-N06",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "    process = _decode(_encode(process), LimitProcess)\n    return _digest(process)",
+    "    process = _decode(_encode(process), LimitProcess)\n    return _digest({\"type\": \"LimitProcess\", \"value\": _encode(process)})"
+   ]
+  ],
+  "expect": [
+   "v010_06_public_process",
+   "FA15_FA17_limit_Point"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-08 関所 F の F-a (変異の係 sui-gate-f-a-mut、要件 tools/mutant_requirements_gate_f.json)。process_digest の対象を process の直の三欄でなく VALUE の包み付きにする。"
+ },
+ {
+  "id": "GF-S01",
+  "file": "src/sui/_f_handles.py",
+  "edits": [
+   [
+    "    return require_issued(attached_world(root), FCertifiedWorld)",
+    "    world = next(entry[0] for entry in _ISSUED.values() if type(entry[0]) is FCertifiedWorld and entry[0].world_key == root.world_key)\n    return _require(world, FCertifiedWorld)"
+   ]
+  ],
+  "expect": [
+   "structure_A_unissued_root",
+   "structure_A4_B2_uncertified"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-09 構造の直しの後の変異。共通 gate を迂回し、未発行や内容を変更した根にも world_key の一致だけで既存の認証世界を流用する。 根自身の発行印、内容 digest、manifest の照合をせず WorldData を返す。"
+ },
+ {
+  "id": "GF-S02",
+  "file": "src/sui/_f_eval.py",
+  "edits": [
+   [
+    "                evidence_cells.setdefault(_dumps(outcome.evidence), []).append(outcome)",
+    "                evidence_cells.setdefault(_dumps((outcome.id, outcome.evidence)), []).append(outcome)"
+   ]
+  ],
+  "expect": [
+   "review_F09_unobservable",
+   "structure_C1_C2_unobservable"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-09 構造の直しの後の変異。E の同じ射影を持つ核を合算せず、内部 outcome ID ごとに情報を計上する。"
+ },
+ {
+  "id": "GF-S03",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "                        if key in returns:",
+    "                        if False and key in returns:"
+   ]
+  ],
+  "expect": [
+   "structure_C4_aliases",
+   "review_F11",
+   "structure_C4_aliases"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-09 構造の直しの後の変異。後続の choose で意味が同じ別名を正準化せず、それぞれ質量 1 の候補として保持する。"
+ },
+ {
+  "id": "GF-S04",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        self._zero_cycles(policies, kernels, operations, roots, after)\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "review_F13",
+   "structure_C6_zero"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-09 構造の直しの後の変異。世界発行時の到達可能な 0 時間循環の認証を省略する。"
+ },
+ {
+  "id": "GF-S05",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "    digest = _digest(_c1_measurement_content(frame, frame_model))",
+    "    digest = _digest({\"measurement\": _c1_measurement_content(frame, frame_model), \"source_record\": frame.source_record})"
+   ]
+  ],
+  "expect": [
+   "review_F14_new_delivery",
+   "structure_B6_C1_deduplication",
+   "facts_mutation_08_10"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-09 構造の直しの後の変異。source_record を C1 の測定内容 digest に混ぜ、同じ測定の別配送を衝突として拒否する。"
+ },
+ {
+  "id": "GF-S07",
+  "file": "src/sui/_f_quantity.py",
+  "edits": [
+   [
+    "    if old is None:\n        return None\n    _,digest,expected,definition,unit,root = old",
+    "    if old is None:\n        return q, (q.proof.args.get(\"unit\", \"dimensionless\") if q.proof is not None else \"dimensionless\")\n    _,digest,expected,definition,unit,root = old"
+   ]
+  ],
+  "expect": [
+   "review_F16_issued_quantities",
+   "v014_FA18_quantity_guarantee",
+   "facts_mutation_09"
+  ],
+  "paths": [
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-09 構造の直しの後の変異。数量の発行元の照合を省き、JSON 復号や手組みの自己申告 bounds を比較の保証として読む。 数値の構造的整合検査は残し、未発行なら Unknown にする境界だけを壊す。"
+ },
+ {
+  "id": "GF-B01",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "                if seal(payload, salt) != rebuilt.seal:\n                    raise core.FReplayMismatch('result_mismatch', fields=('/reader/seal',))\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "v014_seal_material"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: 原記録の捕捉で本文と塩から封を再計算する照合を省く。CID/header と本文 digest の他の検査は通す。"
+ },
+ {
+  "id": "GF-B02",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        values=dict(available=available,incorporated=incorporated,belief=belief_ref,",
+    "        values=dict(available=available,incorporated=available,belief=belief_ref,"
+   ]
+  ],
+  "expect": [
+   "K_seven_cases",
+   "FA06_knowledge_progress",
+   "structure_C3_acquisition"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: 取得済み available を採用・反映済み incorporated として K を発行する。"
+ },
+ {
+  "id": "GF-B03",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        context = core.FContext(run=now.run,now_ns=now.time_ns,observed_ns=observed.time_ns,",
+    "        context = core.FContext(run=now.run,now_ns=self.point(self.context_point).at.mono_ns,observed_ns=self.point(self.context_point).at.mono_ns,"
+   ]
+  ],
+  "expect": [
+   "K_seven_cases",
+   "FA20_C1_windows",
+   "v014_C1_management"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: 時計を読んだ時刻を捨て、後から保存した context の管理用 FACT の Record.at を now_ns と observed_ns に使う。 2026-10-10 review5 後の local context 構築位置へ移動。error の管理保存時刻へのすり替えは維持。"
+ },
+ {
+  "id": "GF-B04",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        self.request = SimpleNamespace(parents=frozenset(fixed_parents))",
+    "        self.request = SimpleNamespace(parents=frozenset(self.image._entries))"
+   ]
+  ],
+  "expect": [
+   "structure_A5_B4_restore"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: 固定親を読む範囲の代わりに reader の全 CID を使い、固定後に着いた事実も E/K と世界へ取り込む。"
+ },
+ {
+  "id": "GF-B05",
+  "file": "src/sui/f_model.py",
+  "edits": [
+   [
+    "        material = {k: v for k, v in value.items() if k not in (\"id\", \"proof\")}",
+    "        material = {k: v for k, v in value.items() if k not in (\"id\", \"proof\", \"start\")}"
+   ]
+  ],
+  "expect": [
+   "FA08_primary_aliases",
+   "structure_B1_B2_every"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: model.11 の一次操作から semantic_key を作る時に start を意味の材料から落とす。"
+ },
+ {
+  "id": "GF-B06",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        after={}; canonical=[]",
+    "        last={a.semantic_key:a for a in actions}\n        candidates=replace(candidates,candidates=tuple(last[a.semantic_key] for a in candidates.candidates),\n            aliases=MappingProxyType({a.id:last[a.semantic_key].id for a in actions if a.id!=last[a.semantic_key].id}))\n        after={}; canonical=[]"
+   ]
+  ],
+  "expect": [
+   "FA08_primary_aliases"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: 根の別名の代表を入力順で最初の操作でなく最後の操作へ置き換える。"
+ },
+ {
+  "id": "GF-B07",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            if representative in after and after[representative]!=value.policy:\n                raise core.FInputError('alias_continuation_conflict',field='/continuation')\n",
+    ""
+   ],
+   [
+    "                            if destination != previous_return:\n                                raise core.FInputError('alias_continuation_conflict', field='/policies/' + pid + '/' + node.id)\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "structure_B1_B2_every",
+   "structure_C4_aliases"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: 別名の戻り先が違っても拒否せず、根では最後の戻り先、後続 choose では最初の代表の戻り先を使う。"
+ },
+ {
+  "id": "GF-B08",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    if request.purpose!=purpose or request.context_key!=context_key: raise core.FInputError('invalid_draw',field='/draw/request')",
+    "    if request.purpose!=purpose: raise core.FInputError('invalid_draw',field='/draw/request')"
+   ]
+  ],
+  "expect": [
+   "FA19_one_root",
+   "FA19_generation_and_selection",
+   "v014_FA19_fixture_generator",
+   "facts_mutation_selection"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: draw の用途だけを検査して context_key を照合せず、別の固定問題を指す selection draw も bind する。"
+ },
+ {
+  "id": "GF-B09",
+  "file": "src/sui/f_facts.py",
+  "edits": [
+   [
+    "    result=read_c1_frames(compiler.model,records,context=compiler.context,resources=resources)",
+    "    seen_reports=set(); kept=[]\n    for record in sorted(records,key=lambda r:(r.at.mono_ns,r.at.seq,str(r.id))):\n        if getattr(record.body,'contract',None)==core._ContractRef('sui.s4b.rate_report','1'):\n            value=record.body.content.as_json()\n            key=core._digest({k:value[k] for k in ('channel','arrival_count','outcome')})\n            if key in seen_reports: continue\n            seen_reports.add(key)\n        kept.append(record)\n    records=tuple(kept)\n    resources=core._handle(core.FResources,authority=core._require(resources,core.FResources),\n        models=resources.models,records=records,registry=resources.registry,preference_ledger=resources.preference_ledger)\n    result=read_c1_frames(compiler.model,records,context=compiler.context,resources=resources)"
+   ]
+  ],
+  "expect": [
+   "structure_B6_C1_deduplication"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: C1 の独立な同値の窓を channel/count/outcome の値だけで再配送とみなし、生成元と窓の違いを捨てて reader に渡す。 初稿は records 側だけをまとめ、resources.records の全件検査が誤りを止めた。最小の両方の読みを同じ値の重複除去へ揃える。 値が等しい配送は記録時刻が最初のものだけを保持し、新しい独立窓を古い窓の再配送として落とす。"
+ },
+ {
+  "id": "GF-B10",
+  "file": "src/sui/f_entry.py",
+  "edits": [
+   [
+    "            if origin+unit_ns*core._decode(start[\"time\"],_Fraction) != record.at.mono_ns or job.at.mono_ns > record.at.mono_ns:\n                raise core.FInputError(\"measurement_conflict\",\"job start and actual attempt disagree\")\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "structure_B6_C1_deduplication"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: C1 の Job の宣言開始時刻と実際の AttemptStarted の時刻を照合しない。"
+ },
+ {
+  "id": "GF-B11",
+  "file": "src/sui/f_facts.py",
+  "edits": [
+   [
+    "        elif c.implementation_required and not implemented: failures.append(core.FPreflightFailure(outcome='incomplete',reason='algorithm_unavailable',field='/required_capabilities/'+str(i)))",
+    "        elif c.implementation_required and False: failures.append(core.FPreflightFailure(outcome='incomplete',reason='algorithm_unavailable',field='/required_capabilities/'+str(i)))"
+   ]
+  ],
+  "expect": [
+   "past_preflight_requires",
+   "v014_preflight_collects"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: preflight は宣言がある能力の実装欠落を失敗にせず、他に不足がなければ PreflightReady を発行する。"
+ },
+ {
+  "id": "GF-B12",
+  "file": "src/sui/_f_quantity.py",
+  "edits": [
+   [
+    "        _declared_binding(ref,q)",
+    "        if q.proof is None or q.proof.version!='2': _declared_binding(ref,q)"
+   ],
+   [
+    "        if old is not None and (old[0] is not q or old[1] != f._digest(q) or old[2] != ref):",
+    "        if old is not None and old[0] is not q:"
+   ],
+   [
+    "    old = _ISSUED.get(id(q))\n    if old is None:\n        return None\n",
+    "    old = _ISSUED.get(id(q))\n    if old is None and q.proof is not None and q.proof.version=='2':\n        old=next((entry for entry in _ISSUED.values() if entry[0].exact==q.exact and entry[0].bounds==q.bounds),None)\n    if old is None:\n        return None\n"
+   ],
+   [
+    "    if expected != ref or digest != f._digest(q):\n        raise f.FInputError('quantity_binding_conflict')",
+    "    if (q.proof is None or q.proof.version!='2') and (expected != ref or digest != f._digest(q)):\n        raise f.FInputError('quantity_binding_conflict')"
+   ]
+  ],
+  "expect": [
+   "v014_FA18_quantity_guarantee",
+   "v014_quantity_issued_binding"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: v2 数量保証を対象の Point/定義/根への結合でなく exact/bounds の数値一致で流用し、同値の別根の数量・proof を受理する。"
+ },
+ {
+  "id": "GF-B13",
+  "file": "src/sui/_f_handles.py",
+  "edits": [
+   [
+    "def require_issued(value, cls):",
+    "def _finite_descriptor_as_authority(self, **values):\n    from . import f as core\n    original=next(old[0] for old in _ISSUED.values() if type(old[0]) is core.FFiniteUpdateModel\n        and old[0].authority_key==values['authority_key'])\n    for field in core._fields(core.FFiniteUpdateModel):\n        object.__setattr__(self,field.name,values[field.name])\n    object.__setattr__(self,'_authority',(core._ISSUER,core._require(original,core.FFiniteUpdateModel)))\n    issue(self)\n\n\nfrom . import f as _descriptor_core\n_descriptor_core.FFiniteUpdateModel.__init__ = _finite_descriptor_as_authority\n\n\ndef require_issued(value, cls):"
+   ]
+  ],
+  "expect": [
+   "v014_finite_update_descriptor",
+   "contract_FA02_finite_update"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: 有限更新の公開 descriptor の authority_key で内部モデルを拾い、手組み descriptor に発行の印を付ける。同じキーなら改変 source も受理する。"
+ },
+ {
+  "id": "GF-B14",
+  "file": "src/sui/f_facts.py",
+  "edits": [
+   [
+    "def _replay_saved(data,*,reader,registry,budget):\n    raw=core._load_json(data)\n",
+    "def _replay_saved(data,*,reader,registry,budget):\n    raw=core._load_json(data)\n    from ._f_world import capture_reader\n    image=capture_reader(reader,budget)\n    value=core._decode(raw['claim']['value'],getattr(core,raw['claim']['type']))\n    return issue(core._handle(core.FMathArtifact,authority=raw['input'],\n        value=value,canonical_bytes=data,reader=image)),(),None\n"
+   ]
+  ],
+  "expect": [
+   "structure_A5_B4_restore",
+   "past_prepare_missing_capability"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: restore/verify は保存された claim を復号して信じ、一次入力の解決・保存手順の再実行・全 claim の再計算照合を省く。 (2026-10-11 Claude: 認証器の作り直しの後のコードに合わせて書き直した、意味は同じ)"
+ },
+ {
+  "id": "GF-B15",
+  "file": "src/sui/f_facts.py",
+  "edits": [
+   [
+    "    registry: FRegistry, method: ContractRef, budget: RateBudget,\n) -> FMathArtifact[FProblem | NoDecision]:",
+    "    registry: FRegistry, method: ContractRef, budget: RateBudget,\n    legacy_input: core.FWorldRequest | None = None, resources: core.FResources | None = None,\n) -> FMathArtifact[FProblem | NoDecision]:"
+   ],
+   [
+    "        compiler=_Compiler(request,reader=image,registry=registry,budget=budget)",
+    "        from ._f_world import _LegacyCompiler\n        compiler=(_Compiler(request,reader=image,registry=registry,budget=budget) if legacy_input is None\n            else _LegacyCompiler(legacy_input,resources,budget))"
+   ]
+  ],
+  "expect": [
+   "structure_A3_public_signatures",
+   "structure_A5_B4_restore"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "v0.14 事実入口の変異: 新しい通常の prepare に旧の派生入力と FResources を受ける keyword を追加し、指定時に _LegacyCompiler で世界を発行する抜け道を開く。"
+ },
+ {
+  "id": "GF-B16",
+  "file": "src/sui/f_facts.py",
+  "edits": [
+   [
+    "            if certificate:raise\n            from ._f_eval import _no_decision\n            value=_no_decision(None,exc)",
+    "            if certificate:raise\n            value=core.NoDecision(attempt_id=None,root_key=None,outcome='rejected',reason='information_divergent',detail=exc.detail,field=exc.field,proof=None,progress=None,resume=None)"
+   ]
+  ],
+  "expect": [
+   "facts_mutation_03"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 review5 R07 により旧説明を訂正。GF-M25 は新入口から独立の proof checker を明示登録すると core.diagnose_f_limit に到達する (test_review5_GF_M25_independent_checker_does_not_turn_finite_failure_into_divergence)。本 GF-B16 は別途、新入口自身の _limit catch で有限予算の失敗を rejected/information_divergent にすり替える。現組込 checker・特定の予算 fixture の先行失敗を、一般の到達不能の証拠にしない。"
+ },
+ {
+  "id": "GF-T01",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        orders=(('job.at', 'at'),), align_context=True, evidence='F:4299,4476,4769-4771,5433'),",
+    "        orders=(), align_context=True, evidence='F:4299,4476,4769-4771,5433'),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy",
+   "review5_R13_GF_T01_foreign_job_cannot_start_local_clock_source",
+   "review5_closure_preflight_GF_edges_without_selected",
+   "review5_closure_draw_GF_edges_after"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。AttemptStarted の job.at≤at の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の根拠 (C-06 ①成功の集合): AttemptStarted.job は使用した出来事なので実祖先 (A-03/A-06、_FactsOrder.reference) であり同じ run の実祖先の単調時計は basic の実の親→子の検査 (A-05) で非逆行が保証される。よって job.at ≤ at は導かれる。②診断は reason 'shape' で同じ、field が /record/at/mono_ns か /job かの違いだけ。③予算は同じ",
+  "equivalence_scope": "success_set + reason (field differs); 2026-10-12 source"
+ },
+ {
+  "id": "GF-T02",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "                ('cause.at', 'measured'), ('cause.at', 'end'), ('measured', 'actual'),",
+    "                ('cause.at', 'end'), ('measured', 'actual'),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy",
+   "review5_GF_T02"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。measurement の試行開始≤実測 (cause.at≤measured) の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": false,
+  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の導出は無い = 識別する入力が試験に無い。試験の係 sui-gate-f-auth-rel 3 通目に識別の対を依頼: 測定の実測時刻が原因の Attempt より前 (measured < cause.at) で、窓の終端は Attempt の後 (cause.at ≤ end は守る) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+ },
+ {
+  "id": "GF-T03",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "                ('cause.at', 'measured'), ('cause.at', 'end'), ('measured', 'actual'),",
+    "                ('cause.at', 'measured'), ('measured', 'actual'),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy",
+   "review5_closure_preflight_GF_edges_without_selected",
+   "review5_closure_draw_GF_edges_after",
+   "review5_GF_T03_unavailable"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。measurement の試行開始≤測定窓終端 (cause.at≤end) の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T04",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        orders=(('opportunity.at', 'raw.measured'), ('opportunity.at', 'raw.end'),",
+    "        orders=(('opportunity.at', 'raw.end'),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。Binding の opportunity.at≤raw.measured の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 Claude (試験の係 4 通目の問いへの答え): 適用外 = 合法の側が規則上存在しない。F-a の生成契約は組込み opportunity_step_slot/1 だけで、観測は機会の step を実行した Attempt が生む (A-15・U-06) ので opportunity は必ず generated_by に含まれ、残る辺 (generated_by 側の検査) から導かれる。C-06 ①成功の集合は同値、②診断は field の違いだけ、③予算は同じ。別の生成契約は ★ / opportunity.at ≤ raw.measured は generated.at ≤ raw.measured から",
+  "equivalence_scope": "success_set + reason (field differs); 2026-10-12 source"
+ },
+ {
+  "id": "GF-T05",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        orders=(('opportunity.at', 'raw.measured'), ('opportunity.at', 'raw.end'),",
+    "        orders=(('opportunity.at', 'raw.measured'),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。Binding の opportunity.at≤raw.end の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の根拠 (C-06 ①成功の集合): opportunity.at ≤ raw.end は、frame では opportunity.at ≤ raw.measured (残る辺) と measured ∈ interval から、claim では opportunity.at ≤ raw.window_start と start ≤ end から導かれる。②field の違いだけ ③同じ",
+  "equivalence_scope": "success_set + reason (field differs); 2026-10-12 source"
+ },
+ {
+  "id": "GF-T06",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "                ('generated.at', 'raw.measured'), ('generated.at', 'raw.end'),",
+    "                ('generated.at', 'raw.end'),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy",
+   "review5_table_independent_generation"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。Binding の generated.at≤raw.measured の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T07",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "                ('generated.at', 'raw.measured'), ('generated.at', 'raw.end'),",
+    "                ('generated.at', 'raw.measured'),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy",
+   "generation_class"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py",
+   "tests/test_gate_f_auth_rel.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。Binding の generated.at≤raw.end の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の根拠 (C-06 ①成功の集合): generated.at ≤ raw.end は、frame では generated.at ≤ raw.measured (残る辺) と measured ∈ interval (intervals の検査) から、claim では generated.at ≤ raw.window_start (2026-10-12 に足した辺) と start ≤ end から導かれる。②field の違いだけ ③同じ",
+  "equivalence_scope": "success_set + reason (field differs); 2026-10-12 source"
+ },
+ {
+  "id": "GF-T08",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        links=(Link('plan', 'value.plan', contract=fc.OBSERVATION_PLAN),),",
+    "        links=(Link('plan', 'value.plan'),),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy",
+   "review5_table_T08_standalone_request_still_requires_plan"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。measurement_requested の Plan の契約名・版の結合だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T09",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        links=(Link('plan', 'value.plan', contract=fc.OBSERVATION_PLAN),\n               Link('request', 'record.body.decision', 'ref', fc.MEASUREMENT_REQUESTED)),",
+    "        links=(Link('plan', 'value.plan'),\n               Link('request', 'record.body.decision', 'ref', fc.MEASUREMENT_REQUESTED)),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。measurement_job の Plan の契約名・版の結合だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の根拠 (C-06 ①成功の集合): measurement_job の plan の契約は、equals の value.plan == request.value.plan と request 行の plan link (contract=OBSERVATION_PLAN) の検査から導かれる (request は job の実祖先として必ず検査される)。②field の違いだけ ③同じ",
+  "equivalence_scope": "success_set + reason (field differs); 2026-10-12 source"
+ },
+ {
+  "id": "GF-T10",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "            ('plan.cid', 'opportunity.job.value.plan'),\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。Binding Plan CID と opportunity Job の Plan CID の一致辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 Claude (試験の係 4 通目の問いへの答え): 適用外 = 合法の側が規則上存在しない。F-a の生成契約は組込み opportunity_step_slot/1 だけで、観測は機会の step を実行した Attempt が生む (A-15・U-06) ので opportunity は必ず generated_by に含まれ、残る辺 (generated_by 側の検査) から導かれる。C-06 ①成功の集合は同値、②診断は field の違いだけ、③予算は同じ。別の生成契約は ★ / opportunity の Job の plan 一致は generated の Job の plan 一致から",
+  "equivalence_scope": "success_set + reason (field differs); 2026-10-12 source"
+ },
+ {
+  "id": "GF-T11",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "            ('plan.cid', 'generated.job.value.plan'),\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy",
+   "review5_table_independent_generation"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。Binding Plan CID と generated Job の Plan CID の一致辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T12",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "                ('value.plan', 'request.value.plan')),",
+    "                ),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy",
+   "review5_table_independent_generation"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。measurement_job の Plan CID と request の Plan CID の一致辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T13",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        equals=(('record.body.step', 'value.step'), ('value.step', 'request.value.step'),",
+    "        equals=(('record.body.step', 'value.step'),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。Job 本文の step と request の step の一致辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T14",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        equals=(('record.body.step', 'value.step'), ('value.step', 'request.value.step'),",
+    "        equals=(('value.step', 'request.value.step'),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。JobOpened.step と Job 本文の step の一致辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T15",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "            ('value.step', 'opportunity.job.value.step'),\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。Binding.step と opportunity Job の step の一致辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 Claude (試験の係 4 通目の問いへの答え): 適用外 = 合法の側が規則上存在しない。F-a の生成契約は組込み opportunity_step_slot/1 だけで、観測は機会の step を実行した Attempt が生む (A-15・U-06) ので opportunity は必ず generated_by に含まれ、残る辺 (generated_by 側の検査) から導かれる。C-06 ①成功の集合は同値、②診断は field の違いだけ、③予算は同じ。別の生成契約は ★ / opportunity の Job の step 一致は generated の Job の step 一致から",
+  "equivalence_scope": "success_set + reason (field differs); 2026-10-12 source"
+ },
+ {
+  "id": "GF-T16",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "            ('value.step', 'generated.job.value.step')),",
+    "            ),"
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy",
+   "review5_table_independent_generation"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。Binding.step と generated Job の step の一致辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T17",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "               TimeField('source_utc', None, 'record.body.source_time_ns', 'utc_ns', nullable=True)),",
+    "               TimeField('source_utc', 'record.at.run', 'record.body.source_time_ns', nullable=True)),"
+   ],
+   [
+    "        orders=(('received', 'at'), ('cause.at', 'received')),",
+    "        orders=(('received', 'at'), ('cause.at', 'received'), ('source_utc', 'received')),"
+   ]
+  ],
+  "expect": [
+   "review5_R09_source"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (clock_domain)。Observed.source_time_ns の U 領域を M と取り違え、UTC を received と比較する R09 の退行。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。 (2026-10-11 Claude: 認証器の作り直しの後のコードに合わせて書き直した、意味は同じ)"
+ },
+ {
+  "id": "GF-T18",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        orders=(('received', 'at'), ('cause.at', 'received')),",
+    "        orders=(('received', 'at'), ('cause.at', 'received')), nonnegative=('source_utc',),"
+   ]
+  ],
+  "expect": [
+   "review5_R09_source"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (clock_domain)。signed UTC の source_time_ns に非負条件を課し、正当な負の UTC を拒否する。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。 (2026-10-11 Claude: 認証器の作り直しの後のコードに合わせて書き直した、意味は同じ)"
+ },
+ {
+  "id": "GF-T19",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        required, pending = set(), list(roots)",
+    "        required, pending = set(), list(roots)+[p for p in self.compiler.selected if getattr(self.compiler.point(p).body, 'contract', None) in (fc.ROUTE_CONFIG, core._ContractRef('sui.clock.source','1'), core._ContractRef('sui.s4.boot','1'))]"
+   ]
+  ],
+  "expect": [
+   "review5_R10_unreferenced",
+   "review5_R10_referenced"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (dependency_roots)。必要な数値入力の起点を当該観測だけでなく現在の全閉包の RouteApplied/ClockSource/BOOT へ広げ、後着記録を過去の要求へ追加する R10 の退行。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T20",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        orders=(('completion.actual', 'at'), ('previous.at', 'at')),",
+    "        orders=(('previous.at', 'at'),),"
+   ]
+  ],
+  "expect": [
+   "review5_R01",
+   "review5_R02",
+   "review5_R04",
+   "review5_closure_draw_GF_edges_after"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。KnowledgeAdopted の completion.actual≤at の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の根拠 (C-06 ①成功の集合): KnowledgeAdopted.completion は実祖先 (A-10) なので completion.actual ≤ completion.at ≤ adopted.at が basic の実の親→子の検査から導かれる (received ≤ at は Observed 行)。②field の違いだけ ③同じ",
+  "equivalence_scope": "success_set + reason (field differs); 2026-10-12 source"
+ },
+ {
+  "id": "GF-T21",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        orders=(('completion.actual', 'at'), ('previous.at', 'at')),",
+    "        orders=(('completion.actual', 'at'),),"
+   ]
+  ],
+  "expect": [
+   "review5_R01",
+   "review5_R02",
+   "review5_R04",
+   "review5_closure_preflight_GF_edges_without_selected",
+   "review5_closure_draw_GF_edges_after"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。KnowledgeAdopted の previous.at≤at の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": true,
+  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の根拠 (C-06 ①成功の集合): KnowledgeAdopted.previous は実祖先 (A-16 の採用の鎖) なので previous.at ≤ at は basic の実の親→子の検査から導かれる。②field の違いだけ ③同じ",
+  "equivalence_scope": "success_set + reason (field differs); 2026-10-12 source"
+ },
+ {
+  "id": "GF-T22",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        orders=(('observation.reading', 'judgment.reading'), ('judgment.reading', 'actual'),",
+    "        orders=(('judgment.reading', 'actual'),"
+   ]
+  ],
+  "expect": [
+   "review5_R01",
+   "K_seven_cases",
+   "review5_GF_T22"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。context の observation.reading≤judgment.reading の辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。",
+  "equivalent": false,
+  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の導出は無い = 識別する入力が試験に無い。試験の係 sui-gate-f-auth-rel 3 通目に識別の対を依頼: context の observation.reading > judgment.reading で、両方の読みが互いに祖先でない / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+ },
+ {
+  "id": "GF-T23",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        aligns=(('value.reading.run', 'source.value.run'),),",
+    "        aligns=(),"
+   ]
+  ],
+  "expect": [
+   "review5_R01",
+   "review5_R09_source",
+   "assembly_FA01",
+   "review5_R13_GF_T23_local_reading_cannot_use_foreign_boot_and",
+   "review5_closure_preflight_GF_edges_without_selected",
+   "review5_closure_draw_GF_edges_after"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。clock_reading の reading.run と ClockSource.run の明示整列辺だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T24",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    if purpose=='selection' and not set(parents)<=image.ancestors(entry.parents): raise core.FInputError('invalid_draw',field='/draw/parents')",
+    "    # Selection draw no longer checks its actual ancestor closure."
+   ]
+  ],
+  "expect": [
+   "facts_mutation_selection",
+   "FA19_generation_and_selection"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_edge)。draw_fact の選択問題の固定親と draw の実祖先の包含検査だけを外す。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。"
+ },
+ {
+  "id": "GF-T25",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        named = next((r for r in EVENT_INVARIANTS if r.contract == contract), None)",
+    "        named = next((r for r in EVENT_INVARIANTS if r.contract == contract), None)\n        if named is None and type(record.body).__name__ == 'Observed' and not any(p == cid for p, context_key in self._validated):\n            return node"
+   ]
+  ],
+  "expect": [
+   "assembly_FA01",
+   "K_seven_cases",
+   "review5_R08_generation",
+   "review5_table_T25_unknown_observed_keeps_structural",
+   "review5_GF_T25",
+   "review5_GF_T25_initial_structural_check_on_acquired_only",
+   "review5_closure_same_bad_point_is_rejected_on_every"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "R11後の構造へ移植。未登録ObservedのCID初回認証だけを省略。contextごとの再認証は維持。旧手動set操作はfinallyの鍵と矛盾するため除去。 閉包認証後も未知Observedのcaused_by開始≤受信を省略する初回分岐へ到達する。現版の既存same_bad_point試験をexpectへ追加。根拠: scratchpad/f_k_mutations/t25_current_probe.json。",
+  "branch": "initial"
+ },
+ {
+  "id": "GF-T26",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "    EventInvariant('measurement_requested', fc.MEASUREMENT_REQUESTED,\n        payload_body='Decided',\n        links=(Link('plan', 'value.plan', contract=fc.OBSERVATION_PLAN),),\n        inputs=('value.plan',), boundary='now', evidence='F:4377,4769-4771,5433'),\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "review5_R08_generation",
+   "review5_R08_legacy"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-10 不変条件の表への変異 (table_row)。measurement_requested の named 行を丸ごと外し、Plan の型・外側入力・境界を解釈しない。 独立に外した辺が他の検査で覆われる可能性は実行結果へ記録する。 (2026-10-11 Claude: 認証器の作り直しの後のコードに合わせて書き直した、意味は同じ)"
+ },
+ {
+  "id": "GF-T27",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        key = cid, self._context_key",
+    "        key = cid, self._context_key\n        cached = self.node(cid)\n        if self.context is not None and any(p == cid for p, context_key in self._validated) and type(cached['record'].body).__name__ == 'Observed' and not any(rule.contract == getattr(cached['record'].body, 'contract', None) for rule in EVENT_INVARIANTS):\n            self._validated.add(key)\n            return cached"
+   ]
+  ],
+  "expect": [
+   "assembly_FA01",
+   "K_seven_cases",
+   "review5_R08_generation",
+   "review5_table_T25_unknown_observed_keeps_structural",
+   "review5_GF_T27",
+   "review5_GF_T27_structural_check_after_precontext_read_of_same"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "R11後のcachedの意味を移植。context確定前に認証済みの未知Observedだけ、確定後の再認証を省略。CID初回の構造検査は維持。同contextのcache命中は本来も再検査しない。",
+  "branch": "cached",
+  "equivalent": false,
+  "equivalence_reason": "2026-10-10 Claude. No distinguishing input found by mut2 5 nor review5 5-6 (asked explicitly; no objection). Deferred as equivalent for success authentication. / 2026-10-12 Claude: 独立の関係の試験 (rel) でも生き残り。識別の対を試験の係 3 通目に依頼 (context の確定前後の cache・閉包の列挙) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+ },
+ {
+  "id": "GF-C01",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "                    linked.append(self.validate(point, field + '/' + link.name))",
+    "                    if self.context is not None and (point, None) in self._validated:\n                        linked.append(self.node(point))\n                    else:\n                        linked.append(self.validate(point, field + '/' + link.name))"
+   ]
+  ],
+  "expect": [
+   "review5_R11",
+   "review5_R13_GF_T01",
+   "review5_R13_GF_T23",
+   "review5_GF_T27"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "R11/R12 の実際の欠陥の系統。context確定後に所有ノードは検査するが、確定前に読んだ参照先は再訪しない。",
+  "equivalent": false,
+  "equivalence_reason": "2026-10-10 Claude. No distinguishing input found by mut2 5 (17 entrances, 1406 observations) nor by review5 5-6 (asked explicitly; no objection). Deferred as equivalent for success authentication. / 2026-10-12 Claude: 独立の関係の試験 (rel) でも生き残り。識別の対を試験の係 3 通目に依頼 (context の確定前後の cache・閉包の列挙) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+ },
+ {
+  "id": "GF-C02",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        key = cid, self._context_key",
+    "        key = cid, None"
+   ]
+  ],
+  "expect": [
+   "review5_R11",
+   "review5_R13_GF_T01",
+   "review5_R13_GF_T23",
+   "review5_GF_T27"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "R11/R12 の実際の欠陥の系統。検査済みの鍵からcontextの同一性を外し、確定前の認証を確定後へ流用する。",
+  "equivalent": false,
+  "equivalence_reason": "2026-10-10 Claude. No distinguishing input found by mut2 5 nor review5 5-6 (asked explicitly; no objection). Deferred as equivalent for success authentication. / 2026-10-12 Claude: 独立の関係の試験 (rel) でも生き残り。識別の対を試験の係 3 通目に依頼 (context の確定前後の cache・閉包の列挙) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+ },
+ {
+  "id": "GF-C03",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    if (type(record.body).__name__, record.writer.name, record.category.name) != shape:",
+    "    if contract.name != 'sui.clock.source' and (type(record.body).__name__, record.writer.name, record.category.name) != shape:"
+   ]
+  ],
+  "expect": [
+   "review5_R12_decoder"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "R11/R12 の実際の欠陥の系統。ClockSourceのdecoderだけ共通の本文型・Role・Category検査を迂回し、契約とJSONが同じ偽装本文を通す。"
+ },
+ {
+  "id": "GF-C04",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    if (type(record.body).__name__, record.writer.name, record.category.name) != shape:",
+    "    if contract.name != 'sui.f.context_observed' and (type(record.body).__name__, record.writer.name, record.category.name) != shape:"
+   ]
+  ],
+  "expect": [
+   "review5_R12_decoder"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "R11/R12 の実際の欠陥の系統。contextのdecoderだけ共通の本文型・Role・Category検査を迂回し、契約とJSONが同じ偽装本文を通す。"
+ },
+ {
+  "id": "GF-C05",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    if (type(record.body).__name__, record.writer.name, record.category.name) != shape:",
+    "    if contract.name != 'sui.f.clock_reading' and (type(record.body).__name__, record.writer.name, record.category.name) != shape:"
+   ]
+  ],
+  "expect": [
+   "review5_R12_decoder"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "R11/R12 の実際の欠陥の系統。clock_readingのdecoderだけ共通の本文型・Role・Category検査を迂回し、契約とJSONが同じ偽装本文を通す。"
+ },
+ {
+  "id": "GF-C06",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    if (type(record.body).__name__, record.writer.name, record.category.name) != shape:",
+    "    if contract.name != 'sui.f.draw_fact' and (type(record.body).__name__, record.writer.name, record.category.name) != shape:"
+   ]
+  ],
+  "expect": [
+   "review5_R12_draw_decoder"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "R11/R12 の実際の欠陥の系統。draw_factのdecoderだけ共通の本文型・Role・Category検査を迂回し、契約とJSONが同じ偽装本文を通す。"
+ },
+ {
+  "id": "GF-C07",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    if (type(record.body).__name__, record.writer.name, record.category.name) != shape:",
+    "    if contract.name != 'sui.f.model_source' and (type(record.body).__name__, record.writer.name, record.category.name) != shape:"
+   ]
+  ],
+  "expect": [
+   "review5_R12_decoder"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "R11/R12 の実際の欠陥の系統。modelのdecoderだけ共通の本文型・Role・Category検査を迂回し、契約とJSONが同じ偽装本文を通す。"
+ },
+ {
+  "id": "GF-C08",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        return self.context is not None or not rule.depends_on_context(kind, index)",
+    "        return True"
+   ]
+  ],
+  "expect": [
+   "review5_R11",
+   "review5_R12_decoder",
+   "assembly_FA01",
+   "review5_closure_preflight_GF_edges_without_selected"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "R11/R12 の実際の欠陥の系統。表のcontext依存の欄を無視し、未確定段でcontext.runや境界を要する検査まで実行する。 現版のprepareは表適用前にcontextを復号するため、contextなしの既存preflight試験へ接続。実差し替えで合法入力がAttributeErrorになることを確認。"
+ },
+ {
+  "id": "GF-K01",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    audit.selected = set(audit.visible_cids) | set(roots)",
+    "    audit.selected = set(roots) if any(getattr(audit.point(p).body, 'contract', None) == fc.DRAW_FACT for p in roots) else set(audit.visible_cids) | set(roots)"
+   ]
+  ],
+  "expect": [
+   "review5_closure_same_bad_point_is_rejected_on_every",
+   "review5_closure_R14_R15_R16_primary",
+   "review5_closure_draw_GF_edges_after"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "閉包認証の変異。drawを含む閉包だけ実祖先の集合を起点へ入れず、本文参照から届くものに縮める。"
+ },
+ {
+  "id": "GF-K02",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    order.closed_points = frozenset(audit.selected)",
+    "    from .clock_contracts import SOURCE\n    from .s4_contracts import BOOT\n    order.closed_points = frozenset(p for p in audit.selected if p in roots or getattr(audit.point(p).body, 'contract', None) not in (SOURCE, BOOT))"
+   ]
+  ],
+  "expect": [
+   "review5_closure_same_bad_point_is_rejected_on_every",
+   "review5_closure_R14_R15_R16_primary",
+   "review5_closure_draw_GF_edges_after",
+   "assembly_FA01"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "閉包認証の変異。明示rootではない時計の来歴ClockSource/BOOTを認証対象閉包から落とす。"
+ },
+ {
+  "id": "GF-K03",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            core.FContextCheckEvent:('record',),core.FCandidateDeclaration:('model',),",
+    "            core.FContextCheckEvent:(),core.FCandidateDeclaration:('model',),"
+   ]
+  ],
+  "expect": [
+   "review5_closure_same_bad_point_is_rejected_on_every",
+   "review5_closure_R14_R15_R16_primary",
+   "review5_closure_draw_GF_edges_after"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "閉包認証の変異。過去contextのcheck_eventsのPointを、DTO参照の閉包列挙から外す。",
+  "equivalent": false,
+  "equivalence_reason": "2026-10-10 Claude. Logically redundant; differs only at the finite budget boundary (review5 5 R19: max_cells 324-325). Equivalent in meaning, not in budget consumption. / 2026-10-12 Claude: 独立の関係の試験 (rel) でも生き残り。識別の対を試験の係 3 通目に依頼 (context の確定前後の cache・閉包の列挙) / 2026-10-12 Claude: 試験の係 4 通目 = 単独の到達の形は適用外 (A-17 により check_events の参照先には実祖先の経路もある)。有限予算の規範は F-a に無く、C-06 ①だけを主張、②③は未確認 / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+ },
+ {
+  "id": "GF-K04",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            core.FCandidateGeneration:('basis','draws'),",
+    "            core.FCandidateGeneration:('draws',),"
+   ]
+  ],
+  "expect": [
+   "FA19_generation_and_selection",
+   "assembly_FA19",
+   "auth",
+   "candidate_generation",
+   "review5_GF_K04",
+   "review5_closure_R14_R15_R16_primary",
+   "review5_closure_draw_GF_edges_after",
+   "review5_closure_same_bad_point_is_rejected_on_every"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "閉包認証の変異。候補宣言generation.basisのPointを閉包列挙から外す。",
+  "equivalent": false,
+  "equivalence_reason": "2026-10-11 Claude: 今の約束 A-04 で候補宣言の外側の Prediction.basis は generation.basis の Ref を全部含む。閉包は外側の basis の Ref を辿るので、generation.basis の Point は point_fields が無くても閉包に入る (変異の写しで A-06 の違反 18 件が _check_contract_version 等で同じく拒まれるのを確かめた: scratchpad/k04work/probe.py)。外側の basis が欠けていれば A-04 の proof_mismatch で拒む。成功の集合は同じ。違うのは「basis の記録が不正で、しかも外側の basis にも無い」二重の不正の時の診断の理由だけ (C-06 の ② は同値と主張しない) / 2026-10-12 Claude: 独立の関係の試験 (rel) でも生き残り。識別の対を試験の係 3 通目に依頼 (context の確定前後の cache・閉包の列挙) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+ },
+ {
+  "id": "GF-K05",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    for point in sorted(order.closed_points):\n        order.validate(point)",
+    "    for point in sorted(order.closed_points)[1:]:\n        order.validate(point)"
+   ]
+  ],
+  "expect": [
+   "review5_closure_same_bad_point_is_rejected_on_every",
+   "review5_closure_R14_R15_R16_primary",
+   "review5_closure_draw_GF_edges_after",
+   "review5_GF_T25",
+   "review5_GF_K05"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "閉包認証の変異。固定閉包の先頭の1記録への表の適用を省略する。再帰リンクで覆われるかも実行結果に残す。"
+ },
+ {
+  "id": "GF-K06",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            self.constraints(rule, node, field)",
+    "            if rule.name == 'context' and self.context is not None:\n                redirected = {**node, 'judgment': tuple({**n, 'reading': self.time(self.context.run, self.context.now_ns)} for n in node['judgment']), 'observation': tuple({**n, 'reading': self.time(self.context.run, self.context.observed_ns)} for n in node['observation'])}\n                self.constraints(rule, redirected, field)\n            else:\n                self.constraints(rule, node, field)"
+   ]
+  ],
+  "expect": [
+   "review5_closure_same_bad_point_is_rejected_on_every",
+   "review5_closure_R14_R15_R16_primary",
+   "review5_closure_draw_GF_edges_after"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "閉包認証の変異。過去contextのcheck_eventsを、その記録自身でなく現在のcontextの観測・判断境界で検査する(R14)。"
+ },
+ {
+  "id": "GF-K07",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        if not link.nullable and self.has_null(node, link.path):",
+    "        if False and not link.nullable and self.has_null(node, link.path):"
+   ],
+   [
+    "            if not found and self.has_null(env, path) and path not in rule.optional:",
+    "            if False and not found and self.has_null(env, path) and path not in rule.optional:"
+   ],
+   [
+    "            if not self.select(env, path):\n                raise core.FInputError('unresolved_reference', 'required generation field absent', field + '/' + path)",
+    "            if not self.select(env, path) and not self.has_null(env, path):\n                raise core.FInputError('unresolved_reference', 'required generation field absent', field + '/' + path)"
+   ]
+  ],
+  "expect": [
+   "review5_closure_same_bad_point_is_rejected_on_every",
+   "review5_closure_R14_R15_R16_primary",
+   "review5_closure_draw_GF_edges_after"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "閉包認証の変異。必須参照・比較のnullを空の辺として通し、Binding.caused_byを省略扱いにする(R16)。"
+ },
+ {
+  "id": "GF-K08",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        orders=(('received', 'at'), ('cause.at', 'received')),",
+    "        orders=(('received', 'at'),),"
+   ]
+  ],
+  "expect": [
+   "review5_closure_same_bad_point_is_rejected_on_every",
+   "review5_closure_R14_R15_R16_primary",
+   "review5_closure_draw_GF_edges_after"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "閉包認証の変異。Observedの原因Attempt開始≤受信の辺だけを外す(R15)。 (2026-10-11 Claude: 認証器の作り直しの後のコードに合わせて書き直した、意味は同じ)",
+  "equivalent": false,
+  "equivalence_reason": "2026-10-12 Claude: 独立の関係の試験 (test_gate_f_auth_rel) でも生き残った。同値の導出は無い = 識別する入力が試験に無い。試験の係 sui-gate-f-auth-rel 3 通目に識別の対を依頼: Observed の received が記録の at より前で、原因の Attempt の at が received より後・at より前 (cause.at ≤ at は守る) / 2026-10-12 Claude: 試験の係が仕様から作った識別の対 (4 通目 #1/#5/#7〜10) でも生き残った。別の確かめが先に拒んでいるが、何が拒むかは未特定。C-06 の ①〜③ とも同値の主張はしない。原因の特定は F-b の ★ (HANDOFF §G)"
+ },
+ {
+  "id": "GF-K09",
+  "file": "src/sui/f_facts.py",
+  "edits": [
+   [
+    "        certify_reader_closure(image, roots=(*request.fixed_parents,*available), budget=budget)",
+    "        pass  # preflight bypasses closure certification"
+   ]
+  ],
+  "expect": [
+   "review5_closure_same_bad_point_is_rejected_on_every",
+   "review5_closure_R14_R15_R16_primary",
+   "review5_closure_draw_GF_edges_after",
+   "review5_closure_preflight_GF_edges_without_selected"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "閉包認証の変異。preflightだけ閉包の認証を飛ばす。"
+ },
+ {
+  "id": "GF-K10",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        order = certify_reader_closure(image, roots=(point,*additional_roots), budget=budget, context=context,\n                                       post_problem=purpose=='selection')",
+    "        order = type('UncheckedDraw', (), {'validate': lambda self, cid, field: {'value': core._decode(record.body.content.as_json(), core.FDrawFact)}})()"
+   ]
+  ],
+  "expect": [
+   "review5_closure_same_bad_point_is_rejected_on_every",
+   "review5_closure_R14_R15_R16_primary",
+   "review5_closure_draw_GF_edges_after"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "閉包認証の変異。drawのbind/evaluateだけ全閉包認証を飛ばし、認証済みdraw本文のdecoderだけを使う。"
+ },
+ {
+  "id": "GF-A02",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "               Link('sources', '@sources', contract=SOURCE, profiles=('facts',), edge='clock_provenance'),\n               Link('gap_evidence'",
+    "               Link('sources', '@sources', contract=SOURCE, profiles=('facts',)),\n               Link('gap_evidence'"
+   ]
+  ],
+  "expect": [
+   "auth_17_3_R22"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: R22: measurement ClockSource link treated as a uses edge (notice receipt <= measurement)"
+ },
+ {
+  "id": "GF-A03",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "if link.edge in NO_AVAILABILITY_EDGES or owner_rule.temporal_exception",
+    "if owner_rule.temporal_exception"
+   ]
+  ],
+  "expect": [
+   "auth_17_3_R22"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: T2: edge kinds ignored, every reference gets availability-before-event"
+ },
+ {
+  "id": "GF-A04",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            if item.types and type(node.get('value')).__name__ not in item.types:\n                continue\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "auth_17_12_D1_coverage_unproved"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: D1: union-branch meaning ignored; completed-window bound applied to every coverage kind"
+ },
+ {
+  "id": "GF-A05",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "types=('CoverageClaim', 'Gap'))),",
+    "types=('CoverageClaim', 'Gap', 'CoverageUnproved'))),"
+   ]
+  ],
+  "expect": [
+   "auth_17_12_D1_coverage_unproved"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: D1: CoverageUnproved treated as a completed window"
+ },
+ {
+  "id": "GF-A06",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        orders=(('start', 'interval_end'), ('completed_end', 'actual'),",
+    "        orders=(('start', 'interval_end'),"
+   ]
+  ],
+  "expect": [
+   "relation"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth_rel.py",
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: D1: completed-window bound dropped for CoverageClaim and Gap (2026-10-11 Claude: 認証器の作り直しの後のコードに合わせて書き直した、意味は同じ) (2026-10-12 Claude: coverage 行の 'end' を 'interval_end' に改名したのに合わせて old を書き直した)",
+  "equivalent": false,
+  "equivalence_reason": "2026-10-12 Claude: 試験の係 (sui-gate-f-auth-rel 4〜5 通目) の関係 closed_window_receipt の対で KILLED (expect は test_relation_pair の全体、-k は接頭辞 test_relation_)"
+ },
+ {
+  "id": "GF-A07",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            (not image.entry(cid).is_event and\n             image.entry(cid).parents <= self.compiler.visible_cids))",
+    "            (image.entry(cid).category.value == 'prediction' and\n             image.entry(cid).parents <= self.compiler.visible_cids))"
+   ]
+  ],
+  "expect": [
+   "auth_17_2_R21"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: G1: only Prediction treated as a derived leaf when resolving a Ref (Interpretation unresolved)"
+ },
+ {
+  "id": "GF-A08",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "if cid in self.visible_cids or (not entry.is_event and entry.parents <= self.visible_cids):",
+    "if cid in self.visible_cids or (entry.category.value=='prediction' and entry.parents <= self.visible_cids):"
+   ]
+  ],
+  "expect": [
+   "auth_17_2_R21"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: G1: closure traversal treats only Prediction as a derived leaf"
+ },
+ {
+  "id": "GF-A09",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        if entry.is_event and cid not in self.visible_cids:\n",
+    "        if entry.category.value != 'prediction' and cid not in self.visible_cids:\n"
+   ]
+  ],
+  "expect": [
+   "auth_17_2_R21"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: G1: point() treats only Prediction as a derived leaf"
+ },
+ {
+  "id": "GF-A10",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        if ((entry.is_event and dependency not in ancestors)",
+    "        if ((entry.category.value != 'prediction' and dependency not in ancestors)"
+   ]
+  ],
+  "expect": [
+   "auth_17_2_R21"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: G1: reference() treats only Prediction as a derived leaf"
+ },
+ {
+  "id": "GF-A11",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "    EventInvariant('Intention', body='Intention',\n        links=(Link('decided_in', 'record.body.decided_in', 'ref', body='Decided', numeric=False),\n               Link('supersedes', 'record.body.supersedes', 'ref', body='Intention', numeric=False, nullable=True),\n               Link('via', 'record.body.via', 'ref', body='AttemptStarted', numeric=False, nullable=True)),\n        align_context=True, evidence='F §3-10-17-2,-6; records.py:210-237'),\n",
+    ""
+   ],
+   [
+    "\n_check_totality()\n",
+    "\n"
+   ]
+  ],
+  "expect": [
+   "auth_17_2_R21"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: R21: Intention row missing and the import-time totality check removed (lookup StopIteration)"
+ },
+ {
+  "id": "GF-A12",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "('end', 'actual'), ('gap_end', 'actual'),",
+    "('end', 'actual'),"
+   ]
+  ],
+  "expect": [
+   "auth_17_12_D1_frame_gap"
+  ],
+  "paths": [
+   "tests/test_gate_f_facts.py"
+  ],
+  "note": "2026-10-10 Claude (Codex unavailable). §3-10-17 conformance fix, reverted: D1: the gap interval of a frame is not bounded by its receipt"
+ },
+ {
+  "id": "GF-R01",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "                self.relation('generation before acquisition', dict(\n                    finish=completion['finish'][0]['reading'], acquired=acquired), field + '/generation')",
+    "                pass"
+   ]
+  ],
+  "expect": [
+   "auth",
+   "stage_stops"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): D/A-10 (FA17-B01): 取得だけの道で生成完了 <= 取得時計を見ない"
+ },
+ {
+  "id": "GF-R02",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        elif isinstance(record.body, Observed):\n            self.relation('reference availability', dict(available=dependency['actual'], event=acquired), field)",
+    "        elif isinstance(record.body, Observed):\n            pass"
+   ]
+  ],
+  "expect": [
+   "auth",
+   "same_clock_point"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): D/A-09・A-12 (FA17-B02): 通知の本文の取得で受信 <= 取得を見ない"
+ },
+ {
+  "id": "GF-R03",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            if saved[0] != acquired[0] or saved[1] > acquired[1]:\n                raise core.FIncomplete('certificate_incomplete', 'declaration recorded after acquisition', field)",
+    "            pass"
+   ]
+  ],
+  "expect": [
+   "auth"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-11 (U-05): 取得より後に記録された宣言を取得済みとする"
+ },
+ {
+  "id": "GF-R04",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            if not found:\n                raise core.FIncomplete('certificate_incomplete', 'generation evidence absent', field + '/generation')",
+    "            pass"
+   ]
+  ],
+  "expect": [
+   "auth",
+   "review4",
+   "stage_stops"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-10: 生成の証拠が無い結果の取得を認める"
+ },
+ {
+  "id": "GF-R05",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    if contract is not None and contract.name in names and contract not in versions:",
+    "    if False:"
+   ]
+  ],
+  "expect": [
+   "auth",
+   "inventory_field"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): D/V-08 (FA17-M03): 既知名の未知版を通す"
+ },
+ {
+  "id": "GF-R06",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "                    self.ordered(previous[1], reading[1], field + '/check_events')",
+    "                    pass"
+   ]
+  ],
+  "expect": [
+   "relation"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py",
+   "tests/test_gate_f_auth_rel.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): D/A-17 (FA17-M02): check_events の時計の読みの逆転を通す",
+  "equivalent": false,
+  "equivalence_reason": "2026-10-12 Claude: 試験の係 (sui-gate-f-auth-rel 4〜5 通目) の関係 sibling_clock の対で KILLED (expect は test_relation_pair の全体、-k は接頭辞 test_relation_)"
+ },
+ {
+  "id": "GF-R07",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            same(about, {ref(value.request)}, 'about')",
+    "            pass"
+   ]
+  ],
+  "expect": [
+   "auth",
+   "outer_reference_set"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-04: 結果の about を本文の request と照合しない"
+ },
+ {
+  "id": "GF-R08",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            if len(set(column)) != len(column):\n                raise core.FInputError('shape', 'repeated outer reference', field + '/' + name)",
+    "            pass"
+   ]
+  ],
+  "expect": [
+   "outer_reference_set"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-04: 外側の参照の重複を通す"
+ },
+ {
+  "id": "GF-R09",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "                if (statement.request, statement.result, statement.model) != (value.request, value.result, model):\n                    raise core.FInputError('proof_mismatch', 'statement names other objects', field + '/statement')",
+    "                pass"
+   ]
+  ],
+  "expect": [
+   "auth"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-10・A-04: 証明の文が別の対象を指しても通す (EF/ED で)"
+ },
+ {
+  "id": "GF-R10",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            contains({ref(p) for p in value.generation.basis}, 'generation/basis')",
+    "            pass"
+   ]
+  ],
+  "expect": [
+   "auth",
+   "candidate_generation",
+   "outer_reference_set",
+   "review4",
+   "review5_GF_K04"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py",
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-04: 候補の generation.basis を外側の basis が含むかを見ない"
+ },
+ {
+  "id": "GF-R11",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "                raise core.FInputError(rule.mismatch, 'event bindings disagree', field + '/' + left)",
+    "                raise core.FInputError('proof_mismatch', 'event bindings disagree', field + '/' + left)"
+   ]
+  ],
+  "expect": [
+   "auth",
+   "review5_table_independent"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py",
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): D/A-21 (FA17-M06): 生成の対応の不一致を proof_mismatch と返す"
+ },
+ {
+  "id": "GF-R12",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            if rule.align_context and self.enabled(rule, 'align_context') and record.at.run != self.context.run:\n                # A-05/A-18: another run's event is legal; it is compared with\n                # this context only where a use needs it (then clock_unaligned).\n                node['other_run'] = True",
+    "            if rule.align_context and self.enabled(rule, 'align_context') and record.at.run != self.context.run:\n                self.aligned(record.at.run, self.context.run, field + '/run')"
+   ]
+  ],
+  "expect": [
+   "inventory_field"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-05・A-18: 使われない別 run の記録を拒む"
+ },
+ {
+  "id": "GF-R13",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "                        raise core.FIncomplete('certificate_incomplete','unknown time needed',field)",
+    "                        raise core.FInputError('shape','null clock comparison endpoint',field)"
+   ]
+  ],
+  "expect": [
+   "unknown_receipt_null",
+   "presence_and_unavailable"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-20: 必要になった合法な null を shape と返す"
+ },
+ {
+  "id": "GF-R15",
+  "file": "src/sui/_f_invariants.py",
+  "edits": [
+   [
+    "        # A-12/A-18: a provenance notice, judged by its role, not by the fixed\n        # problem's judgment bound (a late ClockSource notice is legal).\n        scope_time=None,\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "clock_identity"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): D/A-12・A-18 (R22): 遅い ClockSource の通知を判断の境界で拒む"
+ },
+ {
+  "id": "GF-R16",
+  "file": "src/sui/f_entry.py",
+  "edits": [
+   [
+    "        return not (isinstance(value, dict) and value.get(\"kind\") in (\"measurement_unavailable\", \"coverage_unproved\"))",
+    "        return True"
+   ]
+  ],
+  "expect": [
+   "auth",
+   "inventory_field"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/V-09・A-14: 値の無い coverage の報告に Binding を求める"
+ },
+ {
+  "id": "GF-R17",
+  "file": "src/sui/f_facts.py",
+  "edits": [
+   [
+    "    kept=tuple(r for r in candidates if not isinstance(r.body,Observed) or r.body.contract.name in c1_names)",
+    "    kept=candidates"
+   ]
+  ],
+  "expect": [
+   "auth"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-20・M-16: C1 が読まない記録を C1 の読みに入れる"
+ },
+ {
+  "id": "GF-R18",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "                            if type(key) is not str or re.fullmatch(r'sha256:[0-9a-f]{64}',key) is None:\n                                raise core.FInputError('reference_kind','predicate key is not a Point','/predicate/args/'+side+'/key')",
+    "                            if type(key) is not str or re.fullmatch(r'sha256:[0-9a-f]{64}',key) is None:continue"
+   ]
+  ],
+  "expect": [
+   "auth"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-06: 短絡で隠れる述語の子の不正な参照を通す"
+ },
+ {
+  "id": "GF-R19",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "            if key in first:alias[cid]=first[key]",
+    "            if False:alias[cid]=first[key]"
+   ]
+  ],
+  "expect": [
+   "readoption_preserves",
+   "review5_R04"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py",
+   "tests/test_gate_f_facts.py",
+   "tests/test_gate_f_contract.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-16: 同じ (completion, previous) の採用を競合として数える"
+ },
+ {
+  "id": "GF-R20",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        if contract == PREFERENCE:\n            try:\n                _parse(self.compiler.point(cid))\n            except ValueError as exc:\n                raise core.FInputError('shape', str(exc), field + '/content') from exc",
+    "        if False:\n            pass"
+   ]
+  ],
+  "expect": [
+   "inventory_field"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/A-19・A-20: 好みの紙の形を入口によって見ない"
+ },
+ {
+  "id": "GF-R21",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "                    if odd:\n                        raise core.FInputError('shape', 'body key set differs from its contract', field + '/' + odd[0])",
+    "                    pass"
+   ]
+  ],
+  "expect": [
+   "inventory_field"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/V-08・A-20: C1 の記録の欄の過不足を通す"
+ },
+ {
+  "id": "GF-R22",
+  "file": "src/sui/f.py",
+  "edits": [
+   [
+    "        if field is None and fields:\n            field = fields[0]\n",
+    ""
+   ]
+  ],
+  "expect": [
+   "auth",
+   "whole_record_identity"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): B/A-21: 不一致の診断に欄の場所を返さない"
+ },
+ {
+  "id": "GF-R23",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "        self.relation('boundaries', dict(\n            observed=",
+    "        if context.observed_ns < 0:\n            raise core.FInputError('shape', 'negative reading', '/context/reading')\n        self.relation('boundaries', dict(\n            observed="
+   ]
+  ],
+  "expect": [
+   "signed_monotonic"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): D/V-04 (FA17-M05): 符号付きの単調時計に 0 の下限を戻す"
+ },
+ {
+  "id": "GF-R24",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    points = tuple(core.FFactsPointDependency(point=cid, entry_present=True, body_present=True,\n        record=facts.image._records[cid].id, record_digest=core._digest(facts.image._records[cid]))\n        for cid in sorted(facts.selected))",
+    "    points = ()"
+   ]
+  ],
+  "expect": [
+   "auth",
+   "replay",
+   "review4"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/E-05・P7: 依存の表から Point ごとの内容の結合を落とす"
+ },
+ {
+  "id": "GF-R25",
+  "file": "src/sui/_f_world.py",
+  "edits": [
+   [
+    "    _world_domain='sui.f.world/3'\n    _problem_contract=fc.PROBLEM_FACTS\n    _problem_domain='sui.f.problem/3'\n\n    def __init__(self, request, *, reader, registry, budget):",
+    "    _world_domain='sui.f.world/3'\n    _problem_contract=fc.PROBLEM_FACTS\n    _problem_domain=None\n\n    def __init__(self, request, *, reader, registry, budget):"
+   ]
+  ],
+  "expect": [
+   "auth",
+   "replay",
+   "review4"
+  ],
+  "paths": [
+   "tests/test_gate_f_auth.py"
+  ],
+  "note": "2026-10-11 Claude (認証器の作り直し、今の約束): S/E-05: problem/3 の鍵を domain なしで作る"
  }
 ]
