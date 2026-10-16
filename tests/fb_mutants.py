@@ -1,13 +1,14 @@
-"""Independent F-b mutants, paper v0.12 (bacff105a33c6acb).
+"""Independent F-b mutants: v0.12 designs; scope updated against v0.15.
 
 M-01: PREDECLARED population, before writing any mutant implementation.
-All line numbers below refer to specs/関所F_Fb_今の約束.md.
+Paper: specs/関所F_Fb_今の約束.md. Unmarked lines are design-time v0.12;
+v0.15 scope updates are explicitly marked (old :1509 is now :1876).
 Each row has a proposed SINGLE broken promise. All controls mean the SAME
 Scenario, E0, legal prefix and Cut with CorrectWindow; no changed declaration.
 The final column states the behavior required of that nearest legal control.
 SC names without a concrete suffix are proposed minimal structural scenes,
 not claims that the existing numerical branch can be run. Actual mappings and
-results are in test_fb_mutants.py. Proposals are not discrimination evidence.
+results are in fb_mutants_results.json. Proposals are not discrimination evidence.
 
 ID | paper row; mapping | proposed wrong behavior | scene | nearest legal control
 INV-1.a | 839;1399 | Accept acknowledges custody but drops the unsaved receipt | minimal receipt | receipt retained through HostAck
@@ -32,7 +33,7 @@ INV-6.a | 857;1417 | completed preparation swaps Wr start clock for Wp finish cl
 INV-6.b | 858;1418 | issue two separately named T records for one work ending | SC-04-DESC terminal | one saved terminal record
 INV-6.c | 859;1419 | merge distinct item_slots OR distinct acquisition intents with equal targets | SC-11 same-content-other-slot / M-two-acquisitions | preserve both identities
 INV-7.a | 860;1420;1045 | invent Xc from a singleton terminal report (no incompatible pair) | SC-04-DESC terminal | T only, no Xc
-INV-7.b | 861;1421 | enter a launched body after an upstream conflicting report is saved | SC-18 minimal structural conflict | entry blocked; evidence saving continues
+INV-7.b | 861;1421; v0.15:1887 (12),1876 (old 1509) | 範囲外 (実装の段へ): enter-after-conflict proposal retained for the implementation stage | all 16 SC-18 branches have E0=None and are implementation-stage | legal IC/IG/IA and UseDeps correspondence require the real F-a boundary
 INV-7.c | 862;1422 | late report rewrites an already fixed terminal | SC-15 tie local | original terminal unchanged
 INV-8.a | 863;1423 | replace a work's frozen numerical root with current Saved points | SC-04-DESC | descriptor keeps original root
 INV-8.b | 864;1424 | EnterWorker reads current Saved points instead of its frozen input | SC-04 pending local | actual read uses fixed input
@@ -60,7 +61,7 @@ Scope: H-01..H-06 are OUTSIDE this automated task (891-896). Numerical
 legality, /2 projection, contract-specific Support and actual issued F-a
 certificates/artifact closure remain implementation-stage (1509); no symbolic
 pass certifies them. A row can gain STRUCTURAL discrimination while retaining
-these limitations. Six previously unconnected rows are not silently removed.
+these limitations. Seven implementation-stage rows remain in the denominator.
 
 Final scope disposition (proposals above remain in the 45-row denominator):
 - INV-9.b: implementation-stage (866,1426,1509). SC-07a/b has no executable
@@ -73,10 +74,10 @@ Final scope disposition (proposals above remain in the 45-row denominator):
 - INV-16.a/16.b: implementation-stage (880-881,1440-1441,1509). The public
   structural artifact-issued scene does not provide saved authenticated
   evaluation/PR/Draw/Selected correspondence or actual artifact closure.
-- INV-7.b: NOT declared out of scope. Independent mutant/control still
-  unimplemented: SC-18 declarations have E0=None and scope b. A legal
-  structural IX prefix with explicit UseDeps/EvidenceRefs and affected keys
-  is needed. Its proposal remains above; do not silently remove this row.
+- INV-7.b: 範囲外 (実装の段へ), owner decision in v0.15 (12):1887.
+  All 16 SC-18 branches are implementation-stage, E0=None. Legal IC/IG/IA
+  values and UseDeps/conflict correspondence need real F-a, v0.15:1876
+  (the old :1509 decision). Keep the row and its implementation-stage bridge.
 - Other numerical portions of every row remain implementation-stage (1509).
   Structural identification of one case is not whole-row or numeric coverage.
 
@@ -90,7 +91,7 @@ naming/wire only (1); no extra semantic or numerical assumption (0).
 Read boundary: inspect.signature/getdoc and public dataclass declarations,
 SCENES/E0/instantiate, and actual public calls only. No implementation source
 of CorrectWindow, Environment or checker predicates was opened.
-Session logging: latest instruction permits only these two new files, so
+Session logging: latest instruction permits these two files and results JSON;
 Obsidian Sessions/Projects/Heat updates are intentionally NOT performed.
 Reused knowledge: Obsidian/Knowledge/確かめる係の設計_すり抜けの型と環境の真実_2026-10-13.md;
 applicable: keep A-G failure mechanisms and independent E0/actual observations
