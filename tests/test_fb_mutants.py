@@ -584,7 +584,7 @@ def report_data(value):
 
 
 def read_evidence(previous):
-    """Read supplied reports and ONLY the scene module's recorded JSON literal.
+    """Read supplied reports and ONLY the scene results JSON's observation record.
 
     Never import/execute test_fb_scenes or inspect its test bodies. If temporary
     reports expire, preserve their verbatim rows/hashes as a historical snapshot.
@@ -612,12 +612,8 @@ def read_evidence(previous):
                     reference=columns[2], source=f'{path.as_posix()}:{number}'))
         evidence['sources'].append(dict(kind=destination, path=path.as_posix(),
             sha256=sha256(raw).hexdigest(), read_range=f'全文 1-{len(lines)}; tables retained', reread=True))
-    path = ROOT / 'tests/test_fb_scenes.py'
-    text = path.read_text(encoding='utf-8')
-    marker = "RECORDED_OBSERVATION_EVIDENCE = json.loads(r'''"
-    start = text.index(marker) + len(marker)
-    end = text.index("''')", start)
-    observed = json.loads(text[start:end])
+    path = ROOT / 'tests/fb_scenes_results.json'
+    observed = json.loads(path.read_text(encoding='utf-8'))['records']['RECORDED_OBSERVATION_EVIDENCE']
     manifest = {s['id']: s for s in observed['manifest']}
     for result in observed['latest_reports']:
         declaration = manifest[result['id']]
@@ -632,7 +628,7 @@ def read_evidence(previous):
         })
     evidence['sources'].append(dict(kind='scenes', path=path.relative_to(ROOT).as_posix(),
         sha256=sha256(path.read_bytes()).hexdigest(),
-        read_range=f'recorded JSON only, lines {text[:start].count(chr(10))+1}-{text[:end].count(chr(10))+1}',
+        read_range='records.RECORDED_OBSERVATION_EVIDENCE: full value only; migration/report not used',
         reread=True))
     assert {r['target'] for r in evidence['check2_rows']} == set(ROW_ORDER)
     assert {r['target'] for r in evidence['check2_rows'] if r['kind'] != '—'} == REPORTED_UNCONNECTED
