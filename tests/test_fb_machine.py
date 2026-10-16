@@ -296,7 +296,7 @@ def checked_cases():
 def test_independent_rows_on_every_existing_small_scenario(case_index, checked_cases, capsys):
     scenario, graph, report = checked_cases[case_index]
     assert tuple(r.condition_id for r in report.rows) == CONDITION_IDS
-    assert sum(report.counts.values()) == 45
+    assert sum(report.counts.values()) == 47
     assert report.human == tuple((h, "未点検") for h in HUMAN_IDS)
     assert not report.passed  # smoke reachability is not semantic completeness
     with capsys.disabled():
@@ -307,16 +307,16 @@ def test_independent_rows_on_every_existing_small_scenario(case_index, checked_c
         for finding in report.violations:
             print(f"  {finding.condition_id} {finding.location}: {finding.message}; {finding.target!r}", flush=True)
     assert not report.violations, report.violations
-def test_checker_denominator_keeps_all_45_conditions_and_all_scopes():
-    assert len(ROWS) == 45
+def test_checker_denominator_keeps_all_47_conditions_and_all_scopes():
+    assert len(ROWS) == 47
     assert {r.condition_id: r.scope for r in ROWS} == dict(SCOPE_UNIVERSE)
     assert sum(r.identification == "具体化済み" for r in ROWS) == 13
-    assert sum(r.identification == "未具体化" for r in ROWS) == 32
+    assert sum(r.identification == "未具体化" for r in ROWS) == 34
     assert len(CONCRETE_IDENTIFICATION) == 13
     assert all(len(r.paper_columns) == 7 and r.formula for r in ROWS)
     assert len(coverage()) == sum(len(scopes) for _, scopes in SCOPE_UNIVERSE)
     report = Checker().report()
-    assert report.counts == {"違反": 0, "違反なし・識別力確認済み": 0, "違反なし・識別力未確認": 45}
+    assert report.counts == {"違反": 0, "違反なし・識別力確認済み": 0, "違反なし・識別力未確認": 47}
     assert all("not_run" in row.limitations for row in report.rows)
 def _candidate_step(e0, before, after, action=Action("Wait")):
     # Frozen counterfactual input to the checker, not an alleged reachable state
@@ -521,7 +521,7 @@ def test_incomplete_or_cut_graph_is_never_a_dead_end_or_a_pass():
     for scenario in (Scenario("CHECK-boundary", e0, 1), Scenario("CHECK-cut", e0, 100, cut=Cut("save-exit", frozenset(("AddEntry",))))):
         report = check_exploration(scenario, explore(scenario))
         assert not report.complete and not report.passed
-        for row in report.rows[-2:]:
+        for row in (r for r in report.rows if r.condition_id in ('L-RECEIPT', 'L-DERIVE')):
             assert any("not run" in reason for reason in row.limitations)
 def test_long_fair_scc_does_not_depend_on_python_recursion_limit():
     count = 2100
@@ -744,7 +744,7 @@ def test_handmade_contract_checks_never_promote_identification_or_remove_human_r
     report = checker.report()
     assert not report.passed and not report.violations
     assert report.counts["違反なし・識別力確認済み"] == 0
-    assert report.connection_counts == {"約束の未接続": 0, "約束違反": 0, "約束接続・部分判定": 45}
+    assert report.connection_counts == {"約束の未接続": 0, "約束違反": 0, "約束接続・部分判定": 47}
     assert report.human == tuple((h, "未点検") for h in HUMAN_IDS)
     disconnected = Checker()
     disconnected.on_observations(None, None)
@@ -936,7 +936,7 @@ def test_observer_transport_rejects_separate_fake_el_and_changed_e0_without_mark
     assert any(v.path == "EL" for v in checker.report().contract_violations)
     checker.on_observations(replace(contract, capacity=(("measure", 7),)), trace)
     assert any(v.path == "E0" for v in checker.report().contract_violations)
-    assert checker.report().connection_counts["約束違反"] == 45
+    assert checker.report().connection_counts["約束違反"] == 47
     assert not checker.report().passed
 def test_end_known_uses_actual_generation_first_post_prefix_and_saved_receipt():
     bc = observation_check
@@ -1337,8 +1337,8 @@ def test_connected_handoff_all_rows_use_actual_condition_custody(checked_handoff
     scenario, graph, edge, report = checked_handoff_case
     assert graph.complete and len(graph.states) <= scenario.max_states <= 200_000
     assert not report.violations and not report.contract_violations, report.violations
-    assert report.counts == {"違反": 0, "違反なし・識別力確認済み": 0, "違反なし・識別力未確認": 45}
-    assert report.connection_counts == {"約束の未接続": 0, "約束違反": 0, "約束接続・部分判定": 45}
+    assert report.counts == {"違反": 0, "違反なし・識別力確認済み": 0, "違反なし・識別力未確認": 47}
+    assert report.connection_counts == {"約束の未接続": 0, "約束違反": 0, "約束接続・部分判定": 47}
     assert report.human == tuple((h, "未点検") for h in HUMAN_IDS)
     assert not any("condition-owner" in reason for row in report.rows for reason in row.limitations)
     with capsys.disabled():
@@ -2765,7 +2765,9 @@ def test_connection_counts_and_per_scene_elapsed_report(checked_cases, capsys):
     tags = set()
     with capsys.disabled():
         for scenario, graph, report in checked_cases:
-            assert report.connection_counts == {"約束の未接続": 0, "約束違反": 0, "約束接続・部分判定": 45}
+            assert report.connection_counts == {"約束の未接続": 0, "約束違反": 0, "約束接続・部分判定": 47}
+            assert len(report.rows) == 47
+            assert {"INV-2.g", "INV-16.c"} <= {row.condition_id for row in report.rows}
             if scenario.id == "CHECK-EI-transport":
                 assert report.unconnected_observations == ()
             tags.update(e.tag for state in graph.states for e in state.evidence.observation_trace.events)
@@ -3786,6 +3788,885 @@ def test_delivery_bundle_is_predeclared_and_does_not_reuse_messages_or_predict_r
     assert e0.delivery_bundles[0].notices == (HostNotice("unknown-0"), WorkerNotice("w0", 0))
 
 
+# MG-01 BEGIN: window-owned M3/M4 tests (paper v0.18 1928-1969).
+# The checker-owned sections on either side are unchanged. These are finite
+# implementation tests, not independent identification or F-a mathematical proof.
+def _mg_record(slot, contract, content, category="Event"):
+    from fb_machine import FieldRole, ReferencePath, TypedReference
+
+    def references(value, path=()):
+        if isinstance(value, PlanRef):
+            yield TypedReference("PATH-MG-WIRE", path, value, "UE", "generation")
+        elif isinstance(value, Object):
+            for key, child in value.items:
+                yield from references(child, path + (key,))
+        elif isinstance(value, tuple):
+            for index, child in enumerate(value):
+                yield from references(child, path + (index,))
+
+    refs = tuple(references(content))
+    record = RecordPlan(slot, contract, category, content, refs)
+    roles = tuple(FieldRole(contract, "PATH-MG-WIRE", r.path, "UE", "generation") for r in refs)
+    return record, roles, ReferencePath("PATH-MG-WIRE", (contract.name,), (), "UE", "generation", "direct")
+
+
+def _mg_generation_e0(outcome=None, draws=(), reverse_basis=False):
+    from fb_machine import Source, candidate_request_content
+    process, reader, model, request = (PlanRef("initial", s) for s in ("process", "reader", "model", "Qgen"))
+    candidate, context, evaluation = PlanRef("generated", "CG"), PlanRef("context", "context"), PlanRef("evaluation", "EQ")
+    basis = (reader, model) if reverse_basis else (model, reader)
+    d = Descriptor("wg", process, process, "generate-and-compare", "generation/0", reader,
+        Contract("model.internal_generator", "1"), Contract("sui.fb.candidate_generation", "1"),
+        obj(draws=draws, method_parameter="whole-args"), frozenset((model, reader)),
+        NumericalView(frozenset((model, reader)), (model, reader), obj(model=model, generation_basis=basis)),
+        "bootstrap", frozenset((process,)), request, "Wg", (("think", 1),), frozenset((request,)))
+    q, qroles, path = _mg_record("Qgen", Contract("sui.fb.candidate_request", "1"), candidate_request_content(d))
+    initial_records = tuple(RecordPlan(s, Contract("model.initial." + s, "1"), "Event", obj(origin="bootstrap", slot=s))
+                            for s in ("process", "reader", "model")) + (q,)
+    declaration = obj(model=model, input_order=("internal-A", "internal-B"), measure=obj(weights=(2, 1)),
+        generation=obj(generator=d.method, args=d.args, basis=basis, draws=draws),
+        continuation=obj(after=(obj(candidate="internal-A", policy=None), obj(candidate="internal-B", policy=None))))
+    # Only the independent worker Program supplies the candidate contents. The
+    # initial declaration contains the method, never an external candidate list.
+    actual = outcome or Outcome(OutcomeKind.RETURNED, obj(variant="Candidates", declaration=declaration))
+    cg = AllowedPlan("generated", "O-G", ("generation", "wg"),
+        (RecordPlan("CG", Contract("candidate_declaration", "1"), "Prediction", Source("candidate_declaration", "wg")),),
+        guards=(Guard("generation", "wg"),))
+    eq_record, eroles, _ = _mg_record("EQ", Contract("sui.fb.evaluation_request", "1"),
+        obj(candidates=candidate, reader=reader, model=model, preferences=(model,), context=context, o=(model,), j=(reader,)))
+    ep = replace(d, work_id="ep", stage="Ep", stage_slot="evaluation/0", request=evaluation,
+                 trigger=candidate, method=Contract("model.prepare_evaluation", "1"),
+                 output_contract=Contract("model.evaluation_prepared", "1"),
+                 input_points=frozenset((candidate, context, model, reader)),
+                 numerical_view=NumericalView(frozenset((candidate, context, model)), (candidate, context), obj(model=model, context=context)),
+                 required=frozenset((evaluation, candidate, context)))
+    eq = AllowedPlan("evaluation", "O-G", ("evaluation", "wg"), (eq_record,), (ep,),
+        (Guard("evaluation", "wg", candidate), Guard("generation_context", context)))
+    initial = obj(generator=d.method, args=d.args)
+    boot = Event("Boot", obj(declaration=obj(initial=initial)))
+    e0 = E0(initial=initial, paper_version="v0.18", budget=Budget(window_faults=1), postings=(Posting("boot", boot, 0),), plans=(
+        AllowedPlan("initial", "O-02", ("initial", 0), initial_records, (d,)), cg, eq,
+        AllowedPlan("context", "O-13", ("context", 0),
+                    (RecordPlan("context", Contract("model.evaluation_context", "1"), "Event", obj(observed="later-context")),),
+                    guards=(Guard("saved", model),))),
+        programs=(Program("wg", (actual,), False), Program("ep", (), False)))
+    return replace(e0, references=e0.references + (path,), field_roles=e0.field_roles + qroles + eroles), declaration
+
+
+class _MGPath:
+    def __init__(self, e0):
+        self.e0, self.env, self.window = e0, Environment(e0), CorrectWindow(e0)
+        self.state = boundary_state(e0)
+
+    def take(self, operation, target=()):
+        step = self.env.step(self.state, Action(operation, target), self.window)
+        self.state = step.state
+        return step
+
+    def save(self, unit, slots):
+        for slot in slots:
+            for op in ("PrepareReceipt" if unit.startswith("receipt/") else "PrepareOne",
+                       "PutBody", "AddEntry", "ConfirmWrite", "CompleteWrite"):
+                self.take(op, (unit, slot))
+
+    def receive(self):
+        envelope = self.state.core.h.queue[0]
+        self.take("Accept", (envelope,))
+        self.take("HostAck", envelope.key)
+        self.save(receipt_unit_id(envelope.run, envelope.number), ("receipt",))
+        return envelope
+
+    def start(self, work):
+        for op in ("ResolveWork", "ClaimStart", "Launch"):
+            self.take(op, (work,))
+        self.take("EnterWorker", (work + ":wrapper:0",))
+
+    def finish(self, work):
+        self.take("WorkerStep", (work,))
+        self.take("Deliver", ("report:" + work + ":0",))
+        return self.receive()
+
+
+def _mg_started(e0):
+    path = _MGPath(e0)
+    path.take("PublishUnit", ("initial",))
+    path.save("initial", tuple(r.slot for r in e0.plans[0].records))
+    path.start("wg")
+    return path
+
+
+def _mg_condition(path, kind, target):
+    return next(c for c in path.state.core.p.conditions
+                if c.key.obligation == "O-G" and c.key.kind == kind and c.key.target == target)
+
+
+def test_mg01_generation_cg_eq_keeps_issue_during_save_and_context_wait_then_atomic_ep():
+    from fb_check import Owner, SlotKey, UnitKey, WorkKey
+    from fb_machine import Disabled, View
+    e0, declaration = _mg_generation_e0()
+    path = _MGPath(e0)
+    assert len([b for b in e0.observation_contract.completions if b.key.obligation == "O-G"]) == 7
+    path.take("PublishUnit", ("initial",))
+    assert [w.descriptor.work_id for w in path.state.core.p.work] == ["wg"]
+    assert _mg_condition(path, "run", WorkKey("wg")).unmet
+    with pytest.raises(Disabled):
+        path.take("ClaimStart", ("wg",))  # run exists BEFORE Qgen is Saved.
+    path.save("initial", tuple(r.slot for r in e0.plans[0].records))
+    path.start("wg")
+    envelope = path.finish("wg")
+    assert envelope.event.kind == "WorkFinished"
+    assert not _mg_condition(path, "run", WorkKey("wg")).unmet
+    # FBM3-R01 / paper 1956: the EQ context is already short at EndKnown, so
+    # the same owner accepts a target-bearing pG; issue[CG] stays separately.
+    early = next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    assert [(e.reason_id, e.witness) for e in early] == [("evaluation context unavailable", PlanRef("context", "context"))]
+    assert not _mg_condition(path, "handle", WorkKey("wg")).unmet
+    assert _mg_condition(path, "issue", SlotKey("generated", "CG")).unmet
+    assert not any(c.key.kind == "issue" and c.key.target == SlotKey("evaluation", "EQ")
+                   for c in path.state.core.p.conditions)
+    path.take("RecognizeTerminal", ("wg",))
+    assert next(u for u in path.state.core.p.units if u.id == "terminal:wg").slots[0].plan.content.get("returned") == envelope.event.fields.get("outcome").content
+    path.take("PublishUnit", ("generated",))
+    cg = next(u for u in path.state.core.p.units if u.id == "generated")
+    expected = envelope.event.fields.get("outcome").content.get("declaration")
+    assert cg.slots[0].plan.content == expected
+    assert expected.get("input_order") == declaration.get("input_order")
+    assert expected.get("generation").get("draws") == ()
+    assert cg.generation.descriptor == e0.plans[0].works[0]
+    assert cg.generation.candidate == PlanRef("generated", "CG")
+    assert cg.generation.evaluation == PlanRef("evaluation", "EQ")
+    assert cg.generation.purpose.origin == _mg_condition(path, "run", WorkKey("wg")).key
+    issue = _mg_condition(path, "issue", SlotKey("evaluation", "EQ"))
+    assert issue.owner == Owner("P.units", "generated") and issue.unmet == frozenset((issue.key,))
+    assert not cg.slots[0].prepared
+    with pytest.raises(Disabled):
+        path.take("PublishUnit", ("evaluation",))
+    path.save("generated", ("CG",))
+    assert _mg_condition(path, "issue", SlotKey("evaluation", "EQ")).unmet == issue.unmet
+    assert not _mg_condition(path, "save", SlotKey("generated", "CG")).unmet
+    for op in ("Drain", "FaultWindow", "RebuildWindow", "Drain"):
+        path.take(op)
+    assert _mg_condition(path, "issue", SlotKey("evaluation", "EQ")).owner == issue.owner
+    assert [w.descriptor.work_id for w in path.state.core.p.work] == ["wg"]
+    residual = next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    assert any(e.witness == PlanRef("context", "context") and e.obligation_key == cg.generation.purpose for e in residual)
+    assert Action("PublishUnit", ("evaluation",)) not in path.window.enabled(View(path.state.core, path.state.controls, path.state.evidence))
+    path.take("PublishUnit", ("context",))
+    path.save("context", ("context",))
+    eqstep = path.take("PublishUnit", ("evaluation",))
+    assert tuple(e.key for e in eqstep.events if e.tag == "Publish") == (UnitKey("evaluation"),)
+    eq = next(u for u in path.state.core.p.units if u.id == "evaluation")
+    ep = next(w for w in path.state.core.p.work if w.descriptor.work_id == "ep")
+    assert eq.works == ("ep",) and ep.descriptor.request == PlanRef("evaluation", "EQ")
+    assert eq.generation.purpose == cg.generation.purpose and eq.generation.shortages == residual
+    assert not _mg_condition(path, "issue", SlotKey("evaluation", "EQ")).unmet
+    assert any(c.key.obligation == "O-10" and c.key.kind == "run" and c.key.target == WorkKey("ep") and c.unmet
+               for c in path.state.core.p.conditions)
+    assert eq.slots[0].plan.content.get("candidates") == next(u for u in path.state.core.p.units if u.id == "generated").slots[0].prepared.point
+    assert eq.slots[0].plan.content.get("context") == next(u for u in path.state.core.p.units if u.id == "context").slots[0].prepared.point
+    with pytest.raises(Disabled):
+        path.take("ClaimStart", ("ep",))
+    path.save("evaluation", ("EQ",))
+    path.start("ep")
+    assert next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes == residual
+
+
+@pytest.mark.parametrize("outcome", (
+    Outcome(OutcomeKind.RETURNED, obj(variant="NoCandidates", basis=obj(reason="this-method/input-produced-none"))),
+    Outcome(OutcomeKind.FAILURE, obj(code="generator-failed", basis="actual-worker-failure")),
+    Outcome(OutcomeKind.UNKNOWN, obj(reason="result-unconfirmed", basis="actual-worker-unknown")),
+), ids=("NoCandidates", "Failure", "Unknown"))
+def test_mg01_non_success_saves_exact_t_and_purpose_without_successors_or_retry(outcome):
+    from fb_check import SlotKey, WorkKey
+    from fb_machine import Disabled
+    e0, _ = _mg_generation_e0(outcome)
+    path = _mg_started(e0)
+    envelope = path.finish("wg")
+    path.take("RecognizeTerminal", ("wg",))
+    path.save("terminal:wg", ("T",))
+    terminal = next(u for u in path.state.core.p.units if u.id == "terminal:wg").slots[0].prepared.record
+    assert terminal.content.get("returned") == outcome.content
+    assert terminal.content.get("terminal_kind") == outcome.kind
+    assert terminal.content.get("work") == "wg" and terminal.content.get("stage") == "Wg"
+    assert terminal.content.get("first_receipt") == next(r.unit.slots[0].prepared.point for r in path.state.core.p.receipts if r.envelope == envelope)
+    row = next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg")
+    assert row.purposes and row.purposes[0].obligation_key.origin == _mg_condition(path, "run", WorkKey("wg")).key
+    assert row.purposes[0].witness.outcome == outcome
+    assert not _mg_condition(path, "handle", WorkKey("wg")).unmet
+    for unit in ("generated", "evaluation"):
+        with pytest.raises(Disabled):
+            path.take("PublishUnit", (unit,))
+    with pytest.raises(Disabled):
+        path.take("ClaimStart", ("wg",))
+    assert [w.descriptor.work_id for w in path.state.core.p.work] == ["wg"]
+    assert not any(u.id in ("generated", "evaluation") for u in path.state.core.p.units)
+    assert not any(e.header.record.contract.name in ("candidate_declaration", "sui.fb.evaluation_request", "draw_fact") for e in path.state.core.e)
+    assert not _mg_condition(path, "save", SlotKey("terminal:wg", "T")).unmet
+
+
+def test_mg01_no_initial_has_no_qgen_or_generation_work():
+    from fb_machine import Disabled
+    e0, _ = _mg_generation_e0()
+    boot = Event("Boot", obj(declaration=obj(initial=None)))
+    e0 = replace(e0, initial=None, postings=(Posting("boot", boot, 0),))
+    path = _MGPath(e0)
+    for unit in ("initial", "generated", "evaluation"):
+        with pytest.raises(Disabled):
+            path.take("PublishUnit", (unit,))
+    assert not path.state.core.p.work and not path.state.core.p.units
+    assert not any(e.header.record.contract.name == "sui.fb.candidate_request" for e in path.state.core.e)
+
+
+@pytest.mark.parametrize("draws", ((obj(purpose="candidate_generation", ordinal=0),), None), ids=("R10-required", "undeclared"))
+def test_mg01_generation_draw_requirement_remains_unconnected(draws):
+    from fb_machine import MissingContract
+    e0, _ = _mg_generation_e0(draws=draws)
+    path = _MGPath(e0)
+    path.take("PublishUnit", ("initial",))
+    path.save("initial", tuple(r.slot for r in e0.plans[0].records))
+    path.take("ResolveWork", ("wg",))
+    with pytest.raises(MissingContract, match="R10"):
+        path.take("ClaimStart", ("wg",))
+    assert next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").descriptor.args.get("draws") == draws
+    assert not path.state.core.runners
+
+
+def test_mg01_success_and_predecessor_save_wait_do_not_invent_residual_purpose():
+    from fb_check import SlotKey
+    e0, _ = _mg_generation_e0()
+    path = _mg_started(e0)
+    path.take("PublishUnit", ("context",))
+    path.save("context", ("context",))
+    assert not next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    path.finish("wg")
+    assert not next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    path.take("PublishUnit", ("generated",))
+    assert _mg_condition(path, "issue", SlotKey("evaluation", "EQ")).unmet
+    assert not next(u for u in path.state.core.p.units if u.id == "generated").generation.shortages
+    path.take("Drain")
+    assert not next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    path.save("generated", ("CG",))
+    path.take("PublishUnit", ("evaluation",))
+    assert not next(u for u in path.state.core.p.units if u.id == "evaluation").generation.shortages
+
+
+def test_mg01_generation_basis_correspondence_is_declared_independently_of_application_order():
+    e0, _ = _mg_generation_e0(reverse_basis=True)
+    d = e0.plans[0].works[0]
+    assert d.numerical_view.context.get("generation_basis") != d.numerical_view.application_order
+    path = _mg_started(e0)
+    envelope = path.finish("wg")
+    path.take("PublishUnit", ("generated",))
+    candidate = next(u for u in path.state.core.p.units if u.id == "generated").slots[0].plan.content
+    assert candidate.get("generation").get("basis") == envelope.event.fields.get("outcome").content.get("declaration").get("generation").get("basis")
+    assert candidate.get("generation").get("basis") == tuple(next(u for u in path.state.core.p.units if u.id == "initial").slots[i].prepared.point for i in (1, 2))
+
+
+def test_mg01_unit_presence_cannot_create_eq_issue_or_context_purpose_without_publication():
+    from fb_check import SlotKey
+    from fb_machine import Slot, Unit
+    e0, _ = _mg_generation_e0()
+    path = _mg_started(e0)
+    envelope = path.finish("wg")
+    # FBM3-R01: only the EndKnown context shortage exists; the ghost adds none.
+    early = next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    assert [e.reason_id for e in early] == ["evaluation context unavailable"]
+    cg = e0.plans[1]
+    content = envelope.event.fields.get("outcome").content.get("declaration")
+    # Counterfactual custody corruption, not an identification run: a P.units
+    # mark without any actual EU Publish cannot be an occurrence source.
+    ghost = Unit(cg.unit, cg.obligation_id, cg.key, (Slot(replace(cg.records[0], content=content)),), (), frozenset())
+    p = replace(path.state.core.p, units=path.state.core.p.units + (ghost,))
+    path.state = replace(path.state, core=replace(path.state.core, p=p))
+    path.take("Drain")
+    assert not any(c.key.kind == "issue" and c.key.target == SlotKey("evaluation", "EQ") for c in path.state.core.p.conditions)
+    assert next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes == early
+
+
+@pytest.mark.parametrize("fault", ("empty-order", "model", "generator-version", "args", "basis-order", "missing-continuation", "draws"))
+def test_mg01_generation_compares_whole_reply_before_any_candidate_issue(fault):
+    from fb_machine import Disabled
+    from fb_check import SlotKey
+    e0, declaration = _mg_generation_e0()
+    values = dict(declaration.items)
+    generation = dict(values["generation"].items)
+    if fault == "empty-order":
+        values["input_order"] = ()
+    elif fault == "model":
+        values["model"] = PlanRef("initial", "reader")
+    elif fault == "generator-version":
+        generation["generator"] = Contract("model.internal_generator", "2")
+    elif fault == "args":
+        generation["args"] = obj(draws=(), method_parameter="different-args")
+    elif fault == "basis-order":
+        generation["basis"] = tuple(reversed(generation["basis"]))
+    elif fault == "missing-continuation":
+        values["continuation"] = obj()
+    else:
+        generation["draws"] = None  # Falsy is not the explicit no-draw declaration.
+    values["generation"] = obj(**generation)
+    reply = Outcome(OutcomeKind.RETURNED, obj(variant="Candidates", declaration=obj(**values)))
+    e0 = replace(e0, programs=(replace(e0.programs[0], replies=(reply,)), e0.programs[1]))
+    path = _mg_started(e0)
+    path.finish("wg")
+    path.take("RecognizeTerminal", ("wg",))
+    with pytest.raises(Disabled):
+        path.take("PublishUnit", ("generated",))
+    assert not any(c.key.kind == "issue" and c.key.target in (SlotKey("generated", "CG"), SlotKey("evaluation", "EQ"))
+                   for c in path.state.core.p.conditions)
+    assert [w.descriptor.work_id for w in path.state.core.p.work] == ["wg"]
+
+
+@pytest.mark.parametrize("boundary", ("before-CG", "before-EQ", "before-Ep-entry"))
+def test_mg01_independent_conflict_blocks_new_generation_use_without_rolling_back(boundary):
+    from fb_machine import Disabled
+    e0, declaration = _mg_generation_e0()
+    changed = obj(**dict(declaration.items, input_order=tuple(reversed(declaration.get("input_order")))))
+    second = Outcome(OutcomeKind.RETURNED, obj(variant="Candidates", declaration=changed))
+    e0 = replace(e0, programs=(replace(e0.programs[0], replies=e0.programs[0].replies + (second,)), e0.programs[1]))
+    path = _mg_started(e0)
+    path.finish("wg")
+    path.take("PublishUnit", ("context",))
+    path.save("context", ("context",))
+    if boundary != "before-CG":
+        path.take("PublishUnit", ("generated",))
+        path.save("generated", ("CG",))
+    if boundary == "before-Ep-entry":
+        path.take("PublishUnit", ("evaluation",))
+        path.save("evaluation", ("EQ",))
+        path.take("ResolveWork", ("ep",))
+    before = tuple(u.id for u in path.state.core.p.units)
+    path.take("WorkerStep", ("wg",))
+    path.take("Deliver", ("report:wg:1",))
+    path.receive()  # Two genuinely produced incompatible replies, no Xc needed.
+    target = ("ClaimStart", ("ep",)) if boundary == "before-Ep-entry" else (
+        "PublishUnit", ("generated" if boundary == "before-CG" else "evaluation",))
+    with pytest.raises(Disabled, match="conflict"):
+        path.take(*target)
+    assert tuple(u.id for u in path.state.core.p.units) == before
+    assert next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    assert not any(r.work == "ep" for r in path.state.core.runners)
+
+
+@pytest.mark.parametrize("fault", ("unsaved-Point", "wrong-model"))
+def test_mg01_eq_requires_real_saved_inputs_and_the_matching_ep_view(fault):
+    from fb_machine import Disabled, Point
+    e0, _ = _mg_generation_e0()
+    eq = e0.plans[2]
+    content = dict(eq.records[0].content.items)
+    if fault == "unsaved-Point":
+        content["preferences"] = (Point("unconfirmed-preference"),)
+    else:
+        content["model"] = PlanRef("initial", "process")
+    record, roles, _ = _mg_record("EQ", eq.records[0].contract, obj(**content))
+    e0 = replace(e0, plans=(e0.plans[0], e0.plans[1], replace(eq, records=(record,)), e0.plans[3]),
+                 field_roles=e0.field_roles + roles)
+    path = _mg_started(e0)
+    # Context saved before EndKnown (FBM3-R01) isolates the EQ input fault.
+    path.take("PublishUnit", ("context",))
+    path.save("context", ("context",))
+    path.finish("wg")
+    path.take("PublishUnit", ("generated",))
+    path.save("generated", ("CG",))
+    with pytest.raises(Disabled):
+        path.take("PublishUnit", ("evaluation",))
+    assert not any(u.id == "evaluation" for u in path.state.core.p.units)
+    assert [w.descriptor.work_id for w in path.state.core.p.work] == ["wg"]
+    reasons = next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    if fault == "unsaved-Point":
+        assert not reasons  # A Point awaiting storage is not a concrete use shortage.
+    else:
+        assert any(e.reason_id == "evaluation input correspondence differs" for e in reasons)
+
+
+@pytest.mark.parametrize("stage,wrong_kind", (("D", "WorkFinished"), ("Wr", "DrawReturned")))
+def test_mg01_wrong_notice_family_is_saved_but_not_first_end(stage, wrong_kind):
+    from fb_machine import Disabled
+    e0 = unknown_work()
+    d = replace(e0.plans[0].works[0], stage=stage)
+    failure = Outcome(OutcomeKind.FAILURE, obj(variant="DrawFailure", reason="draw-refused"))
+    e0 = replace(e0, unknown_notices=(), plans=(replace(e0.plans[0], works=(d,)),),
+                 programs=(Program("w0", (failure, Outcome(OutcomeKind.RETURNED, obj(variant="DrawValue", value=0.25))), False),))
+    path = _MGPath(e0)
+    path.take("PublishUnit", ("initial",))
+    path.save("initial", ("process", "reader", "request"))
+    path.start("w0")
+    path.take("WorkerStep", ("w0",))
+    message = path.state.core.network.messages[0]
+    generation = message.generation
+    # Deliberate environment transport fault, retaining the genuine producer's
+    # Generation. An external Posting with no producer linkage cannot identify
+    # the old bug: _first_end already ignored such a notice before M4.
+    fields = (obj(work="w0", started=generation.started, finished=generation.finished, outcome=failure)
+              if wrong_kind == "WorkFinished" else obj(work="w0", outcome=failure))
+    wrong = replace(message, event=Event(wrong_kind, fields))
+    network = replace(path.state.core.network, messages=(wrong,))
+    path.state = replace(path.state, core=replace(path.state.core, network=network))
+    path.take("Deliver", (wrong.id,))
+    wrong_envelope = path.receive()
+    assert wrong_envelope.event.kind == wrong_kind
+    assert next(r for r in path.state.core.p.receipts if r.envelope == wrong_envelope).unit.slots[0].prepared.record.contract.name == (
+        "sui.fb.work_report" if wrong_kind == "WorkFinished" else "sui.fb.draw_report")
+    with pytest.raises(Disabled, match="await report"):
+        path.take("RecognizeTerminal", ("w0",))
+    assert not any(u.id == "terminal:w0" for u in path.state.core.p.units)
+    assert any(c.key.kind == "run" and c.key.target.work == "w0" and c.unmet for c in path.state.core.p.conditions
+               if hasattr(c.key.target, "work"))
+    path.take("WorkerStep", ("w0",))
+    path.take("Deliver", ("report:w0:1",))
+    right_envelope = path.receive()
+    path.take("RecognizeTerminal", ("w0",))
+    terminal = next(u for u in path.state.core.p.units if u.id == "terminal:w0").slots[0].plan.content
+    assert right_envelope.event.kind == ("DrawReturned" if stage == "D" else "WorkFinished")
+    assert terminal.get("returned") == obj(variant="DrawValue", value=0.25)
+    assert terminal.get("first_receipt") == next(r.unit.slots[0].prepared.point for r in path.state.core.p.receipts if r.envelope == right_envelope)
+
+
+def test_mg01_draw_failure_first_keeps_t_only_despite_late_value():
+    from fb_machine import Disabled, Source
+    e0 = unknown_work()
+    d = replace(e0.plans[0].works[0], stage="D")
+    failure = Outcome(OutcomeKind.FAILURE, obj(variant="DrawFailure", reason="draw-refused"))
+    later = Outcome(OutcomeKind.RETURNED, obj(variant="DrawValue", value=0.25))
+    df = PlanRef("draw-result", "DF")
+    ee = replace(d, work_id="ee", stage="Ee", request=df, required=frozenset((df,)))
+    result = AllowedPlan("draw-result", "O-11", ("draw-end", "w0"),
+        (RecordPlan("DF", Contract("draw_fact", "1"), "Event", Source("outcome_content", "w0")),), (ee,),
+        (Guard("outcome", "w0", ("Success", "DrawValue")),))
+    e0 = replace(e0, unknown_notices=(), plans=(replace(e0.plans[0], works=(d,)), result), programs=(Program("w0", (failure, later), False),))
+    path = _MGPath(e0)
+    path.take("PublishUnit", ("initial",))
+    path.save("initial", ("process", "reader", "request"))
+    path.start("w0")
+    first = path.finish("w0")
+    assert first.event.kind == "DrawReturned" and first.event.fields.get("outcome") == failure
+    path.take("WorkerStep", ("w0",))
+    path.take("Deliver", ("report:w0:1",))
+    path.receive()
+    with pytest.raises(Disabled, match="different terminal branch"):
+        path.take("PublishUnit", ("draw-result",))
+    path.take("RecognizeTerminal", ("w0",))
+    path.save("terminal:w0", ("T",))
+    unit = next(u for u in path.state.core.p.units if u.id == "terminal:w0")
+    assert unit.slots[0].prepared.record.content.get("returned") == failure.content
+    assert unit.slots[0].prepared.record.content.get("terminal_kind") == OutcomeKind.FAILURE
+    assert unit.slots[0].prepared.record.content.get("first_receipt") == next(r.unit.slots[0].prepared.point for r in path.state.core.p.receipts if r.envelope == first)
+    assert tuple(u.id for u in path.state.core.p.units) == ("initial", "terminal:w0")
+    assert [w.descriptor.stage for w in path.state.core.p.work] == ["D"]
+    assert not any(e.header.record.contract.name in ("draw_fact", "sui.fb.draw_unknown", "math_artifact", "decision") for e in path.state.core.e)
+# MG-01 END: window-owned M3/M4 tests.
+
+
+# MG-03 BEGIN: window-owned corrections; checker-owned sections are untouched.
+@pytest.mark.parametrize("launch", ("normal", "uncertain_after"))
+def test_mg03_actual_context_resolves_nested_refs_once_and_keeps_declaration(launch):
+    e0, _ = _mg_generation_e0()
+    initial, d = e0.plans[0], e0.plans[0].works[0]
+    model, reader = PlanRef("initial", "model"), PlanRef("initial", "reader")
+    literal = "PlanRef(unit='initial', slot='model')"
+    context = obj(model=model, generation_basis=(model, reader),
+                  nested=obj(inputs=(reader, obj(model=model)), literal=literal))
+    d = replace(d, numerical_view=replace(d.numerical_view, context=context))
+    from fb_machine import candidate_request_content
+    q, roles, _ = _mg_record("Qgen", Contract("sui.fb.candidate_request", "1"), candidate_request_content(d))
+    e0 = replace(e0, plans=(replace(initial, records=initial.records[:-1] + (q,), works=(d,)),) + e0.plans[1:],
+                 field_roles=e0.field_roles + roles, budget=replace(e0.budget, uncertain_launches=1))
+    path = _MGPath(e0)
+    path.take("PublishUnit", ("initial",))
+    path.save("initial", tuple(r.slot for r in e0.plans[0].records))
+    for op in ("ResolveWork", "ClaimStart"):
+        path.take(op, ("wg",))
+    step = path.env.step(path.state, Action("Launch", ("wg",), launch), path.window)
+    path.state = step.state
+    if launch == "normal":
+        path.take("EnterWorker", ("wg:wrapper:0",))
+    saved = {s.plan.slot: s.prepared.point for u in path.state.core.p.units if u.id == "initial" for s in u.slots}
+    expected = NumericalView(frozenset((saved["model"], saved["reader"])), (saved["model"], saved["reader"]),
+        obj(model=saved["model"], generation_basis=(saved["model"], saved["reader"]),
+            nested=obj(inputs=(saved["reader"], obj(model=saved["model"])), literal=literal)))
+    runner = next(r for r in path.state.core.runners if r.work == "wg")
+    assert runner.numerical_input == expected
+    assert runner.descriptor_read.numerical_view == expected
+    assert e0.plans[0].works[0].numerical_view.context == context
+    assert next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").descriptor == d
+    path.take("Drain")
+    path.take("WorkerStep", ("wg",))
+    assert next(r for r in path.state.core.runners if r.work == "wg").numerical_input == expected
+    reads = [e for e in path.state.evidence.observation_trace.events if e.tag == "ReadInputs" and e.key.work == "wg"]
+    assert len(reads) == 1 and reads[0].value.numerical_view == expected
+
+
+def test_mg03_fully_typed_cg_and_public_input_have_no_inv8_or_generation_violation():
+    # Reuse the independent, publicly authored declaration, not its old bug expectation.
+    e0 = _mg02_generation_e0(typed_cg=True)
+    declaration = e0.plans[0].works[0]
+    scenario, states, edges, take, _ = _mg02_generation_path(e0, "saved-eq")
+    cg = next(u for u in states[-1].core.p.units if u.id == "mg-cg").slots[0].prepared
+    model = next(u for u in states[-1].core.p.units if u.id == "initial").slots[2].prepared.point
+    assert cg.record.content.get("model") == model
+    assert cg.record.content.get("generation").get("basis") == (model,)
+    assert {r.path: r.ref for r in cg.record.references} == {
+        ("model",): model, ("generation", "basis", 0): model}
+    assert all((r.role, r.use) == ("UE", "generation") for r in cg.record.references)
+    assert all(isinstance(r.ref, PlanRef) for r in e0.plans[1].records[0].references)
+    assert e0.plans[0].works[0] == declaration
+    for op in ("ResolveWork", "ClaimStart", "Launch"):
+        take(Action(op, ("mg-ep",)))
+    take(Action("EnterWorker", ("mg-ep:wrapper:0",)))
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations and not report.violations, (report.contract_violations, report.violations)
+
+
+def test_mg03_source_expansion_cannot_rebind_a_wrong_declared_cg_reference():
+    e0 = _mg02_generation_e0(typed_cg=True)
+    cg = e0.plans[1]
+    record = cg.records[0]
+    bad = replace(record, references=tuple(replace(r, ref=PlanRef("initial", "reader"))
+                  if r.path == ("model",) else r for r in record.references))
+    e0 = replace(e0, plans=(e0.plans[0], replace(cg, records=(bad,))) + e0.plans[2:], observation_declarations=None)
+    _, states, _, take, _ = _mg02_generation_path(e0, "cg")
+    with pytest.raises(RuntimeError, match="reference path differs from fixed plan"):
+        take(Action("PrepareOne", ("mg-cg", "cg")))
+    assert next(u for u in states[-1].core.p.units if u.id == "mg-cg").slots[0].prepared is None
+
+
+def test_mg03_nested_source_and_literal_refs_both_prepare_to_their_declared_targets():
+    """model.generation_projection/1 is a name-only fixture contract, not a paper claim."""
+    from fb_machine import Source
+    e0 = _mg02_generation_e0()
+    reply = e0.programs[0].replies[0].content.get("declaration")
+    record, roles, rule = _mg_record("projection", Contract("model.generation_projection", "1"),
+                                    obj(payload=reply, literal=PlanRef("initial", "reader")))
+    record = replace(record, content=obj(payload=Source("candidate_declaration", "mg-wg"),
+                                         literal=PlanRef("initial", "reader")))
+    plan = AllowedPlan("projection", "O-13", ("projection",), (record,), guards=(Guard("first", "mg-wg"),))
+    e0 = replace(e0, plans=e0.plans + (plan,), field_roles=e0.field_roles + roles,
+                 references=e0.references + (rule,), observation_declarations=None)
+    _, states, _, take, save = _mg02_generation_path(e0, "end")
+    take(Action("PublishUnit", ("projection",)))
+    published = next(u for u in states[-1].core.p.units if u.id == "projection").slots[0].plan
+    assert published.content.get("literal") == PlanRef("initial", "reader")
+    save("projection", "projection")
+    prepared = next(u for u in states[-1].core.p.units if u.id == "projection").slots[0].prepared
+    inputs = {s.plan.slot: s.prepared.point for u in states[-1].core.p.units if u.id == "initial" for s in u.slots}
+    assert {r.path: r.ref for r in prepared.record.references} == {
+        ("literal",): inputs["reader"], ("payload", "model"): inputs["model"],
+        ("payload", "generation", "basis", 0): inputs["model"]}
+    assert prepared.record.content.get("literal") == inputs["reader"]
+    assert prepared.record.content.get("payload").get("model") == inputs["model"]
+
+
+def _mg03_point_save_wait_e0():
+    from hashlib import sha256
+    from fb_machine import Record
+    e0, _ = _mg_generation_e0()
+    # Author a known Point before I0 with the independent fixture codec. This
+    # path prepares the predecessor at rank 2, after Wg entry and its one return.
+    planned = e0.plans[3].records[0]
+    record = Record("context:context", Reading(e0.run, e0.clock_source, 2), planned.contract,
+                    planned.category, planned.content, ())
+    salt = sha256(_handmade_encode(("model-salt", record.name))).hexdigest().encode("ascii")
+    point = _handmade_prepared(record, salt=salt).point
+    old = PlanRef("context", "context")
+    eq = e0.plans[2]
+    ep = eq.works[0]
+    ep = replace(ep, input_points=(ep.input_points - {old}) | {point}, required=(ep.required - {old}) | {point},
+        numerical_view=replace(ep.numerical_view, points=(ep.numerical_view.points - {old}) | {point},
+            application_order=tuple(point if p == old else p for p in ep.numerical_view.application_order),
+            context=obj(**dict(ep.numerical_view.context.items, context=point))))
+    body = obj(**dict(eq.records[0].content.items, context=point))
+    eq = replace(eq, records=(replace(eq.records[0], content=body),), works=(ep,),
+                 guards=tuple(g for g in eq.guards if g.kind != "generation_context") + (Guard("saved", point),))
+    return replace(e0, plans=e0.plans[:2] + (eq, e0.plans[3])), point
+
+
+@pytest.mark.parametrize("body_written", (False, True), ids=("prepared-only", "body-only"))
+def test_mg03_pending_point_storage_keeps_eq_issue_without_creating_pg(body_written):
+    from fb_check import Owner, SlotKey
+    from fb_machine import Disabled
+    e0, point = _mg03_point_save_wait_e0()
+    path = _mg_started(e0)
+    path.finish("wg")
+    path.take("PublishUnit", ("context",))
+    path.take("PrepareOne", ("context", "context"))
+    pending = next(u for u in path.state.core.p.units if u.id == "context").slots[0].prepared
+    assert pending.point == point and not any(e.point == point for e in path.state.core.e)
+    if body_written:
+        path.take("PutBody", ("context", "context"))
+    path.take("PublishUnit", ("generated",))
+    path.save("generated", ("CG",))
+    issue = _mg_condition(path, "issue", SlotKey("evaluation", "EQ"))
+    assert issue.owner == Owner("P.units", "generated") and issue.unmet == frozenset((issue.key,))
+    assert not next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    with pytest.raises(Disabled):
+        path.take("PublishUnit", ("evaluation",))
+    if not body_written:
+        path.take("PutBody", ("context", "context"))
+    for op in ("AddEntry", "ConfirmWrite", "CompleteWrite"):
+        path.take(op, ("context", "context"))
+    path.take("PublishUnit", ("evaluation",))
+    assert not _mg_condition(path, "issue", SlotKey("evaluation", "EQ")).unmet
+    eq = next(u for u in path.state.core.p.units if u.id == "evaluation")
+    assert eq.slots[0].plan.content.get("context") == point and not eq.generation.shortages
+    assert not next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+
+
+def test_mg03_concrete_context_shortage_creates_original_pg_and_later_eq_does_not_clear_it():
+    from fb_check import SlotKey, WorkKey
+    e0, _ = _mg_generation_e0()
+    path = _mg_started(e0)
+    path.finish("wg")
+    # FBM3-R01 / paper 1956: born at EndKnown, unchanged by CG PUB.
+    purposes = next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    path.take("PublishUnit", ("generated",))
+    assert next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes == purposes
+    assert len(purposes) == 1
+    residual = purposes[0]
+    assert residual.reason_id == "evaluation context unavailable" and residual.witness == PlanRef("context", "context")
+    assert residual.obligation_key.origin == _mg_condition(path, "run", WorkKey("wg")).key
+    assert _mg_condition(path, "issue", SlotKey("evaluation", "EQ")).unmet
+    path.save("generated", ("CG",))
+    path.take("PublishUnit", ("context",))
+    path.save("context", ("context",))
+    path.take("PublishUnit", ("evaluation",))
+    assert next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes == purposes
+    assert next(u for u in path.state.core.p.units if u.id == "evaluation").generation.shortages == purposes
+# MG-03 END: window-owned corrections.
+
+
+# MG-05 BEGIN: window-owned public EQ contract and publication boundaries.
+def _mg05_literal_e0():
+    """Execute the published frozen declaration, never a window/checker body."""
+    from textwrap import dedent
+    from fb_machine import FieldRole, ReferencePath, TypedReference
+    public = dict(PlanRef=PlanRef, obj=obj, frozenset=frozenset, Descriptor=Descriptor,
+                  Contract=Contract, NumericalView=NumericalView, TypedReference=TypedReference,
+                  RecordPlan=RecordPlan, AllowedPlan=AllowedPlan, Guard=Guard, FieldRole=FieldRole,
+                  ReferencePath=ReferencePath)
+    fragment = AllowedPlan.__doc__.split("        process = PlanRef('initial', 'process')", 1)[1]
+    fragment = "        process = PlanRef('initial', 'process')" + fragment.split("\n    Add evaluation/", 1)[0]
+    exec(dedent(fragment), public)
+    e0, _ = _mg_generation_e0()
+    # One generation input is enough to distinguish the later evaluation view.
+    # The checker's sorted(PlanRef set) failure for multiple inputs is reported
+    # separately; do not turn that implementation accident into an E0 rule.
+    model = PlanRef("initial", "model")
+    wg = replace(e0.plans[0].works[0], input_points=frozenset((model,)),
+        numerical_view=NumericalView(frozenset((model,)), (model,), obj(model=model, generation_basis=(model,))))
+    qbody = obj(process=wg.process, trigger=wg.trigger, reader=wg.reader, purpose=wg.purpose,
+        stage_slot=wg.stage_slot, method=wg.method, output_contract=wg.output_contract,
+        args=wg.args, input_points=(model,), numerical_view=obj(points=(model,),
+        application_order=(model,), context=wg.numerical_view.context), allocation=wg.allocation,
+        need=wg.need, permissions=(wg.process,))
+    q, qroles, _ = _mg_record("Qgen", Contract("sui.fb.candidate_request", "1"), qbody)
+    initial = replace(e0.plans[0], records=e0.plans[0].records[:-1] + (q,), works=(wg,))
+    declaration = e0.programs[0].replies[0].content.get("declaration")
+    declaration = obj(**dict(declaration.items, generation=obj(**dict(declaration.get("generation").items, basis=(model,)))))
+    program = replace(e0.programs[0], replies=(Outcome(OutcomeKind.RETURNED, obj(variant="Candidates", declaration=declaration)),))
+    cg_record = replace(e0.plans[1].records[0], slot="cg", references=tuple(
+        TypedReference("PATH-CG-INPUT", path, model, "UE", "generation")
+        for path in (("model",), ("generation", "basis", 0))))
+    cg_roles = tuple(FieldRole(cg_record.contract, ref.path_id, ref.path, ref.role, ref.use) for ref in cg_record.references)
+    cg_rule = ReferencePath("PATH-CG-INPUT", ("candidate_declaration/1",), (), "UE", "generation", "direct")
+    candidate = replace(e0.plans[1], unit="candidate", records=(cg_record,))
+    inputs = AllowedPlan("eval-inputs", "O-02", ("evaluation-inputs",), tuple(
+        RecordPlan(name, Contract("model.evaluation_input", "1"), "Event", obj(slot=name))
+        for name in ("model", "preferences", "context", "observation", "judgment")))
+    e0 = replace(e0, plans=(initial, candidate, public["evaluation"], inputs), programs=(program, e0.programs[1]),
+        field_roles=tuple(r for r in e0.field_roles if r.record_contract not in (q.contract, public["record"].contract))
+                    + public["roles"] + qroles + cg_roles,
+        references=e0.references + (public["rule"], cg_rule),
+        observation_declarations=None)
+    return e0
+
+
+class _MG05Path(_MGPath):
+    def __init__(self, e0):
+        super().__init__(e0)
+        self.scenario = Scenario("MG-05-public-boundary", e0, 1)
+        self.states, self.edges = [self.state], []
+
+    def take(self, operation, target=()):
+        from fb_machine import Edge
+        step = super().take(operation, target)
+        self.edges.append(Edge(len(self.states) - 1, len(self.states), Action(operation, target), step.events, step.result))
+        self.states.append(self.state)
+        return step
+
+
+def _mg05_started(e0):
+    path = _MG05Path(e0)
+    path.take("PublishUnit", ("initial",))
+    path.save("initial", tuple(r.slot for r in e0.plans[0].records))
+    path.take("PublishUnit", ("eval-inputs",))
+    path.save("eval-inputs", tuple(r.slot for r in e0.plans[3].records))
+    path.start("wg")
+    return path
+
+
+def _mg05_before_eq(e0):
+    path = _mg05_started(e0)
+    path.finish("wg")
+    path.take("RecognizeTerminal", ("wg",))
+    path.take("PublishUnit", ("candidate",))
+    path.save("candidate", ("cg",))
+    return path
+
+
+@pytest.mark.parametrize("preference_tuple", (False, True), ids=("single-preference", "ordered-preferences"))
+def test_mg05_literal_eq_contract_resolves_evaluation_inputs_separately_from_generation(preference_tuple):
+    from fb_machine import Disabled
+    e0 = _mg05_literal_e0()
+    if preference_tuple:
+        from fb_machine import FieldRole, TypedReference
+        eq = e0.plans[2]
+        prefs = (PlanRef("eval-inputs", "preferences"), PlanRef("eval-inputs", "model"))
+        body = obj(**dict(eq.records[0].content.items, preferences=prefs))
+        refs = tuple(r for r in eq.records[0].references if r.path != ("preferences",)) + tuple(
+            TypedReference("PATH-EQ-INPUT", ("preferences", i), p, "UE", "math") for i, p in enumerate(prefs))
+        record = replace(eq.records[0], content=body, references=refs)
+        roles = tuple(FieldRole(record.contract, r.path_id, r.path, r.role, r.use) for r in refs)
+        e0 = replace(e0, plans=e0.plans[:2] + (replace(eq, records=(record,)), e0.plans[3]),
+                     field_roles=tuple(r for r in e0.field_roles if r.record_contract != record.contract) + roles)
+    path = _mg05_before_eq(e0)
+    declaration = e0.plans[0].works[0]
+    path.take("PublishUnit", ("evaluation",))
+    eq = next(u for u in path.state.core.p.units if u.id == "evaluation")
+    fixed = {s.plan.slot: s.prepared.point for u in path.state.core.p.units if u.id == "eval-inputs" for s in u.slots}
+    cg = next(u for u in path.state.core.p.units if u.id == "candidate").slots[0].prepared.point
+    reader = next(u for u in path.state.core.p.units if u.id == "initial").slots[1].prepared.point
+    assert eq.slots[0].plan.content == obj(candidates=cg, reader=reader, model=fixed["model"],
+        preferences=(fixed["preferences"], fixed["model"]) if preference_tuple else fixed["preferences"],
+        context=fixed["context"], o=fixed["observation"], j=fixed["judgment"])
+    ep = next(w for w in path.state.core.p.work if w.descriptor.work_id == "ep")
+    assert ep.descriptor == e0.plans[2].works[0] and ep.descriptor.request == PlanRef("evaluation", "eq")
+    assert ep.descriptor.reader == declaration.reader and ep.descriptor.purpose == declaration.purpose
+    assert e0.plans[0].works[0] == declaration
+    path.save("evaluation", ("eq",))
+    # The generation program has not stopped: release needs its independent Stop.
+    with pytest.raises(Disabled):
+        path.take("Release", ("wg",))
+    path.take("Drain")
+    assert not next(w for w in path.state.core.p.work if w.descriptor.work_id == "wg").purposes
+    if not preference_tuple:
+        # Full finite generation/custody check; not a F-a clock/math certificate.
+        report = check_exploration(path.scenario, _c05_graph(path.scenario, path.states, path.edges))
+        assert not report.contract_violations and not report.violations, (report.contract_violations, report.violations)
+
+
+@pytest.mark.parametrize("fault", ("o-scalar", "j-scalar", "preferences-scalar", "extra-key", "missing-key",
+                                    "context-missing", "context-exchanged", "o-mirror", "j-mirror", "numerical-input-missing",
+                                    "order-unsaved"))
+def test_mg05_incomplete_eq_correspondence_cannot_publish_or_discharge_issue(fault):
+    from fb_check import Owner, SlotKey
+    from fb_machine import Disabled
+    e0 = _mg05_literal_e0()
+    eq = e0.plans[2]
+    body = dict(eq.records[0].content.items)
+    ep, view = eq.works[0], eq.works[0].numerical_view
+    if fault.endswith("scalar"):
+        body[fault.split("-")[0]] = 0
+    elif fault == "extra-key":
+        body["ignored"] = "not-in-contract"
+    elif fault == "missing-key":
+        del body["j"]
+    elif fault.startswith("context"):
+        context = dict(view.context.items)
+        if fault == "context-missing":
+            del context["context"]
+        else:
+            context["context"] = PlanRef("eval-inputs", "model")
+        ep = replace(ep, numerical_view=replace(view, context=obj(**context)))
+    elif fault.endswith("mirror"):
+        context = dict(view.context.items)
+        context[fault[0]] = PlanRef("eval-inputs", "context")
+        ep = replace(ep, numerical_view=replace(view, context=obj(**context)))
+    elif fault == "numerical-input-missing":
+        missing = PlanRef("eval-inputs", "judgment")
+        ep = replace(ep, input_points=ep.input_points - {missing}, numerical_view=replace(view,
+            points=view.points - {missing}, application_order=tuple(p for p in view.application_order if p != missing)))
+    else:
+        from fb_machine import Point
+        ep = replace(ep, numerical_view=replace(view, application_order=view.application_order + (Point("unconfirmed-order-input"),)))
+    # Reference declarations remain independent of the changed body/type.
+    eq = replace(eq, records=(replace(eq.records[0], content=obj(**body)),), works=(ep,))
+    e0 = replace(e0, plans=e0.plans[:2] + (eq, e0.plans[3]))
+    path = _mg05_before_eq(e0)
+    issue = _mg_condition(path, "issue", SlotKey("evaluation", "eq"))
+    with pytest.raises(Disabled):
+        path.take("PublishUnit", ("evaluation",))
+    assert _mg_condition(path, "issue", SlotKey("evaluation", "eq")) == issue
+    assert issue.owner == Owner("P.units", "candidate") and issue.unmet == frozenset((issue.key,))
+    assert not any(w.descriptor.work_id == "ep" for w in path.state.core.p.work)
+    assert not any(u.id == "evaluation" for u in path.state.core.p.units)
+
+
+@pytest.mark.parametrize("field", ("input_order", "measure"))
+def test_mg05_public_publish_boundary_exposes_single_field_cg_substitution(field):
+    """Negative input uses the public window seam, not a new legal E0 Source."""
+    from fb_machine import Effect, Source
+
+    class SubstituteCG(CorrectWindow):
+        def publish_unit(self, view, plan_id):
+            decision = super().publish_unit(view, plan_id)
+            if plan_id != "candidate":
+                return decision
+            unit = decision.result
+            slot = unit.slots[0]
+            original = slot.plan.content
+            value = tuple(reversed(original.get("input_order"))) if field == "input_order" else obj(weights=(99, 1))
+            changed = obj(**dict(original.items, **{field: value}))
+            unit = replace(unit, slots=(replace(slot, plan=replace(slot.plan, content=changed)),))
+            return replace(decision, custody=replace(decision.custody,
+                units=tuple(unit if u.id == unit.id else u for u in decision.custody.units)), result=unit,
+                effects=tuple(Effect(e.kind, e.key, (unit, e.value[1]))
+                              if e.kind == "Publish" and e.key == unit.id else e for e in decision.effects))
+
+    e0 = _mg05_literal_e0()
+    path = _mg05_started(e0)
+    path.finish("wg")
+    original = next(r.value.outcome.content.get("declaration") for r in path.state.evidence.ew.events
+                    if r.kind == "Returned")
+    path.window = SubstituteCG(e0)
+    path.take("PublishUnit", ("candidate",))
+    published = next(u for u in path.state.core.p.units if u.id == "candidate").slots[0].plan.content
+    assert {k for k, v in original.items if published.get(k) != v} == {field}
+    assert e0.plans[1].records[0].content == Source("candidate_declaration", "wg")
+    assert next(r.value.outcome.content.get("declaration") for r in path.state.evidence.ew.events
+                if r.kind == "Returned") == original
+    report = check_exploration(path.scenario, _c05_graph(path.scenario, path.states, path.edges))
+    assert any(v.condition_id == "INV-16.c" for v in report.violations)
+
+
+def test_mg05_saved_upstream_conflict_blocks_launched_ep_without_releasing_occupation():
+    from fb_machine import Disabled
+    e0 = _mg05_literal_e0()
+    declaration = e0.programs[0].replies[0].content.get("declaration")
+    changed = obj(**dict(declaration.items, measure=obj(weights=(7, 1))))
+    e0 = replace(e0, capacity=(("think", 2),), allocation=(("think", 2),), programs=(
+        replace(e0.programs[0], replies=e0.programs[0].replies + (Outcome(OutcomeKind.RETURNED,
+            obj(variant="Candidates", declaration=changed)),)), e0.programs[1]))
+    path = _mg05_before_eq(e0)
+    path.take("PublishUnit", ("evaluation",))
+    path.save("evaluation", ("eq",))
+    for op in ("ResolveWork", "ClaimStart", "Launch"):
+        path.take(op, ("ep",))
+    before = next(w for w in path.state.core.p.work if w.descriptor.work_id == "ep")
+    assert before.held == (("think", 1),) and not before.consumed
+    path.take("WorkerStep", ("wg",))
+    path.take("Deliver", ("report:wg:1",))
+    path.receive()
+    with pytest.raises(Disabled, match="conflict"):
+        path.take("EnterWorker", ("ep:wrapper:0",))
+    after = next(w for w in path.state.core.p.work if w.descriptor.work_id == "ep")
+    assert after.held == before.held and after.token == before.token and not after.consumed
+    assert [f.value for f in path.state.evidence.ew.events if f.kind == "Reserve" and f.key == "ep"] == [(("think", 1),)]
+    assert not any(f.kind == "Release" and f.key == "ep" for f in path.state.evidence.ew.events)
+    assert not any(r.work == "ep" for r in path.state.core.runners)
+    assert {u.id for u in path.state.core.p.units} >= {"candidate", "evaluation", "terminal:wg"}
+# MG-05 END: window-owned public EQ contract and publication boundaries.
+
+
 # C-05 checker-owned tests, paper v0.15 (9-3補). Only public model steps.
 # Both window-owned sections stay byte-identical; checker sections may evolve.
 def _c05_scene(name):
@@ -4036,11 +4917,11 @@ def test_c05_reached_miss_is_confirmed_but_not_identified(c05_desc_prefix):
     assert bc.contrast_result(normative='合法', detected=True, reached=True, complete=True)[1] == '合法対照の誤検出'
 
 
-def test_c05_44_individual_predicates_and_unknown_stays_in_denominator(c05_desc_prefix):
+def test_c05_51_individual_predicates_and_unknown_stays_in_denominator(c05_desc_prefix):
     bc = observation_check
     predicates = bc.COMPLETION_PREDICATES
-    assert len(predicates) == len({cid for cid, _, _ in predicates}) == len({fn for _, fn, _ in predicates}) == 44
-    assert {line for _, _, line in predicates} == set(range(1529, 1573))
+    assert len(predicates) == len({cid for cid, _, _ in predicates}) == len({fn for _, fn, _ in predicates}) == 51
+    assert {line for _, _, line in predicates} == set(range(1529, 1573)) | set(range(1941, 1948))
     assert bc.classify_custody(None, False, False) == '未接続'
     assert bc.classify_custody(False, False, False) == '削除・消去の違反'
     assert bc.classify_custody(False, False, True) == '未達のまま保全'
@@ -4503,3 +5384,1002 @@ def test_c06_unconnected_issue_public_prefix(cid, scene_name, reason):
     with pytest.raises(ValueError, match='IE/ID'):
         scenes.instantiate(_c05_scene(scene_name))
     pytest.skip(cid + ': ' + reason)
+
+
+# MG-02 BEGIN: checker-owned v0.18 M3/M4 public-path contrasts.
+def _mg02_terminal_e0(stage='D', outcome=None, postings=()):
+    """An independent terminal-notice slice, not a claim of F-a validity."""
+    from fb_machine import declare_observation_e0
+    base = publication()
+    work = replace(base.plans[0].works[0], work_id='mg-terminal', stage=stage)
+    plan = replace(base.plans[0], works=(work,))
+    outcome = outcome or Outcome(OutcomeKind.FAILURE, obj(reason='declared-failure'))
+    e0 = replace(base, plans=(plan,), programs=(Program(work.work_id, (outcome,), True),),
+                 postings=base.postings + postings, observation_declarations=None,
+                 receipt_kinds=((0, 'Boot'), (1, postings[0].event.kind if postings else
+                                             'DrawReturned' if stage == 'D' else 'WorkFinished')))
+    return replace(e0, observation_declarations=declare_observation_e0(e0))
+
+
+def _mg02_terminal_path(e0):
+    scenario = Scenario('MG-02-terminal', e0, 200)
+    states, edges = [Environment(e0).initial()], []
+    def take(action, window=None):
+        return _c05_take(scenario, states, edges, action, window)
+    def save(unit, slot, receipt=False):
+        for op in ('PrepareReceipt' if receipt else 'PrepareOne', 'PutBody',
+                   'AddEntry', 'ConfirmWrite', 'CompleteWrite'):
+            take(Action(op, (unit, slot)))
+    def accept_save(slots=('receipt',)):
+        envelope = states[-1].core.h.queue[0]
+        take(Action('Accept', (envelope,)))
+        take(Action('HostAck', envelope.key))
+        for slot in slots:
+            save(receipt_unit_id(envelope.run, envelope.number), slot, True)
+        return envelope
+    take(Action('Post', ('boot',)))
+    accept_save(('boot', 'declaration'))
+    take(Action('PublishUnit', ('initial',)))
+    for record in e0.plans[0].records:
+        save('initial', record.slot)
+    for op in ('ResolveWork', 'ClaimStart', 'Launch'):
+        take(Action(op, ('mg-terminal',)))
+    take(Action('EnterWorker', ('mg-terminal:wrapper:0',)))
+    take(Action('WorkerStep', ('mg-terminal',)))
+    return scenario, states, edges, take, save, accept_save
+
+
+@pytest.mark.parametrize('stage,kind', (('D', 'DrawReturned'), ('Wr', 'WorkFinished')))
+@pytest.mark.parametrize('outcome', (
+    Outcome(OutcomeKind.RETURNED, obj(value='finite-value')),
+    Outcome(OutcomeKind.FAILURE, obj(reason='finite-failure')),
+    Outcome(OutcomeKind.UNKNOWN, obj(reason='finite-unknown')),
+))
+def test_mg02_m4_terminal_family_and_all_outcomes(stage, kind, outcome):
+    bc = observation_check
+    e0 = _mg02_terminal_e0(stage, outcome)
+    scenario, states, edges, take, save, accept_save = _mg02_terminal_path(e0)
+    assert bc.observed_end_known(e0.observation_contract, states[-1].evidence.observation_trace,
+                                 'mg-terminal') is None
+    take(Action('Deliver', ('report:mg-terminal:0',)))
+    envelope = accept_save()
+    assert envelope.event.kind == kind
+    known = bc.observed_end_known(e0.observation_contract, states[-1].evidence.observation_trace,
+                                  'mg-terminal')
+    assert known[0] == envelope and known[1].outcome == outcome
+    take(Action('RecognizeTerminal', ('mg-terminal',)))
+    save('terminal:mg-terminal', 'T')
+    result = bc.evaluate_condition_custody(e0.observation_contract,
+        states[-1].evidence.observation_trace, states[-1])
+    assert not result.violations
+    run = next(j for j in result.custody if isinstance(j.target, bc.CompletionKey)
+               and j.target.kind == 'run' and j.target.target == bc.WorkKey('mg-terminal'))
+    assert run.direct is True and run.classification == '達成済み'
+    saved = next(j for j in result.custody if isinstance(j.target, bc.CompletionKey)
+                 and j.target.kind == 'save' and j.target.target == bc.SlotKey('terminal:mg-terminal', 'T'))
+    assert saved.direct is True and saved.classification == '達成済み'
+    if stage == 'D' and outcome.kind == OutcomeKind.FAILURE:
+        records = [r.header.record.contract.name for r in states[-1].core.e]
+        assert 'draw_fact' not in records and 'sui.fb.draw_unknown' not in records
+        assert not any(w.descriptor.stage == 'Ee' for w in states[-1].core.p.work)
+        assert not any(isinstance(j.target, bc.UnconnectedCompletion)
+                       and j.target.condition_id == 'C-O11.issue[DF/DU]' for j in result.custody)
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.violations and not report.contract_violations
+
+
+@pytest.mark.parametrize('stage,wrong_kind', (('D', 'WorkFinished'), ('Wr', 'DrawReturned')))
+def test_mg02_m4_wrong_family_preserves_receipt_and_unmet_run(stage, wrong_kind):
+    from fb_machine import Event
+    bc = observation_check
+    # Obtain only the public EW readings. Replay from I0 with an independently
+    # declared external notice carrying those exact readings and outcome.
+    base = _mg02_terminal_e0(stage)
+    _, original, _, _, _, _ = _mg02_terminal_path(base)
+    generation = next(e.value.generation for e in original[-1].evidence.observation_trace.events
+                      if e.tag == 'WorkerReturn')
+    fields = dict(work='mg-terminal', outcome=generation.outcome)
+    if wrong_kind == 'WorkFinished':
+        fields.update(started=generation.started, finished=generation.finished)
+    posting = Posting('mg-wrong-family', Event(wrong_kind, obj(**fields)),
+                      generation.finished.rank, source=generation.provenance)
+    e0 = _mg02_terminal_e0(stage, postings=(posting,))
+    scenario, states, edges, take, _, accept_save = _mg02_terminal_path(e0)
+    take(Action('Post', ('mg-wrong-family',)))
+    envelope = accept_save()
+    before = states[-1]
+    assert bc.observed_end_known(e0.observation_contract, before.evidence.observation_trace,
+                                 'mg-terminal') is None
+    result = bc.evaluate_condition_custody(e0.observation_contract, before.evidence.observation_trace, before)
+    assert not result.violations
+    target = next(j.target for j in result.custody if isinstance(j.target, bc.CompletionKey)
+                  and j.target.kind == 'run' and j.target.target == bc.WorkKey('mg-terminal'))
+    assert next(j for j in result.custody if j.target == target).classification == '未達のまま保全'
+    receipt = [j for j in result.custody if isinstance(j.target, bc.CompletionKey)
+               and j.target.obligation == 'O-01' and j.target.obligation_key == envelope.key]
+    assert receipt and all(j.direct is True for j in receipt)
+    # Public bad Drain output, applied by Environment.step; no patched state.
+    take(Action('Drain'), _c05_change_window(e0, lambda c: c.key == target, 'delete'))
+    bad = bc.evaluate_condition_custody(e0.observation_contract,
+        states[-1].evidence.observation_trace, states[-1], before_state=before)
+    assert {v.row for v in bad.violations if v.target == target} == {'INV-2.a', 'INV-2.c'}
+    assert next(j for j in bad.custody if j.target == target).classification == '削除・消去の違反'
+
+
+@pytest.mark.parametrize('family', ('draw_fact', 'sui.fb.draw_unknown', 'Ee'))
+@pytest.mark.parametrize('failure', (False, True))
+def test_mg02_m4_draw_failure_forbids_each_successor(family, failure):
+    from fb_machine import declare_observation_e0
+    bc = observation_check
+    kind = (OutcomeKind.FAILURE if failure else OutcomeKind.UNKNOWN
+            if family == 'sui.fb.draw_unknown' else OutcomeKind.RETURNED)
+    base = _mg02_terminal_e0(outcome=Outcome(kind, obj(reason='fixed-terminal-case')))
+    # A finite terminal-family slice, not a claim of F-a mathematical validity.
+    # On Failure this is an invalid downstream recipe, declared before I0. Its
+    # publication through the public port cannot acquire normative authority.
+    work = replace(base.plans[0].works[0], work_id='mg-illegal-ee', stage='Ee')
+    followup = AllowedPlan('mg-illegal-followup', 'O-11', ('mg-terminal',),
+        (RecordPlan('record', Contract('model.followup' if family == 'Ee' else family, '1'),
+                    'Event', obj(value='not-a-draw-result')),),
+        (work,) if family == 'Ee' else (), (Guard('first', 'mg-terminal'),))
+    e0 = replace(base, plans=base.plans + (followup,), observation_declarations=None)
+    e0 = replace(e0, observation_declarations=declare_observation_e0(e0))
+    _, states, _, take, _, accept_save = _mg02_terminal_path(e0)
+    take(Action('Deliver', ('report:mg-terminal:0',)))
+    accept_save()
+    before = states[-1]
+    assert not bc.check_m4_draw_followups(e0.observation_contract, before.evidence.observation_trace).clauses
+    take(Action('PublishUnit', (followup.unit,)))
+    result = bc.check_m4_draw_followups(e0.observation_contract, states[-1].evidence.observation_trace)
+    clauses = result.clauses
+    assert not result.limitations
+    assert len(clauses) == 1
+    assert clauses[0].row == 'INV-15.b' and clauses[0].satisfied is (not failure)
+    assert clauses[0].target == (bc.WorkKey('mg-terminal'), bc.UnitKey(followup.unit))
+# MG-02 END: checker-owned additions.
+
+
+# MG-02 M3 BEGIN: independent declarations from the published wire contract.
+def _mg02_generation_e0(branch='Candidates', wait=None, draws=(), typed_cg=False, eq_context_wait=False,
+                        preferences='single', multiple_inputs=False, parameter=7, reply_parameter=None):
+    from fb_machine import FieldRole, ReferencePath, Source, TypedReference, declare_observation_e0
+    base = publication()
+    model, pref, context = (PlanRef('initial', s) for s in ('model', 'preferences', 'context'))
+    if eq_context_wait:
+        context = PlanRef('mg-context', 'context')
+    extra = PlanRef('initial', 'preference-b')
+    inputs = (model, extra) if multiple_inputs else (model,)
+    preference = (pref,) if preferences == 'singleton' else (pref, extra) if preferences == 'multiple' else pref
+    preference_refs = preference if isinstance(preference, tuple) else (preference,)
+    request, candidate, evaluation = PlanRef('initial', 'request'), PlanRef('mg-cg', 'cg'), PlanRef('mg-eq', 'eq')
+    wg = replace(base.plans[0].works[0], work_id='mg-wg', stage='Wg',
+        purpose='generate-and-compare', stage_slot='generation', request=request,
+        trigger=PlanRef('initial', 'process'),
+        method=Contract('model.internal-generator', '1'), output_contract=Contract('sui.fb.candidate_generation', '1'),
+        args=obj(draws=draws, parameter=parameter), input_points=frozenset(inputs),
+        numerical_view=NumericalView(frozenset(inputs), tuple(reversed(inputs)), obj(model=model, generation_basis=inputs)),
+        need=(('think', 1),), required=frozenset((*inputs, request)),
+        permissions=frozenset((pref, context)) if multiple_inputs else frozenset())
+    # Deliberately do not call candidate_request_content or checker constructors.
+    qgen = obj(process=wg.process, trigger=wg.trigger, reader=wg.reader, purpose=wg.purpose,
+        stage_slot=wg.stage_slot, method=wg.method, output_contract=wg.output_contract,
+        args=wg.args, input_points=tuple(sorted(wg.input_points, key=repr)),
+        numerical_view=obj(points=tuple(sorted(wg.numerical_view.points, key=repr)),
+            application_order=wg.numerical_view.application_order, context=wg.numerical_view.context),
+        allocation=wg.allocation, need=wg.need, permissions=tuple(sorted(wg.permissions, key=repr)))
+    declaration = obj(model=model, input_order=('generated-a', 'generated-b'), measure=None,
+        generation=obj(generator=wg.method, args=wg.args if reply_parameter is None
+                       else obj(draws=draws, parameter=reply_parameter), basis=inputs, draws=draws),
+        continuation=obj(after=()))
+    eq_content = obj(candidates=candidate, reader=wg.reader, model=model,
+                     preferences=preference, context=context, o=(), j=())
+    ep = replace(wg, work_id='mg-ep', stage='Ep', stage_slot='evaluation', request=evaluation,
+        method=Contract('model.evaluate', '1'), output_contract=Contract('model.artifact', '1'),
+        input_points=frozenset((candidate, *preference_refs, context)),
+        numerical_view=NumericalView(frozenset((model, *preference_refs, context)), (pref, model), obj(model=model, context=context)),
+        required=frozenset((evaluation, candidate, model, *preference_refs, context)))
+    roles = []
+    def record(slot, contract, content, *, reference_content=None, category='Event'):
+        references = []
+        def walk(value, path=()):
+            if isinstance(value, PlanRef):
+                name = 'MG-02-' + contract.name + '-' + repr(path)
+                roles.append(FieldRole(contract, name, path, 'UE', 'generation'))
+                references.append(TypedReference(name, path, value, 'UE', 'generation'))
+            elif isinstance(value, Object):
+                for key, item in value.items: walk(item, path + (key,))
+            elif isinstance(value, (tuple, frozenset)):
+                for i, item in enumerate(value): walk(item, path + (i,))
+        walk(content if reference_content is None else reference_content)
+        return RecordPlan(slot, contract, category, content, tuple(references))
+    records = tuple(r for r in base.plans[0].records if r.slot != 'request') + tuple(
+        RecordPlan(s, Contract('model.' + s, '1'), 'Event', obj(symbol=s))
+        for s in (('model', 'preferences', 'context', 'preference-b')
+                  if multiple_inputs or preferences == 'multiple' else ('model', 'preferences', 'context'))) + (
+        record('request', Contract('sui.fb.candidate_request', '1'), qgen),)
+    initial = replace(base.plans[0], records=records, works=(wg,))
+    cg = AllowedPlan('mg-cg', 'O-G', ('generation', wg.work_id),
+        (record('cg', Contract('candidate_declaration', '1'), Source('candidate_declaration', wg.work_id),
+                reference_content=declaration if typed_cg else obj(), category='Prediction'),), (), (Guard('generation', wg.work_id),))
+    missing = PlanRef('mg-context', 'context')
+    guards = (Guard('evaluation', wg.work_id, candidate),)
+    if wait:
+        guards += (Guard(wait, missing),)
+    eq = AllowedPlan('mg-eq', 'O-G', ('evaluation', wg.work_id),
+        (record('eq', Contract('sui.fb.evaluation_request', '1'), eq_content),), (ep,), guards)
+    later = AllowedPlan('mg-context', 'O-02', ('context',),
+        (RecordPlan('context', Contract('model.context', '1'), 'Event', obj(symbol='later-context')),))
+    outcome = (Outcome(OutcomeKind.RETURNED, obj(variant='Candidates', declaration=declaration)) if branch == 'Candidates'
+               else Outcome(OutcomeKind.RETURNED, obj(variant='NoCandidates', basis=obj(reason='none-for-input')))
+               if branch == 'NoCandidates' else Outcome(OutcomeKind(branch), obj(reason=branch)))
+    e0 = replace(base, plans=(initial, cg, eq, later), programs=(Program(wg.work_id, (outcome,), True), Program(ep.work_id)),
+        field_roles=base.field_roles + tuple(roles), receipt_kinds=((0, 'Boot'), (1, 'WorkFinished')),
+        references=base.references + tuple(ReferencePath(r.path_id,
+            (r.record_contract.name + '/' + r.record_contract.version,),
+            ('.'.join(map(str, r.path)),), r.role, r.use, 'declared_identity_only') for r in roles),
+        observation_declarations=None)
+    return replace(e0, observation_declarations=declare_observation_e0(e0))
+
+
+def _mg02_generation_path(e0, through='end'):
+    scenario = Scenario('MG-02-generation', e0, 200)
+    states, edges = [Environment(e0).initial()], []
+    def take(action, window=None):
+        try:
+            return _c05_take(scenario, states, edges, action, window)
+        except Exception as error:
+            raise RuntimeError(f'{action}: {type(error).__name__}: {error}') from None
+    def save(unit, slot, receipt=False):
+        for op in ('PrepareReceipt' if receipt else 'PrepareOne', 'PutBody', 'AddEntry', 'ConfirmWrite', 'CompleteWrite'):
+            take(Action(op, (unit, slot)))
+    def accept_save(slots):
+        envelope = states[-1].core.h.queue[0]
+        take(Action('Accept', (envelope,))); take(Action('HostAck', envelope.key))
+        for slot in slots: save(receipt_unit_id(envelope.run, envelope.number), slot, True)
+    take(Action('Post', ('boot',))); accept_save(('boot', 'declaration'))
+    take(Action('PublishUnit', ('initial',)))
+    if through == 'initial': return scenario, states, edges, take, save
+    for r in e0.plans[0].records: save('initial', r.slot)
+    for op in ('ResolveWork', 'ClaimStart', 'Launch'): take(Action(op, ('mg-wg',)))
+    take(Action('EnterWorker', ('mg-wg:wrapper:0',)))
+    if through == 'entered': return scenario, states, edges, take, save
+    take(Action('WorkerStep', ('mg-wg',))); take(Action('Deliver', ('report:mg-wg:0',)))
+    accept_save(('receipt',))
+    if through == 'end': return scenario, states, edges, take, save
+    take(Action('RecognizeTerminal', ('mg-wg',)))
+    if through == 'terminal': return scenario, states, edges, take, save
+    take(Action('PublishUnit', ('mg-cg',)))
+    if through == 'cg': return scenario, states, edges, take, save
+    save('mg-cg', 'cg')
+    if through == 'saved-cg': return scenario, states, edges, take, save
+    take(Action('PublishUnit', ('mg-eq',)))
+    if through == 'eq': return scenario, states, edges, take, save
+    save('mg-eq', 'eq')
+    return scenario, states, edges, take, save
+
+
+def test_mg02_generation_public_input_contract():
+    e0 = _mg02_generation_e0(typed_cg=True)
+    try:
+        scenario, states, edges, _, _ = _mg02_generation_path(e0, 'saved-eq')
+    except Exception as error:
+        pytest.fail(type(error).__name__ + ': ' + str(error), pytrace=False)
+    assert {w.descriptor.work_id for w in states[-1].core.p.work} == {'mg-wg', 'mg-ep'}
+    assert any(e.header.record.contract.name == 'candidate_declaration' for e in states[-1].core.e)
+    assert any(e.header.record.contract.name == 'sui.fb.evaluation_request' for e in states[-1].core.e)
+    result = observation_check.evaluate_generation_custody(e0.observation_contract,
+        states[-1].evidence.observation_trace, states[-1])
+    assert not result.violations, result.violations
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations, report.contract_violations
+    assert not report.violations, report.violations
+
+
+def _mg02_result(e0, state, before=None):
+    return observation_check.evaluate_generation_custody(e0.observation_contract,
+        state.evidence.observation_trace, state, before_state=before)
+
+
+def _mg02_change(e0, change):
+    class Changed(CorrectWindow):
+        def drain(self, view):
+            decision = super().drain(view)
+            return replace(decision, custody=change(decision.custody), effects=())
+    return Changed(e0)
+
+
+@pytest.mark.parametrize('cid,branch,through', (
+    ('C-OG.run[Wg]', 'Candidates', 'initial'),
+    ('C-OG.save[T]', 'Candidates', 'end'),
+    ('C-OG.handle[Wg]', 'Failure', 'end'),
+    ('C-OG.issue[CG]', 'Candidates', 'terminal'),
+    ('C-OG.save[CG]', 'Candidates', 'cg'),
+    ('C-OG.issue[EQ]', 'Candidates', 'cg'),
+    ('C-OG.save[EQ]', 'Candidates', 'eq'),
+))
+@pytest.mark.parametrize('change', ('delete', 'clear', 'owner'))
+def test_mg02_seven_conditions_own_positive_and_negative(cid, branch, through, change):
+    bc = observation_check
+    e0 = _mg02_generation_e0(branch)
+    _, states, _, take, _ = _mg02_generation_path(e0, through)
+    before = states[-1]
+    f = bc.GenerationFacts(e0.observation_contract, before.evidence.observation_trace, before)
+    fn = next(fn for name, fn, _ in bc.GENERATION_PREDICATES if name == cid)
+    binding = f.bindings(e0.plans[0].works[0])[fn]
+    good = _mg02_result(e0, before)
+    assert not good.violations, good.violations
+    own = next(j for j in good.custody if j.target == binding.key)
+    assert own.classification == ('引継ぎ済み' if cid == 'C-OG.handle[Wg]' else '未達のまま保全')
+    if cid == 'C-OG.handle[Wg]':
+        # Local handle may be removed after Transfer. The violation is removal
+        # of the accepted residual's real carrier, not removal of a settled row.
+        take(Action('Drain'), _mg02_change(e0, lambda c: replace(c, work=tuple(
+            replace(w, descriptor=replace(w.descriptor, purpose='discarded-original'), purposes=()) for w in c.work))))
+    else:
+        take(Action('Drain'), _c05_change_window(e0, lambda c: c.key == binding.key, change))
+    bad = _mg02_result(e0, states[-1], before)
+    own = next(j for j in bad.custody if j.target == binding.key)
+    assert own.direct is False and own.transfer is False
+    assert own.classification == '削除・消去の違反'
+    assert any(v.row == 'INV-2.g' and v.target == binding.key for v in bad.violations)
+
+
+@pytest.mark.parametrize('branch', ('NoCandidates', 'Failure', 'Unknown'))
+@pytest.mark.parametrize('change', ('delete', 'rename'))
+def test_mg02_non_success_residual_has_original_identity_and_never_direct(branch, change):
+    bc = observation_check
+    e0 = _mg02_generation_e0(branch)
+    _, states, _, take, _ = _mg02_generation_path(e0, 'terminal')
+    before = states[-1]
+    good = _mg02_result(e0, before)
+    assert not good.violations, good.violations
+    purposes = [j for j in good.custody if isinstance(j.target, bc.PurposePart)]
+    assert len(purposes) == 1
+    purpose = purposes[0]
+    assert purpose.direct is False and purpose.classification == '未達のまま保全'
+    assert purpose.target.origin == bc.CompletionKey('O-G', ('work', 'mg-wg'), 'run', bc.WorkKey('mg-wg'))
+    assert purpose.target.part == PlanRef('initial', 'request')
+    assert not any(u.id in ('mg-cg', 'mg-eq') for u in before.core.p.units)
+    assert {w.descriptor.work_id for w in before.core.p.work} == {'mg-wg'}
+    def alter(custody):
+        if change == 'delete': return replace(custody, work=tuple(replace(w,
+            descriptor=replace(w.descriptor, purpose='discarded-original'), purposes=()) for w in custody.work))
+        def changed(work):
+            return replace(work, purposes=tuple(replace(x, obligation_key=replace(x.obligation_key,
+                origin=replace(x.obligation_key.origin, obligation_key=('renamed',)))) for x in work.purposes))
+        return replace(custody, work=tuple(changed(w) for w in custody.work))
+    take(Action('Drain'), _mg02_change(e0, alter))
+    bad = _mg02_result(e0, states[-1], before)
+    assert any(v.row == 'INV-2.g' and v.target == purpose.target for v in bad.violations)
+    assert next(j for j in bad.custody if j.target == purpose.target).direct is False
+
+
+@pytest.mark.parametrize('wait,expected_pg', ((None, False), ('saved', False), ('generation_context', True)))
+def test_mg02_issue_eq_birth_is_not_readiness_or_save_wait(wait, expected_pg):
+    bc = observation_check
+    e0 = _mg02_generation_e0(wait=wait)
+    _, states, _, take, save = _mg02_generation_path(e0, 'cg')
+    for saved in (False, True):
+        if saved: save('mg-cg', 'cg')
+        state = states[-1]
+        result = _mg02_result(e0, state)
+        assert not result.violations, result.violations
+        f = bc.GenerationFacts(e0.observation_contract, state.evidence.observation_trace, state)
+        b = f.bindings(e0.plans[0].works[0])[bc.direct_og_issue_eq]
+        own = next(j for j in result.custody if j.target == b.key)
+        assert own.direct is False and own.classification == '未達のまま保全'
+        purposes = [j for j in result.custody if isinstance(j.target, bc.PurposePart)]
+        assert bool(purposes) is expected_pg
+        if expected_pg:
+            assert purposes[0].direct is False and purposes[0].classification == '未達のまま保全'
+    if wait:
+        with pytest.raises(RuntimeError, match='Disabled'):
+            take(Action('PublishUnit', ('mg-eq',)))
+        take(Action('PublishUnit', ('mg-context',)))
+        save('mg-context', 'context')
+    take(Action('PublishUnit', ('mg-eq',)))
+    result = _mg02_result(e0, states[-1])
+    assert not result.violations, result.violations
+    assert bool([j for j in result.custody if isinstance(j.target, bc.PurposePart)]) is expected_pg
+
+
+def test_mg02_inv16c_whole_qgen_detects_changed_argument_not_just_count():
+    bc = observation_check
+    e0 = _mg02_generation_e0()
+    _, states, _, take, _ = _mg02_generation_path(e0, 'initial')
+    before = states[-1]
+    assert not _mg02_result(e0, before).violations
+    def alter(custody):
+        def slot(s):
+            if s.plan.slot != 'request': return s
+            fields = dict(s.plan.content.items)
+            fields['args'] = obj(draws=(), parameter=8)
+            return replace(s, plan=replace(s.plan, content=obj(**fields)))
+        return replace(custody, units=tuple(replace(u, slots=tuple(slot(s) for s in u.slots))
+                                             if u.id == 'initial' else u for u in custody.units))
+    take(Action('Drain'), _mg02_change(e0, alter))
+    bad = _mg02_result(e0, states[-1], before)
+    assert any(v.row == 'INV-16.c' and v.target == bc.SlotKey('initial', 'request')
+               and 'changed a field' in v.message for v in bad.violations)
+
+
+def test_mg02_typed_cg_public_preparation_contract():
+    # Paper 859-860: a first preparation must match both the independent plan
+    # and its body/reference correspondence; a consistent codec is not enough.
+    bc = observation_check
+    e0 = _mg02_generation_e0(typed_cg=True)
+    scenario, states, edges, take, _ = _mg02_generation_path(e0, 'cg')
+    assert not _mg02_result(e0, states[-1]).violations
+    take(Action('PrepareOne', ('mg-cg', 'cg')))
+    trace = states[-1].evidence.observation_trace
+    key = bc.SlotKey('mg-cg', 'cg')
+    event = next(e for e in trace.events if e.tag == 'FirstPrepare' and e.key == key)
+    first = event.value.prepared
+    model = dict(first.record.content.items)['model']
+    generation = dict(dict(first.record.content.items)['generation'].items)
+    assert {(r.path, r.ref) for r in first.record.references} == {
+        (('model',), model), (('generation', 'basis', 0), generation['basis'][0])}
+    assert isinstance(model, Point) and generation['basis'] == (model,)
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations and not report.violations, report
+
+    # Counterfactual checker input, not a state claimed reachable at the window.
+    # Replace one reference with a different Saved Point; keep the body and
+    # reference count, and recompute all bytes/seal/header/CID independently.
+    pref = next(e.point for e in trace.entries if e.header.record.contract.name == 'model.preferences')
+    wrong_record = replace(first.record, references=tuple(
+        replace(r, ref=pref) if r.path == ('model',) else r for r in first.record.references))
+    wrong = _handmade_prepared(wrong_record, first.parents, first.salt)
+    assert wrong.record.content == first.record.content and pref != model
+    assert bc.ledger_saved(pref, trace, e0.observation_contract.codec)
+    assert bc.prepared_consistent(wrong, e0.observation_contract.codec)
+    bad_trace = replace(trace, origin=None, events=tuple(
+        replace(e, value=replace(e.value, prepared=wrong)) if e is event else e for e in trace.events))
+    bad = bc.evaluate_observations(e0.observation_contract, bad_trace)
+    assert not bad.boundary.violations, bad.boundary.violations
+    assert any(v.row == 'INV-4.c' and v.target == key
+               and v.message == 'first preparation differs from independent permitted plan/codec'
+               for v in bad.violations)
+
+
+@pytest.mark.parametrize('draws', (('needs-RG',), None))
+def test_mg02_d6_random_generation_remains_unconnected(draws):
+    e0 = _mg02_generation_e0(draws=draws)
+    _, states, _, _, _ = _mg02_generation_path(e0, 'initial')
+    result = _mg02_result(e0, states[-1])
+    assert any(row == 'INV-16.c' and 'R10/D6' in reason for row, reason in result.limitations)
+    assert not result.violations, result.violations
+    with pytest.raises(RuntimeError, match='MissingContract'):
+        _mg02_generation_path(e0, 'entered')
+    before = states[-1]
+    def coerce(c):
+        return replace(c, work=tuple(replace(w, descriptor=replace(w.descriptor,
+            args=obj(draws=(), parameter=7))) for w in c.work))
+    scenario = Scenario('MG-02-D6-coercion', e0, 200)
+    _c05_take(scenario, states, [], Action('Drain'), _mg02_change(e0, coerce))
+    bad = _mg02_result(e0, states[-1], before)
+    assert any(v.row == 'INV-16.c' and v.target == observation_check.WorkKey('mg-wg')
+               and 'coerced' in v.message for v in bad.violations)
+
+
+def test_mg02_seven_distinct_direct_conclusions_and_handle_transfer():
+    bc = observation_check
+    e0 = _mg02_generation_e0()
+    _, states, _, take, save = _mg02_generation_path(e0, 'terminal')
+    unit = next(u for u in states[-1].core.p.units if u.id == 'terminal:mg-wg')
+    for slot in unit.slots: save(unit.id, slot.plan.slot)
+    take(Action('PublishUnit', ('mg-cg',)))
+    save('mg-cg', 'cg')
+    take(Action('PublishUnit', ('mg-eq',)))
+    save('mg-eq', 'eq')
+    result = _mg02_result(e0, states[-1])
+    assert not result.violations, result.violations
+    f = bc.GenerationFacts(e0.observation_contract, states[-1].evidence.observation_trace, states[-1])
+    bindings = f.bindings(e0.plans[0].works[0])
+    for cid, fn, _ in bc.GENERATION_PREDICATES:
+        own = next(j for j in result.custody if j.target == bindings[fn].key)
+        assert own.direct is (cid != 'C-OG.handle[Wg]'), (cid, own)
+        assert own.transfer is (cid == 'C-OG.handle[Wg]'), (cid, own)
+
+
+@pytest.mark.parametrize('through,wait', (('initial', None), ('entered', None), ('cg', 'saved')))
+def test_mg02_no_residual_for_delivery_or_predecessor_save_wait(through, wait):
+    from fb_machine import Excuse
+    bc = observation_check
+    e0 = _mg02_generation_e0(wait=wait)
+    _, states, _, take, _ = _mg02_generation_path(e0, through)
+    before = states[-1]
+    good = _mg02_result(e0, before)
+    assert not good.violations and not any(isinstance(j.target, bc.PurposePart) for j in good.custody)
+    if through != 'cg':
+        assert {j.target.kind for j in good.custody if isinstance(j.target, bc.CompletionKey)} == {'run'}
+    f = bc.GenerationFacts(e0.observation_contract, before.evidence.observation_trace, before)
+    part = f.purpose(e0.plans[0].works[0])
+    invented = Excuse('O-G', part, 'mere delivery/save wait', obj(reason='not-a-use-shortage'), frozenset(), ('pG',))
+    take(Action('Drain'), _mg02_change(e0, lambda c: replace(c,
+        work=tuple(replace(w, purposes=w.purposes + (invented,)) for w in c.work))))
+    result = _mg02_result(e0, states[-1], before)
+    assert any(v.row == 'INV-2.g' and v.target == part and 'invented' in v.message for v in result.violations)
+
+
+@pytest.mark.parametrize('field', ('descriptor', 'candidate', 'evaluation', 'purpose'))
+def test_mg02_continuation_reconstructs_original_identity(field):
+    bc = observation_check
+    e0 = _mg02_generation_e0(wait='generation_context')
+    _, states, _, take, _ = _mg02_generation_path(e0, 'saved-cg')
+    before = states[-1]
+    assert not _mg02_result(e0, before).violations
+    def alter(c):
+        def unit(u):
+            if u.id != 'mg-cg': return u
+            g = u.generation
+            value = (replace(g.descriptor, purpose='other') if field == 'descriptor' else
+                     replace(g.purpose, origin=replace(g.purpose.origin, obligation_key=('other',))) if field == 'purpose' else
+                     PlanRef('other', field))
+            return replace(u, generation=replace(g, **{field: value}))
+        return replace(c, units=tuple(unit(u) for u in c.units))
+    take(Action('Drain'), _mg02_change(e0, alter))
+    bad = _mg02_result(e0, states[-1], before)
+    assert any(v.row == 'INV-2.g' and 'cannot reconstruct' in v.message and
+               v.target == bc.UnitKey('mg-cg') for v in bad.violations)
+
+
+def test_mg02_saved_conflicting_return_preserves_commitments_and_original_pg():
+    from fb_machine import declare_observation_e0
+    bc = observation_check
+    base = _mg02_generation_e0()
+    first = base.programs[0].replies[0]
+    second = Outcome(OutcomeKind.FAILURE, obj(reason='later-conflicting-return'))
+    program = replace(base.programs[0], replies=(first, second))
+    e0 = replace(base, programs=(program, base.programs[1]),
+        receipt_kinds=((0, 'Boot'), (1, 'WorkFinished'), (2, 'WorkFinished')), observation_declarations=None)
+    e0 = replace(e0, observation_declarations=declare_observation_e0(e0))
+    _, states, _, take, save = _mg02_generation_path(e0, 'cg')
+    take(Action('WorkerStep', ('mg-wg',)))
+    take(Action('Deliver', ('report:mg-wg:1',)))
+    envelope = states[-1].core.h.queue[0]
+    take(Action('Accept', (envelope,))); take(Action('HostAck', envelope.key))
+    save(receipt_unit_id(envelope.run, envelope.number), 'receipt', True)
+    result = _mg02_result(e0, states[-1])
+    assert not result.violations, result.violations
+    purposes = [j for j in result.custody if isinstance(j.target, bc.PurposePart)]
+    assert len(purposes) == 1 and purposes[0].direct is False
+    assert any(j.target == bc.CompletionKey('O-G', ('generation', 'mg-wg'), 'save', bc.SlotKey('mg-cg', 'cg'))
+               and j.classification == '未達のまま保全' for j in result.custody)
+    save('mg-cg', 'cg')
+    with pytest.raises(RuntimeError, match='Disabled'):
+        take(Action('PublishUnit', ('mg-eq',)))
+
+
+@pytest.mark.parametrize('cid', tuple(cid for cid, _, _ in observation_check.GENERATION_PREDICATES))
+def test_mg02_missing_e0_condition_adapter_stays_in_denominator(cid):
+    bc = observation_check
+    base = _mg02_generation_e0()
+    initial = Environment(base).initial()
+    f = bc.GenerationFacts(base.observation_contract, initial.evidence.observation_trace, initial)
+    fn = next(fn for name, fn, _ in bc.GENERATION_PREDICATES if name == cid)
+    omitted = f.bindings(base.plans[0].works[0])[fn]
+    declared = replace(base.observation_contract,
+        completions=tuple(b for b in base.observation_contract.completions if b != omitted))
+    e0 = replace(base, observation_declarations=declared)
+    _, states, _, _, _ = _mg02_generation_path(e0, 'initial')
+    result = _mg02_result(e0, states[-1])
+    gap = next(j for j in result.custody if isinstance(j.target, bc.UnconnectedCompletion)
+               and j.target.condition_id == cid)
+    assert gap.target.witness == bc.WorkKey('mg-wg') and gap.classification == '未接続'
+    assert gap.direct is None and gap.transfer is None and gap.reasons
+    assert any(cid in reason for _, reason in result.limitations)
+
+
+def test_mg02_unknown_generation_use_contract_is_not_a_false_conclusion():
+    from fb_machine import declare_observation_e0
+    bc = observation_check
+    base = _mg02_generation_e0()
+    cg = replace(base.plans[1], semantic_limits=('MG-02-unconnected-use-contract',))
+    e0 = replace(base, plans=(base.plans[0], cg, *base.plans[2:]), observation_declarations=None)
+    e0 = replace(e0, observation_declarations=declare_observation_e0(e0))
+    _, states, _, _, _ = _mg02_generation_path(e0, 'end')
+    result = _mg02_result(e0, states[-1])
+    f = bc.GenerationFacts(e0.observation_contract, states[-1].evidence.observation_trace, states[-1])
+    target = f.bindings(e0.plans[0].works[0])[bc.direct_og_issue_cg].key
+    own = next(j for j in result.custody if j.target == target)
+    assert own.classification == '未接続' and own.direct is None
+    p = next(j for j in result.custody if isinstance(j.target, bc.PurposePart))
+    assert p.classification == '未接続' and p.direct is False
+    assert not result.violations, result.violations
+
+
+@pytest.mark.parametrize('cid,through,owner', (
+    ('C-OG.run[Wg]', 'initial', observation_check.Owner('P.units', 'initial')),
+    ('C-OG.save[T]', 'end', observation_check.Owner('P.units', 'initial')),
+    ('C-OG.issue[CG]', 'terminal', observation_check.Owner('P.units', 'initial')),
+    ('C-OG.save[CG]', 'cg', observation_check.Owner('P.work', 'mg-wg')),
+    ('C-OG.issue[EQ]', 'cg', observation_check.Owner('P.work', 'mg-wg')),
+    ('C-OG.save[EQ]', 'eq', observation_check.Owner('P.work', 'mg-wg')),
+))
+def test_mg02_existing_but_wrong_owner_is_not_a_valid_carrier(cid, through, owner):
+    bc = observation_check
+    e0 = _mg02_generation_e0()
+    _, states, _, take, _ = _mg02_generation_path(e0, through)
+    before = states[-1]
+    f = bc.GenerationFacts(e0.observation_contract, before.evidence.observation_trace, before)
+    fn = next(fn for name, fn, _ in bc.GENERATION_PREDICATES if name == cid)
+    key = f.bindings(e0.plans[0].works[0])[fn].key
+    assert not _mg02_result(e0, before).violations
+    assert bc.actual_owner_exists(before, owner)
+    take(Action('Drain'), _mg02_change(e0, lambda c: replace(c, conditions=tuple(
+        replace(row, owner=owner) if row.key == key else row for row in c.conditions))))
+    bad = _mg02_result(e0, states[-1], before)
+    assert any(v.row == 'INV-2.g' and v.target == key for v in bad.violations)
+# MG-02 M3 END.
+
+
+# MG-02 follow-up 3 BEGIN: repaired contracts and missing save-wait contrast.
+@pytest.mark.parametrize('field', ('model', 'generation_basis'))
+def test_mg02_unresolved_actual_input_context_is_rejected(field):
+    # Paper 870: actual input, including nested context, must equal the fixed
+    # resolved input. This input to the checker retains just one recipe field.
+    bc = observation_check
+    e0 = _mg02_generation_e0(typed_cg=True)
+    _, states, _, _, _ = _mg02_generation_path(e0, 'entered')
+    trace = states[-1].evidence.observation_trace
+    good = bc.evaluate_observations(e0.observation_contract, trace)
+    assert not good.boundary.violations and not good.violations, good
+    event = next(e for e in trace.events if e.tag == 'ReadInputs' and e.key.work == 'mg-wg')
+    actual = event.value.numerical_view
+    model = dict(actual.context.items)['model']
+    assert isinstance(model, Point) and dict(actual.context.items)['generation_basis'] == (model,)
+    context = dict(actual.context.items)
+    context[field] = PlanRef('initial', 'model') if field == 'model' else (PlanRef('initial', 'model'),)
+    wrong = replace(actual, context=obj(**context))
+    assert (wrong.points, wrong.application_order) == (actual.points, actual.application_order)
+    bad_trace = replace(trace, origin=None, events=tuple(
+        replace(e, value=replace(e.value, numerical_view=wrong)) if e is event else e for e in trace.events))
+    bad = bc.evaluate_observations(e0.observation_contract, bad_trace)
+    assert not bad.boundary.violations, bad.boundary.violations
+    assert {(v.row, v.target, v.message) for v in bad.violations} == {
+        ('INV-8.b', (trace.events.index(event), event.key),
+         'actual descriptor/numerical input differs from E0 fixed values')}
+
+
+@pytest.mark.parametrize('carrier', ('Wg', 'CG'))
+def test_mg02_eq_body_point_save_wait_rejects_unnecessary_pg(carrier):
+    # Paper 1935,1946,1959: an EQ content Point waiting for its predecessor's
+    # save is not a generation_context shortage. Do not add either wait guard.
+    from fb_machine import Excuse
+    bc = observation_check
+    e0 = _mg02_generation_e0(typed_cg=True, eq_context_wait=True)
+    eq = next(p for p in e0.plans if p.unit == 'mg-eq')
+    assert tuple(g.kind for g in eq.guards) == ('evaluation',)
+    assert dict(eq.records[0].content.items)['context'] == PlanRef('mg-context', 'context')
+    scenario, states, edges, take, save = _mg02_generation_path(e0, 'saved-cg')
+    before = states[-1]
+    good = _mg02_result(e0, before)
+    assert not good.violations, good.violations
+    assert not any(isinstance(j.target, bc.PurposePart) for j in good.custody)
+    continuation = next(u.generation for u in before.core.p.units if u.id == 'mg-cg')
+    assert not continuation.shortages
+    assert not any(w.purposes for w in before.core.p.work)
+    issue_eq = bc.CompletionKey('O-G', ('work', 'mg-wg'), 'issue', bc.SlotKey('mg-eq', 'eq'))
+    own = next(j for j in good.custody if j.target == issue_eq)
+    assert own.direct is False and own.classification == '未達のまま保全'
+    with pytest.raises(RuntimeError, match='Disabled'):
+        take(Action('PublishUnit', ('mg-eq',)))
+
+    # Original pG identity from paper 1959, not from checker/window birth flags.
+    d = e0.plans[0].works[0]
+    part = bc.PurposePart(bc.CompletionKey('O-G', ('work', d.work_id), 'run', bc.WorkKey(d.work_id)),
+        (d.purpose, d.process, d.reader, d.request, d.stage_slot), d.request)
+    invented = Excuse('O-G', part, 'mere predecessor save wait', obj(waiting=PlanRef('mg-context', 'context')),
+                      frozenset(), ('pG',))
+    custody = before.core.p
+    if carrier == 'Wg':
+        custody = replace(custody, work=tuple(replace(w, purposes=(invented,))
+            if w.descriptor.work_id == d.work_id else w for w in custody.work))
+    else:
+        custody = replace(custody, units=tuple(replace(u, generation=replace(u.generation, shortages=(invented,)))
+            if u.id == 'mg-cg' else u for u in custody.units))
+    # Frozen checker input only: do not feed this state back into Environment.
+    counterfactual = replace(before, core=replace(before.core, p=custody))
+    bad = _mg02_result(e0, counterfactual, before)
+    assert any(v.row == 'INV-2.g' and v.target == part
+               and v.message == 'pG was invented for delivery/save wait or has changed its original target'
+               for v in bad.violations)
+    assert not any(isinstance(j.target, bc.PurposePart) for j in bad.custody)
+
+    # Continue the unchanged real path: saving that Point permits EQ without pG.
+    take(Action('PublishUnit', ('mg-context',)))
+    save('mg-context', 'context')
+    take(Action('PublishUnit', ('mg-eq',)))
+    save('mg-eq', 'eq')
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations and not report.violations, report
+    assert not any(isinstance(j.target, bc.PurposePart) for j in _mg02_result(e0, states[-1]).custody)
+# MG-02 follow-up 3 END
+
+
+
+# Pre-commit review FBM3-R01/R02 BEGIN (sui-fb-model-review3).
+@pytest.mark.parametrize('context_at,expected_pg', (('entered', False), ('end', True), ('saved-cg', True)))
+def test_fbm3_r01_context_shortage_at_endknown_keeps_pg_even_if_saved_before_cg(context_at, expected_pg):
+    # Paper 1956/1959, D3: a declared EQ-use shortage seen after EndKnown(Wg)
+    # enters the pG branch then; saving the context before CG PUB keeps it.
+    bc = observation_check
+    e0 = _mg02_generation_e0(wait='generation_context', eq_context_wait=True, typed_cg=True)
+    scenario, states, edges, take, save = _mg02_generation_path(e0, context_at)
+    def context():
+        take(Action('PublishUnit', ('mg-context',)))
+        save('mg-context', 'context')
+    context()
+    if context_at == 'entered':
+        take(Action('WorkerStep', ('mg-wg',))); take(Action('Deliver', ('report:mg-wg:0',)))
+        envelope = states[-1].core.h.queue[0]
+        take(Action('Accept', (envelope,))); take(Action('HostAck', envelope.key))
+        save(receipt_unit_id(envelope.run, envelope.number), 'receipt', True)
+    if context_at != 'saved-cg':
+        take(Action('RecognizeTerminal', ('mg-wg',)))
+        take(Action('PublishUnit', ('mg-cg',)))
+        save('mg-cg', 'cg')
+    take(Action('PublishUnit', ('mg-eq',)))
+    save('mg-eq', 'eq')
+    result = _mg02_result(e0, states[-1])
+    assert not result.violations, result.violations
+    purposes = [j for j in result.custody if isinstance(j.target, bc.PurposePart)]
+    assert bool(purposes) is expected_pg
+    assert all(j.direct is False and j.classification == '未達のまま保全' for j in purposes)
+    assert any(w.purposes for w in states[-1].core.p.work if w.descriptor.work_id == 'mg-wg') is expected_pg
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations and not report.violations, report
+
+
+@pytest.mark.parametrize('reply', ('same-point', 'other-point'))
+def test_fbm3_r02_generation_args_compare_resolved_planrefs(reply):
+    # Paper 583/1006/1933: a PlanRef in Wg args is fixed and resolved once; the
+    # reply carrying that resolved Point is not a changed argument, another
+    # Saved Point is. The literal-argument control is the default helper path.
+    from fb_machine import Point
+    bc = observation_check
+    model = PlanRef('initial', 'model')
+    # Both Points are in Wg's actual input read; only the reply's choice differs.
+    e0 = _mg02_generation_e0(typed_cg=True, multiple_inputs=True, parameter=model,
+                             reply_parameter=None if reply == 'same-point' else PlanRef('initial', 'preference-b'))
+    assert e0.plans[0].works[0].args.get('parameter') == model
+    if reply == 'other-point':
+        scenario, states, edges, take, _ = _mg02_generation_path(e0, 'terminal')
+        with pytest.raises(RuntimeError, match='Disabled'):
+            take(Action('PublishUnit', ('mg-cg',)))
+        return
+    scenario, states, edges, _, _ = _mg02_generation_path(e0, 'saved-eq')
+    cg = next(e.header.record for e in states[-1].core.e if e.header.record.contract.name == 'candidate_declaration')
+    parameter = cg.content.get('generation').get('args').get('parameter')
+    assert isinstance(parameter, Point) and parameter.cid
+    result = _mg02_result(e0, states[-1])
+    assert not result.violations, result.violations
+    assert not any(isinstance(j.target, bc.PurposePart) for j in result.custody)
+    assert not any(w.purposes for w in states[-1].core.p.work)
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations and not report.violations, report
+# Pre-commit review FBM3-R01/R02 END
+
+# MG-02 follow-up 4 BEGIN: MG05-C independent public-contract contrasts.
+@pytest.mark.parametrize('shape', ('single', 'singleton', 'multiple'))
+def test_mg05_preferences_reference_members_and_fixed_content(shape):
+    # Paper 861,1935,1937; public EQ wire: preserve tuple order but check each Ref.
+    bc = observation_check
+    e0 = _mg02_generation_e0(typed_cg=True, preferences=shape)
+    scenario, states, edges, _, _ = _mg02_generation_path(e0, 'saved-eq')
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations, report.contract_violations
+    assert not report.violations, tuple((v.condition_id, v.message, v.target) for v in report.violations)
+    trace = states[-1].evidence.observation_trace
+    event = next(e for e in trace.events if e.tag == 'Publish' and e.key == bc.UnitKey('mg-eq'))
+    record = event.value.plan.records[0]
+    content = dict(record.content.items)
+    actual = content['preferences']
+    pref = next(e.point for e in trace.entries if e.header.record.contract.name == 'model.preferences')
+    if shape == 'single':
+        assert actual == pref
+    elif shape == 'singleton':
+        assert actual == (pref,)
+    else:
+        extra = next(e.point for e in trace.entries if e.header.record.contract.name == 'model.preference-b')
+        assert actual == (pref, extra) and pref != extra
+
+    # Frozen checker input: different Saved preference, same tuple/scalar shape
+    # and cardinality. E0 remains unchanged; count-only comparison would miss it.
+    other = content['context']
+    assert other != pref
+    content['preferences'] = (other, *actual[1:]) if isinstance(actual, tuple) else other
+    wrong = replace(event.value.plan, records=(replace(record, content=obj(**content)),))
+    bad_trace = replace(trace, origin=None, events=tuple(
+        replace(e, value=replace(e.value, plan=wrong)) if e is event else e for e in trace.events))
+    bad = bc.evaluate_generation_custody(e0.observation_contract, bad_trace, states[-1])
+    assert any(v.row == 'INV-16.c' and v.target == bc.UnitKey('mg-eq')
+               and 'full corresponding' in v.message for v in bad.violations)
+
+
+def test_mg05_multiple_qgen_refs_keep_sets_and_application_order_separate():
+    bc = observation_check
+    e0 = _mg02_generation_e0(typed_cg=True, multiple_inputs=True)
+    scenario, states, edges, _, _ = _mg02_generation_path(e0, 'saved-eq')
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations, report.contract_violations
+    assert not report.violations, report.violations
+    d = e0.plans[0].works[0]
+    assert d.input_points == frozenset((PlanRef('initial', 'model'), PlanRef('initial', 'preference-b')))
+    assert d.numerical_view.application_order == (PlanRef('initial', 'preference-b'), PlanRef('initial', 'model'))
+    assert d.permissions == frozenset((PlanRef('initial', 'preferences'), PlanRef('initial', 'context')))
+    # Mismatched pre-execution declarations are checker inputs, not window runs.
+    for field in ('input_points', 'points', 'permissions', 'application_order'):
+        q = next(r for r in e0.plans[0].records if r.slot == 'request')
+        content, numerical = dict(q.content.items), dict(dict(q.content.items)['numerical_view'].items)
+        if field == 'application_order':
+            numerical[field] = tuple(reversed(numerical[field]))
+        elif field == 'points':
+            numerical[field] = (numerical[field][0], numerical[field][0])
+        else:
+            content[field] = (content[field][0], content[field][0])
+        content['numerical_view'] = obj(**numerical)
+        initial = replace(e0.plans[0], records=tuple(replace(r, content=obj(**content)) if r is q else r
+                                                   for r in e0.plans[0].records))
+        contract = replace(e0.observation_contract, plans=tuple(initial if p.unit == initial.unit else p
+                                                               for p in e0.observation_contract.plans))
+        bad = bc.evaluate_generation_custody(contract, states[-1].evidence.observation_trace, states[-1])
+        assert any(v.row == 'INV-16.c' and v.target == bc.WorkKey('mg-wg')
+                   and 'whole fixed Wg descriptor' in v.message for v in bad.violations), field
+
+
+@pytest.mark.parametrize('missing_index', (0, 1))
+def test_mg05_each_preference_must_belong_to_ep_input_set(missing_index):
+    # A self-consistent E0/EU declaration can still violate the paper's EQ/Ep
+    # correspondence. Merely skipping preferences would pass the other contrast.
+    bc = observation_check
+    e0 = _mg02_generation_e0(typed_cg=True, preferences='multiple')
+    _, states, _, _, _ = _mg02_generation_path(e0, 'eq')
+    before = states[-1]
+    assert not _mg02_result(e0, before).violations
+    plan = next(p for p in e0.plans if p.unit == 'mg-eq')
+    ep = plan.works[0]
+    preferences = dict(plan.records[0].content.items)['preferences']
+    missing = preferences[missing_index]
+    assert missing in ep.input_points and missing in ep.numerical_view.points
+    bad_ep = replace(ep, input_points=ep.input_points - {missing},
+                     numerical_view=replace(ep.numerical_view, points=ep.numerical_view.points - {missing}))
+    bad_plan = replace(plan, works=(bad_ep,))
+    contract = replace(e0.observation_contract,
+        plans=tuple(bad_plan if p.unit == plan.unit else p for p in e0.observation_contract.plans),
+        descriptors=tuple(bad_ep if d.work_id == ep.work_id else d for d in e0.observation_contract.descriptors))
+    trace = before.evidence.observation_trace
+    trace = replace(trace, origin=None, events=tuple(
+        replace(e, value=replace(e.value, plan=replace(e.value.plan, works=(bad_ep,))))
+        if e.tag == 'Publish' and e.key == bc.UnitKey(plan.unit) else e for e in trace.events))
+    state = replace(before, core=replace(before.core, p=replace(before.core.p,
+        work=tuple(replace(w, descriptor=bad_ep) if w.descriptor.work_id == ep.work_id else w
+                   for w in before.core.p.work))), evidence=replace(before.evidence, observation_trace=trace))
+    # Frozen checker input only. The window must not execute this bad declaration.
+    bad = bc.evaluate_generation_custody(contract, trace, state)
+    assert any(v.row == 'INV-16.c' and v.target == bc.UnitKey(plan.unit)
+               and 'full corresponding' in v.message for v in bad.violations), missing
+
+
+def test_mg05_upstream_conflict_blocks_entry_but_not_responsibility():
+    from fb_machine import declare_observation_e0
+    bc = observation_check
+    base = _mg02_generation_e0(typed_cg=True)
+    replies = (*base.programs[0].replies, Outcome(OutcomeKind.FAILURE, obj(reason='independent-later-failure')))
+    e0 = replace(base, capacity=(('think', 2),), allocation=(('think', 2),),
+        programs=(replace(base.programs[0], replies=replies), base.programs[1]),
+        receipt_kinds=((0, 'Boot'), (1, 'WorkFinished'), (2, 'WorkFinished')), observation_declarations=None)
+    e0 = replace(e0, observation_declarations=declare_observation_e0(e0))
+    scenario, states, edges, take, save = _mg02_generation_path(e0, 'saved-eq')
+    for op in ('ResolveWork', 'ClaimStart', 'Launch'):
+        take(Action(op, ('mg-ep',)))
+    ready = states[-1]
+    entry = Action('EnterWorker', ('mg-ep:wrapper:0',))
+    offered = _c02_start_actions(e0, ready)
+    assert entry in offered
+    assert not _c02_start_result(e0, ready, offered).violations
+    missing = _c02_start_result(e0, ready, tuple(a for a in offered if a != entry))
+    assert any(v.message == 'ready launched work lacks EnterWorker' and v.target == 'mg-ep'
+               for v in missing.violations)
+
+    take(Action('WorkerStep', ('mg-wg',)))
+    take(Action('Deliver', ('report:mg-wg:1',)))
+    envelope = states[-1].core.h.queue[0]
+    take(Action('Accept', (envelope,))); take(Action('HostAck', envelope.key))
+    unsaved = states[-1]
+    offered = _c02_start_actions(e0, unsaved)
+    assert entry in offered  # EW return/receipt claims alone are not Saved Reports.
+    missing = _c02_start_result(e0, unsaved, tuple(a for a in offered if a != entry))
+    assert any(v.message == 'ready launched work lacks EnterWorker' and v.target == 'mg-ep'
+               for v in missing.violations)
+    save(receipt_unit_id(envelope.run, envelope.number), 'receipt', True)
+    blocked = states[-1]
+    assert entry not in _c02_start_actions(e0, blocked)
+    with pytest.raises(RuntimeError, match='Disabled'):
+        take(entry)
+    assert not any(e.tag == 'EnterBody' and e.key.work == 'mg-ep' for e in blocked.evidence.observation_trace.events)
+    held, wrappers, entered, _, _ = bc.actual_start_history(blocked.evidence.observation_trace)
+    assert 'mg-ep' not in entered and wrappers['mg-ep'] == {'mg-ep:wrapper:0'}
+    assert any(k.work == 'mg-ep' and resources == (('think', 1),) for k, resources in held.items())
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations, report.contract_violations
+    assert not report.violations, tuple((v.condition_id, v.message, v.target) for v in report.violations)
+# MG-02 follow-up 4 END
+
+
+# MG-02 follow-up 5 BEGIN: INV-16.c Qgen versus actual EW input, before CG/EQ.
+@pytest.mark.parametrize('field', (
+    'args', 'reader', 'input_points', 'numerical_points', 'application_order', 'numerical_context',
+))
+def test_mg06_inv16c_actual_wg_read_matches_fixed_qgen(field):
+    # Paper 1004,1006,1931,1961: the full request/actual-generation relation
+    # already applies at entry. A later return or CG/EQ is not its trigger.
+    bc = observation_check
+    e0 = _mg02_generation_e0(typed_cg=True, multiple_inputs=True)
+    scenario, states, edges, _, _ = _mg02_generation_path(e0, 'entered')
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations, report.contract_violations
+    assert not report.violations, report.violations
+    state = states[-1]
+    trace = state.evidence.observation_trace
+    event = next(e for e in trace.events if e.tag == 'ReadInputs' and e.key.work == 'mg-wg')
+    assert any(e.tag == 'EnterBody' and e.key == event.key for e in trace.events)
+    assert not any(e.tag == 'WorkerReturn' for e in trace.events)
+    assert not any(e.tag == 'Publish' and e.key in (bc.UnitKey('mg-cg'), bc.UnitKey('mg-eq'))
+                   for e in trace.events)
+    qgen = next(e.header.record for e in trace.entries
+                if e.header.record.contract.name == 'sui.fb.candidate_request')
+    content = dict(qgen.content.items)
+    numerical = dict(content['numerical_view'].items)
+    actual = event.value
+    assert actual.descriptor.args == content['args'] == obj(draws=(), parameter=7)
+    assert actual.descriptor.reader == content['reader']
+    assert actual.descriptor.input_points == frozenset(content['input_points'])
+    assert actual.descriptor.numerical_view == actual.numerical_view
+    assert actual.numerical_view.points == frozenset(numerical['points'])
+    assert actual.numerical_view.application_order == numerical['application_order']
+    assert actual.numerical_view.context == numerical['context']
+    assert not _mg02_result(e0, state).violations
+
+    # Counterfactual checker input only: keep E0, Qgen, all Saved records and
+    # resolution evidence fixed. Change one logical field of the actual read.
+    # For a numerical field, both EW copies agree, so mere self-consistency
+    # checking cannot detect this mismatch with the independently fixed Qgen.
+    alternate = next(e.point for e in trace.entries
+                     if e.header.record.contract.name == 'model.preferences')
+    view = actual.numerical_view
+    assert alternate not in view.points and alternate != actual.descriptor.reader
+    first, second = view.application_order
+    assert first != second and view.points == frozenset((first, second))
+    if field == 'args':
+        wrong = replace(actual, descriptor=replace(actual.descriptor, args=obj(draws=(), parameter=8)))
+    elif field == 'reader':
+        wrong = replace(actual, descriptor=replace(actual.descriptor, reader=alternate))
+    elif field == 'input_points':
+        wrong = replace(actual, descriptor=replace(actual.descriptor,
+            input_points=(actual.descriptor.input_points - {first}) | {alternate}))
+    else:
+        if field == 'numerical_points':
+            changed = replace(view, points=(view.points - {first}) | {alternate})
+        elif field == 'application_order':
+            changed = replace(view, application_order=(second, first))
+        else:
+            context = dict(view.context.items)
+            context['model'] = alternate
+            changed = replace(view, context=obj(**context))
+        wrong = replace(actual, descriptor=replace(actual.descriptor, numerical_view=changed),
+                        numerical_view=changed)
+    assert wrong != actual and wrong.resolutions == actual.resolutions
+    bad_trace = replace(trace, origin=None, events=tuple(
+        replace(e, value=wrong) if e is event else e for e in trace.events))
+    bad_state = replace(state, evidence=replace(state.evidence, observation_trace=bad_trace))
+    observed = bc.evaluate_observations(e0.observation_contract, bad_trace)
+    target = (trace.events.index(event), event.key)
+    assert not observed.boundary.violations, observed.boundary.violations
+    assert {(v.row, v.target, v.message) for v in observed.violations} == {
+        ('INV-8.b', target, 'actual descriptor/numerical input differs from E0 fixed values')}
+    checked = bc.evaluate_generation_custody(e0.observation_contract, bad_trace, bad_state)
+    assert {(v.row, v.target, v.message) for v in checked.violations} == {
+        ('INV-16.c', target, 'actual Wg input differs from the fixed Qgen descriptor/numerical view')}
+# MG-02 follow-up 5 END

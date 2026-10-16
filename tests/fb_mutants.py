@@ -1,4 +1,4 @@
-"""Independent F-b mutants: v0.12 designs; scope updated against v0.15.
+"""Independent F-b mutants: historical v0.12/v0.15 plus v0.18 MG-06.
 
 M-01: PREDECLARED population, before writing any mutant implementation.
 Paper: specs/関所F_Fb_今の約束.md. Unmarked lines are design-time v0.12;
@@ -91,11 +91,59 @@ naming/wire only (1); no extra semantic or numerical assumption (0).
 Read boundary: inspect.signature/getdoc and public dataclass declarations,
 SCENES/E0/instantiate, and actual public calls only. No implementation source
 of CorrectWindow, Environment or checker predicates was opened.
-Session logging: latest instruction permits these two files and results JSON;
-Obsidian Sessions/Projects/Heat updates are intentionally NOT performed.
+Session logging: MG-06 permits only these two Python files. The old JSON is
+historical and immutable here. Obsidian/Projects/Heat are NOT updated.
 Reused knowledge: Obsidian/Knowledge/確かめる係の設計_すり抜けの型と環境の真実_2026-10-13.md;
 applicable: keep A-G failure mechanisms and independent E0/actual observations
 separate; no single-cause inference and no fingerprint marker in model state.
+
+MG-06 M-01 extension: PREDECLARED before M3/M4 implementation (2026-10-17).
+Paper v0.18, SHA256 a3605ac06bbb0657ec6a7078e4d1f7885f29ce257d40546c5f0b03064e8ffc6d.
+Origins: C = supplied example (12); P = paper-only independent design (17/29).
+All controls use the SAME E0/legal prefix/Cut. Proposed scenes are not evidence.
+ID | origin; paper | target / ONE broken promise | scene | nearest legal control
+MG-01 | C;1937,1946 | INV-2.g / issue[EQ] delayed until Saved(CG) | CG PUB, unsaved | issue[EQ] already held
+MG-02 | C;1946,1956 | INV-2.g / drop issue[EQ] in shortage | CG saved, missing context | issue[EQ] and pG retained
+MG-03 | C;1956,1959 | INV-2.g / drop pG in shortage | CG saved, missing context | original pG retained
+MG-04 | C;1959 | INV-2.g / invent pG from save wait alone | ordinary predecessor wait | no pG
+MG-05 | C;1946,1959 | INV-2.g / EQ publication clears existing pG | context later arrives | pG retained after EQ
+MG-06 | C;1934,1952 | INV-16.c / NoCandidates authorizes CG and normal continuation | NoCandidates first | T/pG, no CG/EQ
+MG-07 | C;1953 | INV-16.c / Failure authorizes CG | Failure first | T/pG, no CG
+MG-08 | C;1954 | INV-16.c / Unknown authorizes CG | Unknown first | T/pG, no CG
+MG-09 | C;1931,1961 | INV-16.c / Wg args differ from Qgen | actual Wg entry | fixed args
+MG-10 | C;1936 | INV-16.c / normalize required draws to empty | nonempty draws, R10 | unconnected, no normalization
+MG-11 | C;1967 | INV-15.a / WorkFinished naming D ends D | only WorkFinished | original saved, no end
+MG-12 | C;885,1969 | INV-15.b / late DrawValue after first Failure authorizes DF | Failure then value | T only, no DF/Ee
+MG-13 | P;1941 | INV-2.g / close run[Wg] before EndKnown | Wg promised | run retained
+MG-14 | P;1942 | INV-2.g / close save[T] before Saved(T) | T PUB, unsaved | save[T] retained
+MG-15 | P;1943 | INV-2.g / close handle without transferee | end before CG transfer | handle retained
+MG-16 | P;1944 | INV-2.g / close issue[CG] without publication | nonempty success before CG | issue[CG] retained
+MG-17 | P;1945 | INV-2.g / close save[CG] before Saved(CG) | CG PUB, unsaved | save[CG] retained
+MG-18 | P;1947 | INV-2.g / close save[EQ] before Saved(EQ) | EQ PUB, unsaved | save[EQ] retained
+MG-19 | P;1935,1937 | INV-2.g / omit Ep row on EQ PUB | legal EQ PUB | Ep created atomically
+MG-20 | P;1937,1946 | INV-2.g / omit Ep run custody on EQ PUB | legal EQ PUB | C-O10.run created atomically
+MG-21 | P;1959 | INV-2.g / rebase pG origin to Ep | pG present | original run[Wg] origin
+MG-22 | P;1959 | INV-2.g / truncate pG target | pG present | whole Qgen target
+MG-23 | P;1931,1961 | INV-16.c / change Wg reader on entry | request saved | fixed reader
+MG-24 | P;1931,1935 | INV-16.c / read another generation view | Wg entry | fixed generation view
+MG-25 | P;1933 | INV-16.c / reverse CG input_order only | CG PUB, multiple candidates | actual output order
+MG-26 | P;1933 | INV-16.c / change CG measure only | CG PUB | actual output measure
+MG-27 | P;1935 | INV-16.c / replace Ep evaluation view with generation view | EQ PUB | separate evaluation view
+MG-28 | P;1935,1961 | INV-16.c / EQ names another Saved candidate | EQ PUB | this Wg CG
+MG-29 | P;1954 | INV-16.c / late Candidates overwrite first Wg Unknown | Unknown then Candidates | first Unknown retained
+
+MG-06 continuation 2 declaration (BEFORE rerunning the revised target):
+- MG-12 target revised to INV-15.b by paper 885/1969. The first declaration
+  used INV-16.b in error: this scene does not demonstrate its different
+  problem/purpose/context/Point/value requirement (887). The mutant is unchanged;
+  rerun the newly declared target, never promote an incidental prior hit.
+- MG-15 retained unconnected: same-Wg issue[CG] is already live. Independent
+  acceptance of Transfer is unavailable. C-05 precedent is supplied technical
+  information, not rerun evidence (paper 1340,1586-1590,1943,1951).
+- MG-01/MG-20 retain post-Publish-loss contrasts. Atomic omission contrasts
+  remain not_run/unconfirmed for review (1937,1944,1946); no same-step pass.
+
+MG-06 log: only these two Python files may be written; JSON/vault/Heat untouched.
 """
 
 from dataclasses import replace
@@ -535,3 +583,355 @@ class SingleReportMakesConflict(CorrectWindow):
             return replace(u,slots=u.slots+(m.Slot(plan),))
         return change_publication(d,add_conflict)
 
+
+
+# MG-06 implementations. One public override per class; helpers change only
+# the window's returned Decision. E0 and actual environment history stay fixed.
+def mg_close(custody, kind, unit=None, work=None):
+    return replace(custody, conditions=tuple(
+        replace(c, unmet=frozenset()) if c.key.obligation == 'O-G'
+        and c.key.kind == kind and (unit is None or getattr(c.key.target, 'unit', None) == unit)
+        and (work is None or getattr(c.key.target, 'work', None) == work) else c
+        for c in custody.conditions))
+
+
+def mg_pg(custody, transform):
+    def excuse(x):
+        return transform(x) if x.obligation_id == 'O-G' else x
+    def excuses(xs):
+        return tuple(y for x in xs if (y := excuse(x)) is not None)
+    def generation(g):
+        old=g.shortages
+        updated=excuses(old)
+        purpose=updated[0].obligation_key if old and updated else g.purpose
+        return replace(g,purpose=purpose,shortages=updated)
+    return replace(custody,
+        work=tuple(replace(w, purposes=excuses(w.purposes)) for w in custody.work),
+        units=tuple(replace(u, generation=generation(u.generation)) if u.generation else u
+                    for u in custody.units))
+
+
+def mg_publication(decision, unit_change=lambda u: u, descriptor_change=lambda d: d):
+    units = {e.value[0].id: unit_change(e.value[0]) for e in decision.effects if e.kind == 'Publish'}
+    descriptors = {d.work_id: descriptor_change(d) for e in decision.effects
+                   if e.kind == 'Publish' for d in e.value[1]}
+    return replace(decision,
+        result=units.get(decision.result.id, decision.result) if isinstance(decision.result, m.Unit) else decision.result,
+        custody=replace(decision.custody,
+            units=tuple(units.get(u.id, u) for u in decision.custody.units),
+            work=tuple(replace(w, descriptor=descriptors[w.descriptor.work_id])
+                       if w.descriptor.work_id in descriptors else w for w in decision.custody.work)),
+        effects=tuple(replace(e, value=(units[e.value[0].id], tuple(descriptors[d.work_id] for d in e.value[1])))
+                      if e.kind == 'Publish' else e for e in decision.effects))
+
+
+class DelayEvaluationIssue(CorrectWindow):
+    """MG-01: retain issue[EQ] only once CG is Saved, dropping it meanwhile.
+
+    The public Environment registers the atomic birth after Publish effects.
+    A drain override isolates the wrong unsaved interval without editing that
+    environment. It does not claim to mutate the atomic publication itself.
+    """
+    def drain(self, view):
+        d=super().drain(view)
+        cg_saved=any(e.header.record.contract.name=='candidate_declaration' for e in view.core.e)
+        if cg_saved:
+            return d
+        return replace(d,custody=replace(d.custody,conditions=tuple(c for c in d.custody.conditions
+            if not(c.key.obligation=='O-G' and c.key.kind=='issue' and getattr(c.key.target,'unit',None)=='evaluation'))))
+
+
+class DropEvaluationIssue(CorrectWindow):
+    """MG-02: during context shortage remove already-born issue[EQ]."""
+    def drain(self, view):
+        d = super().drain(view)
+        return replace(d, custody=replace(d.custody, conditions=tuple(c for c in d.custody.conditions
+            if not (c.key.obligation == 'O-G' and c.key.kind == 'issue'
+                    and getattr(c.key.target, 'unit', None) == 'evaluation'))))
+
+
+class DropGenerationPurpose(CorrectWindow):
+    """MG-03: discard every actual pG carrier during shortage."""
+    def drain(self, view):
+        d = super().drain(view)
+        custody=mg_pg(d.custody, lambda x: None)
+        # The continuation itself is another pG carrier, beyond its excuses.
+        custody=replace(custody,units=tuple(replace(u,generation=replace(u.generation,
+            purpose=replace(u.generation.purpose,purpose=(),part=None))) if u.generation else u for u in custody.units))
+        return replace(d,custody=custody)
+
+
+class SaveWaitCreatesPurpose(CorrectWindow):
+    """MG-04: an ordinary predecessor save wait invents a pG."""
+    def drain(self, view):
+        d = super().drain(view)
+        u = next((u for u in d.custody.units if u.generation), None)
+        if u is None:
+            return d
+        g = u.generation
+        x = m.Excuse('O-G', g.purpose, 'predecessor save wait', g.evaluation,
+                     frozenset(e.point for e in view.core.e), ('pG',))
+        if any(x in w.purposes for w in d.custody.work):
+            return d
+        return replace(d, custody=replace(d.custody, work=tuple(
+            replace(w, purposes=w.purposes+(x,)) if w.descriptor.work_id == g.descriptor.work_id else w
+            for w in d.custody.work)))
+
+
+class EvaluationClearsPurpose(CorrectWindow):
+    """MG-05: EQ PUB incorrectly discharges already-existing pG."""
+    def publish_unit(self, view, plan_id):
+        d = super().publish_unit(view, plan_id)
+        if any(s.plan.contract.name == 'sui.fb.evaluation_request' for e in d.effects
+               if e.kind == 'Publish' for s in e.value[0].slots):
+            return replace(d, custody=mg_pg(d.custody, lambda x: None))
+        return d
+
+
+def mg_fabricate_candidate(e0, view, decision):
+    """One wrong authorization: publish a successful CG on a non-success branch.
+
+    The fabricated output uses the documented finite wire, not a checker tag.
+    Downstream save/issue ownership is installed normally, so it is not also
+    testing missing custody. The original terminal knowledge/pG stays intact.
+    """
+    if any(u.id == 'candidate' for u in decision.custody.units):
+        return decision
+    row = next(w for w in decision.custody.work if w.descriptor.stage == 'Wg')
+    desc = row.descriptor
+    resolve = dict(row.resolutions)
+    cgplan = next(p for p in e0.plans if any(r.contract.name == 'candidate_declaration' for r in p.records))
+    eqplan = next(p for p in e0.plans if any(r.contract.name == 'sui.fb.evaluation_request' for r in p.records))
+    cgref = m.PlanRef(cgplan.unit, cgplan.records[0].slot)
+    eqref = m.PlanRef(eqplan.unit, eqplan.records[0].slot)
+    purpose = m.PurposePart(m.CompletionKey('O-G', ('work', desc.work_id), 'run', m.WorkKey(desc.work_id)),
+        (desc.purpose, desc.process, desc.trigger, desc.request, desc.stage_slot), desc.request)
+    body = m.obj(model=resolve[desc.reader], input_order=('a','b'), measure=m.obj(a=1,b=1),
+        generation=m.obj(generator=desc.method, args=desc.args,
+            basis=tuple(resolve.get(r,r) for r in desc.numerical_view.context.get('generation_basis')), draws=()),
+        continuation=m.obj(after=(m.obj(candidate='a',policy=None),m.obj(candidate='b',policy=None))))
+    record = replace(cgplan.records[0], content=body)
+    unit = m.Unit(cgplan.unit, cgplan.obligation_id, cgplan.key, (m.Slot(record),), (),
+        frozenset(e.point for e in view.core.e), m.GenerationContinuation(desc,cgref,eqref,purpose))
+    save = m.CompletionKey('O-G', cgplan.key, 'save', m.SlotKey(cgref.unit,cgref.slot))
+    issue = m.CompletionKey('O-G', ('work',desc.work_id), 'issue', m.SlotKey(eqref.unit,eqref.slot))
+    conditions = decision.custody.conditions + (
+        m.ConditionCustody(save,m.Owner('P.units',cgplan.unit),frozenset((save,))),
+        m.ConditionCustody(issue,m.Owner('P.units',cgplan.unit),frozenset((issue,))))
+    return replace(decision, custody=replace(decision.custody, units=decision.custody.units+(unit,), conditions=conditions),
+        effects=decision.effects+(m.Effect('Publish',unit.id,(unit,())),), result=unit)
+
+
+class NoCandidatesMakesCandidate(CorrectWindow):
+    """MG-06: NoCandidates is mistaken for authorization to publish CG."""
+    def drain(self, view):
+        return mg_fabricate_candidate(self.e0, view, super().drain(view))
+
+
+class FailureMakesCandidate(CorrectWindow):
+    """MG-07: Failure is mistaken for authorization to publish CG."""
+    def drain(self, view):
+        return mg_fabricate_candidate(self.e0, view, super().drain(view))
+
+
+class UnknownMakesCandidate(CorrectWindow):
+    """MG-08: Unknown is mistaken for authorization to publish CG."""
+    def drain(self, view):
+        return mg_fabricate_candidate(self.e0, view, super().drain(view))
+
+
+def mg_enter(decision, change_descriptor=lambda d:d, change_view=lambda v:v):
+    works={e.value[0] for e in decision.effects if e.kind=='Enter'}
+    return replace(decision,custody=replace(decision.custody,work=tuple(
+        replace(w,descriptor=change_descriptor(w.descriptor)) if w.descriptor.work_id in works else w for w in decision.custody.work)),
+        effects=tuple(replace(e,value=(e.value[0],e.value[1],change_view(e.value[2]))) if e.kind=='Enter' else e for e in decision.effects))
+
+
+class GenerationArgsChanged(CorrectWindow):
+    """MG-09: actual entry changes one argument of fixed Qgen."""
+    def enter_worker(self, view, wrapper):
+        return mg_enter(super().enter_worker(view,wrapper), lambda d:replace(d,args=field(d.args,'mode','other')))
+
+
+class GenerationDrawsErased(CorrectWindow):
+    """MG-10: forbidden D6 normalization, never a legal R10 implementation."""
+    def enter_worker(self, view, wrapper):
+        return mg_enter(super().enter_worker(view,wrapper), lambda d:replace(d,args=field(d.args,'draws',())))
+
+
+class WorkFinishedEndsDraw(CorrectWindow):
+    """MG-11: original saved WorkFinished is falsely recognized as D end."""
+    def drain(self, view):
+        d = super().drain(view)
+        notice = next(e for e in view.actual.eh.originals if e.event.kind == 'WorkFinished')
+        work = notice.event.fields.get('work')
+        return replace(d, custody=replace(d.custody, work=tuple(
+            replace(w,knowledge=notice.event.fields.get('outcome'),first=(notice.run,notice.number))
+            if w.descriptor.work_id == work else w for w in d.custody.work)))
+
+
+class LateDrawValueMakesFact(CorrectWindow):
+    """MG-12: publish a DF authorized by a late value after first Failure."""
+    def drain(self, view):
+        d = super().drain(view)
+        if any(u.id == 'late-draw' for u in d.custody.units):
+            return d
+        notices = [e for e in view.actual.eh.originals if e.event.kind == 'DrawReturned']
+        late = notices[-1].event.fields.get('outcome')
+        if late.kind != m.OutcomeKind.RETURNED:
+            return d
+        plan=next(p for p in self.e0.plans if p.unit=='late-draw')
+        record=replace(plan.records[0],content=late.content)
+        unit=m.Unit(plan.unit,plan.obligation_id,plan.key,(m.Slot(record),),(),frozenset(e.point for e in view.core.e))
+        return replace(d,custody=replace(d.custody,units=d.custody.units+(unit,)),
+            effects=d.effects+(m.Effect('Publish',unit.id,(unit,())),),result=unit)
+
+
+class GenerationRunClosed(CorrectWindow):
+    """MG-13: run[Wg] is cleared before EndKnown."""
+    def drain(self, view):
+        d=super().drain(view)
+        return replace(d,custody=mg_close(d.custody,'run',work='wg'))
+
+
+class GenerationTerminalSaveClosed(CorrectWindow):
+    """MG-14: save[T] cleared while T is unsaved."""
+    def drain(self, view):
+        d=super().drain(view)
+        return replace(d,custody=mg_close(d.custody,'save',unit='terminal:wg'))
+
+
+class GenerationHandleClosed(CorrectWindow):
+    """MG-15: handle[Wg] is cleared without a receiving carrier."""
+    def drain(self, view):
+        d=super().drain(view)
+        return replace(d,custody=mg_close(d.custody,'handle',work='wg'))
+
+
+class CandidateIssueClosed(CorrectWindow):
+    """MG-16: issue[CG] cleared before CG PUB."""
+    def drain(self, view):
+        d=super().drain(view)
+        return replace(d,custody=mg_close(d.custody,'issue',unit='candidate'))
+
+
+class CandidateSaveClosed(CorrectWindow):
+    """MG-17: save[CG] cleared before Saved(CG)."""
+    def drain(self, view):
+        d=super().drain(view)
+        return replace(d,custody=mg_close(d.custody,'save',unit='candidate'))
+
+
+class EvaluationSaveClosed(CorrectWindow):
+    """MG-18: save[EQ] cleared before Saved(EQ)."""
+    def drain(self, view):
+        d=super().drain(view)
+        return replace(d,custody=mg_close(d.custody,'save',unit='evaluation'))
+
+
+class EvaluationOmitsEp(CorrectWindow):
+    """MG-19: publish EQ without its atomic Ep row."""
+    def publish_unit(self, view, plan_id):
+        d=super().publish_unit(view,plan_id)
+        if plan_id != 'evaluation':
+            return d
+        return replace(d,custody=replace(d.custody,work=tuple(w for w in d.custody.work if w.descriptor.stage!='Ep')),
+            effects=tuple(replace(e,value=(e.value[0],())) if e.kind=='Publish' else e for e in d.effects))
+
+
+class EvaluationOmitsRun(CorrectWindow):
+    """MG-20: drop the Ep run custody immediately after the atomic EQ PUB.
+
+    The public environment installs the new run after processing Publish;
+    the next drain is the exposed window-owned deletion boundary.
+    """
+    def drain(self, view):
+        d=super().drain(view)
+        return replace(d,custody=replace(d.custody,conditions=tuple(c for c in d.custody.conditions
+            if not(c.key.obligation=='O-10' and c.key.kind=='run'))))
+
+
+class GenerationPurposeRebased(CorrectWindow):
+    """MG-21: move pG's origin from original Wg run to another condition."""
+    def drain(self, view):
+        d=super().drain(view)
+        return replace(d,custody=mg_pg(d.custody,lambda x:replace(x,obligation_key=replace(x.obligation_key,
+            origin=replace(x.obligation_key.origin,target=m.WorkKey('ep'))))))
+
+
+class GenerationPurposeTruncated(CorrectWindow):
+    """MG-22: replace whole original Qgen target by one of its inputs."""
+    def drain(self, view):
+        d=super().drain(view)
+        return replace(d,custody=mg_pg(d.custody,lambda x:replace(x,obligation_key=replace(x.obligation_key,
+            part=m.PlanRef('initial','reader')))))
+
+
+class GenerationReaderChanged(CorrectWindow):
+    """MG-23: actual Wg reads under a different saved reader."""
+    def enter_worker(self, view, wrapper):
+        return mg_enter(super().enter_worker(view,wrapper),lambda d:replace(d,reader=d.process))
+
+
+class GenerationInputChanged(CorrectWindow):
+    """MG-24: actual Wg numerical read uses all currently saved points."""
+    def enter_worker(self, view, wrapper):
+        return mg_enter(super().enter_worker(view,wrapper),change_view=lambda v:replace(v,
+            points=frozenset(e.point for e in view.core.e)))
+
+
+class CandidateOrderChanged(CorrectWindow):
+    """MG-25: CG input order differs from the unchanged actual reply."""
+    def publish_unit(self, view, plan_id):
+        d=super().publish_unit(view,plan_id)
+        return mg_publication(d,lambda u:replace(u,slots=tuple(replace(s,plan=replace(s.plan,
+            content=field(s.plan.content,'input_order',tuple(reversed(s.plan.content.get('input_order'))))))
+            if s.plan.contract.name=='candidate_declaration' else s for s in u.slots)))
+
+
+class CandidateMeasureChanged(CorrectWindow):
+    """MG-26: CG measure differs from the unchanged actual reply."""
+    def publish_unit(self, view, plan_id):
+        d=super().publish_unit(view,plan_id)
+        return mg_publication(d,lambda u:replace(u,slots=tuple(replace(s,plan=replace(s.plan,
+            content=field(s.plan.content,'measure',m.obj(a=2,b=1))))
+            if s.plan.contract.name=='candidate_declaration' else s for s in u.slots)))
+
+
+class EvaluationUsesGenerationView(CorrectWindow):
+    """MG-27: Ep reuses Wg generation view instead of separate evaluation view."""
+    def publish_unit(self, view, plan_id):
+        d=super().publish_unit(view,plan_id)
+        if plan_id!='evaluation':
+            return d
+        wg=next(w.descriptor for w in view.core.p.work if w.descriptor.stage=='Wg')
+        return mg_publication(d,descriptor_change=lambda ep:replace(ep,numerical_view=wg.numerical_view))
+
+
+class EvaluationCandidatesChanged(CorrectWindow):
+    """MG-28: EQ points at a different saved record than this Wg's CG."""
+    def publish_unit(self, view, plan_id):
+        d=super().publish_unit(view,plan_id)
+        other=next(e.point for e in view.core.e if e.header.record.contract.name=='model.reader')
+        def unit(u):
+            return replace(u,slots=tuple(replace(s,plan=replace(s.plan,
+                content=field(s.plan.content,'candidates',other),references=tuple(
+                    replace(r,ref=other) if r.path==('candidates',) else r for r in s.plan.references)))
+                if s.plan.contract.name=='sui.fb.evaluation_request' else s for s in u.slots))
+        return mg_publication(d,unit)
+
+
+class GenerationLateValueOverwritesUnknown(CorrectWindow):
+    """MG-29: a late value overwrites first Wg Unknown knowledge."""
+    def drain(self, view):
+        d=super().drain(view)
+        notices=[e for e in view.actual.eh.originals if e.event.kind=='WorkFinished'
+                 and e.event.fields.get('work')=='wg']
+        if not notices:
+            return d
+        late=notices[-1]
+        changed=replace(d,custody=replace(d.custody,work=tuple(
+            replace(w,knowledge=late.event.fields.get('outcome'),first=(late.run,late.number))
+            if w.descriptor.work_id=='wg' else w for w in d.custody.work)))
+        # The same wrong choice of first end authorizes its ordinary CG suffix.
+        return mg_fabricate_candidate(self.e0,view,changed)

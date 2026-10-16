@@ -1,4 +1,4 @@
-"""Independent F-b mutations: v0.12 designs, v0.15 reporting contract.
+"""Independent F-b mutations: v0.18 MG-06 plus historical v0.12/v0.15.
 
 Targets were declared first in fb_mutants.py. Every case checks its identical
 legal control first and stops the run on a legal-control violation. K-U cuts
@@ -6,8 +6,9 @@ retain ownership and histories; omitted continuation is not claimed complete.
 Progress cases keep the target's full save/derive path. H-01..06 are excluded.
 Only public signatures/docstrings/declarations and actual API outputs were
 read; no CorrectWindow/Environment/checker implementation bodies were opened.
-No environment variables, commit or Obsidian writes: latest three-file limit
-overrides the general log rule. Measurements live in fb_mutants_results.json.
+No environment variables, commit or Obsidian writes: current two-file limit
+overrides the general log rule. Current measurements are in memory/stdout;
+fb_mutants_results.json is immutable historical evidence.
 Normal: .venv/Scripts/python.exe -B -m pytest tests/test_fb_mutants.py -q -p no:cacheprovider
 Explicit refresh: .venv/Scripts/python.exe -B tests/test_fb_mutants.py --record-all
 -B prevents Python/pytest bytecode writes; no environment variable is used.
@@ -111,6 +112,8 @@ def renamed_declaration(value, names):
 
 @lru_cache(None)
 def prepared_scene(scene_id, boundary, allowed):
+    if '-M3-' in scene_id or '-M4-' in scene_id:
+        return mg_prepared_scene(scene_id, boundary, allowed)
     base_id = {'M-minimal-derive':'SC-08-structure-e1-then-other','M-minimal-held-launch':'SC-13-hung-receipt','M-two-acquisitions':'SC-06-structure-verification-pending','M-measure-owned':'SC-12-structure-measure-row','M-empty-interval-receipt':'SC-20-empty-receipts-interval'}.get(scene_id,scene_id)
     scene = next(s for s in scenes.SCENES if s.id == base_id)
     if scene_id=='M-minimal-derive':
@@ -272,6 +275,8 @@ def changed_boundary(case, graph, scenario):
 
 def actual_premise(case, scenario, graph, witness):
     """Paper premises checked on reached public states/events, not row flags."""
+    if case.id.startswith('MG-'):
+        return mg_actual_premise(case, scenario, graph, witness)
     if witness is None:
         return dict(holds=False, reason='mutation was not exercised')
     if case.id in ('M-2d','M-LD'):
@@ -553,7 +558,7 @@ OUT_OF_SCOPE = {
     'INV-16.b': '881/1808/1876: PR/Draw/problem/artifact/Selectedの全対応を実装の段へ。',
 }
 ROW_ORDER = tuple(line.split(' | ')[0] for line in mutants.__doc__.splitlines()
-                  if line.startswith(('INV-', 'L-')) and ' | ' in line)
+                  if line.startswith(('INV-', 'L-')) and ' | ' in line) + ('INV-2.g', 'INV-16.c')
 STATUS_LABELS = dict(identified='識別力確認済み', not_detected='検出できず',
                      unreached_or_incomplete='未到達・未完', out_of_scope='範囲外')
 CONFIRMATION_LABELS = ('確認済み', '未確認', '未接続', '未完', '範囲外★')
@@ -630,7 +635,7 @@ def read_evidence(previous):
         sha256=sha256(path.read_bytes()).hexdigest(),
         read_range='records.RECORDED_OBSERVATION_EVIDENCE: full value only; migration/report not used',
         reread=True))
-    assert {r['target'] for r in evidence['check2_rows']} == set(ROW_ORDER)
+    assert {r['target'] for r in evidence['check2_rows']} == set(ROW_ORDER) - {'INV-2.g', 'INV-16.c'}
     assert {r['target'] for r in evidence['check2_rows'] if r['kind'] != '—'} == REPORTED_UNCONNECTED
     assert len(evidence['issue_rows']) == 8  # O12 EV/S retained in its full text.
     assert len(evidence['scenes']) == 193
@@ -649,6 +654,11 @@ def limitation_status(message):
 
 
 def case_confirmation(result):
+    if result.get('connection_status')=='unconnected':
+        assert result['status']=='unreached_or_incomplete'
+        return CONFIRMATION_LABELS[2]
+    if result.get('execution')=='not_run':
+        return result['confirmation_status']
     if result['status'] in ('identified', 'not_detected'):
         return '確認済み'
     if not result['complete'] or not result['control_complete']:
@@ -669,9 +679,9 @@ def aggregate_confirmation(branches, scope_out=False):
     return '確認済み' if statuses == {'確認済み'} else '未確認'
 
 
-def discrimination_class(target, branches):
+def discrimination_class(target, branches, whole_scope=None):
     """v0.15:1620-1629: scope > confirmed miss > +/- success > other."""
-    if target in OUT_OF_SCOPE:
+    if (target in OUT_OF_SCOPE) if whole_scope is None else whole_scope:
         return 'out_of_scope'
     verified = [b for b in branches if b['confirmation_status'] == '確認済み']
     if any(b['identification_result'] == '違反対照の見逃し' for b in verified):
@@ -688,10 +698,17 @@ def row_table(results, evidence):
         for result in cases:
             branches.append(dict(id=result['id'], origin='current_mutant_contrast',
                 scope=result['scene'], confirmation_status=case_confirmation(result),
-                execution='実行済み', reached=result['premise']['holds'], complete=result['complete'],
+                execution=result.get('execution','実行済み'), reached=result['premise']['holds'], complete=result['complete'],
                 normative_result=result['normative_result'], checker_output=result['checker_output'],
                 identification_result=result['identification_result'], legal_control=result['control'],
-                source=f"cases/{result['id']}", detail='同じE0・前段・Cutの正負対照。未到達/接続不足は成功にしない。'))
+                source=f"cases/{result['id']}", detail=result.get('disposition_reason') or '同じE0・前段・Cutの正負対照。未到達/接続不足は成功にしない。'))
+        if target=='INV-2.g':
+            for identity, detail in (
+                ('MG-01.atomic-birth','Publish effect is followed by Environment registration; only subsequent loss before Saved(CG) is injectable through the exposed drain. Known unconfirmed same-step contrast: paper 1937/1944/1946.'),
+                ('MG-20.atomic-birth','The exposed boundary tests subsequent Ep-run loss; atomic omission at EQ PUB lacks a separated window-owned registration hook. Known unconfirmed same-step contrast: paper 1937/1946.')):
+                branches.append(dict(id=identity,origin='public_hook_limit',confirmation_status=CONFIRMATION_LABELS[1],
+                    execution='not_run: atomic omission contrast',reached=False,normative_result='unjudged: atomic omission not_run',
+                    checker_output='not_run',identification_result='unestablished (not_run)',detail=detail,known_review_gap=True,source='MG06_TURN2_AUDIT'))
         limits = {}
         for result in cases:
             for side, messages in (('mutant', result['limitations']), ('control', result['control_limitations'])):
@@ -736,6 +753,21 @@ def row_table(results, evidence):
                 reached=scene['reach'], normative_result='今回未判定', checker_output=prior,
                 identification_result='範囲外' if status == '範囲外★' else '判定未成立',
                 detail=scene['scope_reason'], source='evidence/scenes/' + scene['id']))
+        # Preserve all 46 current public scene declarations not present in
+        # the historical 193-scene JSON. A local mutant/control prefix is not
+        # execution of the complete declared scene, nor its negative controls.
+        historical_ids={s['id'] for s in evidence['scenes']}
+        for declared in scenes.SCENES:
+            if declared.id in historical_ids or target not in declared.row_ids:
+                continue
+            confirmation=(CONFIRMATION_LABELS[4] if declared.scope_class=='b' else
+                CONFIRMATION_LABELS[2] if declared.blocker or declared.expected_missing_contract else CONFIRMATION_LABELS[1])
+            branches.append(dict(id='current-scene:'+declared.id,origin='current_scene_declaration',
+                confirmation_status=confirmation,execution='not_run: full scene; local mutant prefixes are separate',
+                reached=False,normative_result='unjudged',checker_output='not_run',identification_result='unestablished',
+                detail=declared.blocker or declared.expected_missing_contract or 'Current public declaration retained; no full-scene discrimination is claimed.',
+                source='fb_scenes.SCENES/'+declared.id))
+        whole_scope = target in OUT_OF_SCOPE
         if target in OUT_OF_SCOPE:
             # The owner's decision applies to this WHOLE row. Keep the old
             # public connection status as evidence, not its current scope.
@@ -746,9 +778,9 @@ def row_table(results, evidence):
             branches.append(dict(id='scope:' + target, origin='owner_paper_decision',
                 confirmation_status='範囲外★', execution='not_run', reached=False,
                 normative_result='今回範囲外', checker_output='評価対象外', identification_result='範囲外',
-                detail=OUT_OF_SCOPE[target], source='specs/関所F_Fb_今の約束.md:1876,1887-1888'))
-        status = discrimination_class(target, branches)
-        confirmation = aggregate_confirmation(branches, target in OUT_OF_SCOPE)
+                detail=OUT_OF_SCOPE[target], source='specs/関所F_Fb_今の約束.md:1880,1891-1892'))
+        status = discrimination_class(target, branches, whole_scope)
+        confirmation = aggregate_confirmation(branches, whole_scope)
         reasons = [dict(branch=b['id'], confirmation_status=b['confirmation_status'], reason=b['detail'])
                    for b in branches if b['confirmation_status'] != '確認済み']
         rows.append(dict(target=target, status=status, label=STATUS_LABELS[status],
@@ -761,10 +793,13 @@ def row_table(results, evidence):
 
 
 def validate_rows(rows, results, evidence):
-    assert len(rows) == len(ROW_ORDER) == 45 and {r['target'] for r in rows} == set(ROW_ORDER)
+    assert len(rows) == len(ROW_ORDER) == 47 and {r['target'] for r in rows} == set(ROW_ORDER)
     expected = {r['target']: r for r in row_table(results, evidence)}
     for row in rows:
         target = row['target']
+        assert row['confirmation_status'] in CONFIRMATION_LABELS, target
+        assert all(b['confirmation_status'] in CONFIRMATION_LABELS for b in row['branches']), target
+        assert sum(row['branch_counts'].values()) == len(row['branches']), target
         assert row == expected[target], f'{target}: row/branch classification differs from evidence'
         assert row['confirmation_status'] == aggregate_confirmation(row['branches'], target in OUT_OF_SCOPE), target
         assert not (row['confirmation_status'] == '確認済み' and any(
@@ -775,41 +810,31 @@ def validate_rows(rows, results, evidence):
 
 
 def measured_report(record):
-    totals, confirmations = record['row_totals'], record['confirmation_totals']
-    measurement = record['measurement']
-    lines = [
-        '1. 道: F-b commit後、M-04成績表とM-05記録分離。実装・F-a接続の前。',
-        '2. 紙に無い仮定: 今回は表示順の取り決め1 (名前・表現のみ)、意味変更0。既存A-M-XCは1/0のまま。',
-        '3. ゆう待ち: 0。INV-7.bはv0.15:1887で範囲外へ決定済み。Claude再現は未実行。',
-        '4. 同系統の穴: FBR-02/FBR-03の初回修正。既存検査器の修正周回とは別。',
-        '5. 自己確認: 39ケース全件の測定・45行/枝別集計。通常試験の不変性と注入試験は別のpytest結果を参照。',
-        '', '旧4分類: ' + ' / '.join(f'{k} {v}' for k, v in totals.items()),
-        '確認状況: ' + ' / '.join(f'{k} {v}' for k, v in confirmations.items()),
-        f"全件測定: {measurement['cases']}ケース、{measurement['seconds']}秒。識別成功ケース {measurement['identified_cases']}、見逃し {measurement['missed_cases']}、識別未成立 {measurement['unresolved_cases']}。pytestの補助試験数を含まない。",
-        f"全合法対照: 違反0・契約違反0。最大状態数 {measurement['max_states']}。",
-        '旧分類は:1623/1627、確認状況は:1629。独立対照の成功を保持し、未接続を含む行全体を確認済みにしない。',
-        '場面193枝は過去の公開結果の引用。今回再実行していない。report2の「—」は追加固有対応なしであり接続済み宣言ではない。',
-        '確認状況の代表表示は未接続→未完→未確認。枝数は資料由来の別観測を含み、重複のない意味枝数を主張しない。',
-        '範囲外7行は枝も現在の範囲外★へ揃え、出典当時の区分はsource_confirmation_statusに別保存。',
-        '', '| 行ID | 旧4分類 | 確認状況 | 枝別内訳 (確認済み/未確認/未接続/未完/範囲外★) | 対照 |',
-        '|---|---|---|---|---|',
+    lines=[
+        '1. Road: MG-06, M3/M4 finite model discrimination; before real F-a integration.',
+        '2. New paper-absent assumptions: representation A-MG-WIRE (1); semantic additions 0. Inherited assumptions remain limited.',
+        '3. Owner decisions pending: 0. MG-15 retained unconnected; atomic MG-01/MG-20 contrasts retained unconfirmed.',
+        '4. Same family: first MG-06 round; no checker repair.',
+        '5. Closure: 29 predeclared designs, 17 paper-only; individual dispositions below; 47 rows / 51 condition schemas.',
+        '', 'Current evidence only; historical JSON is never promoted to a current pass.',
+        'Rows: '+json.dumps(record['row_totals'],ensure_ascii=False),
+        'Confirmation: '+json.dumps(record['confirmation_totals'],ensure_ascii=False),
+        '', '| Row | Four-way result | Confirmation | Branches confirmed/unconfirmed/unconnected/incomplete/outside |',
+        '|---|---|---|---|',
     ]
     for row in record['rows']:
-        lines.append('| ' + ' | '.join((row['target'], row['label'], row['confirmation_status'],
-            '/'.join(str(row['branch_counts'][k]) for k in CONFIRMATION_LABELS), ', '.join(row['cases']) or row['reason'])) + ' |')
-    lines += ['', '| 誤実装 | 行 | 場面 | 識別結果 | 状態(誤/正) | 秒(誤/正) | 筋書き |',
-              '|---|---|---|---|---|---|---|']
-    for result in record['cases']:
-        path = ' → '.join(result['shortest']['trace']) or '(局所初期状態)'
-        if result['shortest']['paired_trace']:
-            path += ' / 対: ' + ' → '.join(result['shortest']['paired_trace'])
-        lines.append('| ' + ' | '.join((result['id'], result['target'], result['scene'], STATUS_LABELS[result['status']],
-            f"{result['states']}/{result['control_states']}", f"{result['seconds']}/{result['control_seconds']}", path)) + ' |')
-    lines += ['', '筋書きは固定した合法前段の後のBFS局所最短。前段・他行検出・対象未接続の全文はcasesに保存。',
-              'H-01〜06は対象外。窓口・環境・判定の本体、Claude誤実装は未読。外部Webなし。',
-              '今回の書込みは許可された3ファイルのみ。Obsidian Sessions/Projects/Heatは未反映。',
-              '2通目の13 failed/27 passed、26/9/4/6、当時のゆう待ちはhistorical_snapshots/HISTORICAL_RESUMPTION_AUDITに保存し、現在値へ混ぜない。']
+        lines.append('| '+ ' | '.join((row['target'],row['label'],row['confirmation_status'],
+            '/'.join(str(row['branch_counts'][k]) for k in CONFIRMATION_LABELS)))+' |')
+    lines+=['','| Mutant | Target | Result | Control | States wrong/correct |','|---|---|---|---|---|']
+    for r in record['cases']:
+        lines.append('| '+' | '.join((r['id'],r['target'],STATUS_LABELS[r['status']],r['control'],
+            str(r['states'])+'/'+str(r['control_states'])))+' |')
+    lines+=['','| Condition schema | Confirmation | Finite contrasts |','|---|---|---|']
+    for row in record.get('conditions',condition_table(record['cases'])):
+        lines.append('| '+' | '.join((row['condition'],row['confirmation_status'],','.join(row['cases']) or 'not_run'))+' |')
+    lines+=['',MG06_AUDIT,MG06_TURN2_AUDIT]
     return '\n'.join(lines)
+
 
 def measure_case(case):
     old_hits = legal_control.cache_info().hits
@@ -855,6 +880,10 @@ def measure_case(case):
         progress_complete=progress_complete, normative_result=normative,
         checker_output='狙った違反を報告' if hits else ('評価不能' if not_run else '狙った違反を報告せず'),
         identification_result=identification, checker_not_run=not_run)
+    if proof.get('connection_status')=='unconnected':
+        result['connection_status']='unconnected'
+        result['disposition_reason']=proof['reason']
+        result['limitations']=tuple(result['limitations'])+(proof['reason'],)
     result['confirmation_status'] = case_confirmation(result)
     result = report_data(result)
     print('RESULT', json.dumps({k: result[k] for k in ('id', 'target', 'status', 'states', 'seconds')}, ensure_ascii=True), flush=True)
@@ -883,7 +912,7 @@ def compare_case(recorded, current):
 
 
 def assert_full_population(results):
-    assert len(results) == len(CASES) == 39, 'record update requires ALL 39 cases'
+    assert len(results) == len(CASES), f'record update requires ALL {len(CASES)} cases'
     assert [(r['id'], r['target']) for r in results] == [(c.id, c.target) for c in CASES], 'case identity/order differs'
 
 
@@ -891,41 +920,349 @@ def load_record():
     return json.loads(RESULTS_PATH.read_text(encoding='utf-8-sig'))
 
 
+
+# MG-06 current measurements never write the immutable historical JSON.
+LEGACY_CASES = CASES
+MG_CASES = (
+    Case('MG-01','INV-2.g',mutants.DelayEvaluationIssue,'SC-09-M3-generation-evaluation','after:PublishUnit:candidate',('Drain',)),
+    Case('MG-02','INV-2.g',mutants.DropEvaluationIssue,'SC-09-M3-context-missing','',('Drain',)),
+    Case('MG-03','INV-2.g',mutants.DropGenerationPurpose,'SC-09-M3-context-missing','',('Drain',)),
+    Case('MG-04','INV-2.g',mutants.SaveWaitCreatesPurpose,'SC-09-M3-context-save-wait','',('Drain',)),
+    Case('MG-05','INV-2.g',mutants.EvaluationClearsPurpose,'SC-09-M3-pG-after-EQ','before:PublishUnit:evaluation',('PublishUnit',)),
+    Case('MG-06','INV-16.c',mutants.NoCandidatesMakesCandidate,'SC-15-M3-no-candidates','',('Drain',)),
+    Case('MG-07','INV-16.c',mutants.FailureMakesCandidate,'SC-15-M3-failure','',('Drain',)),
+    Case('MG-08','INV-16.c',mutants.UnknownMakesCandidate,'SC-15-M3-unknown','',('Drain',)),
+    Case('MG-09','INV-16.c',mutants.GenerationArgsChanged,'SC-09-M3-generation-evaluation','before:EnterWorker:wg:wrapper:0',('EnterWorker',)),
+    Case('MG-10','INV-16.c',mutants.GenerationDrawsErased,'SC-09-M3-D6-generation-draw'),
+    Case('MG-11','INV-15.a',mutants.WorkFinishedEndsDraw,'SC-15-M4-D-workfinished','',('Drain',)),
+    Case('MG-12','INV-15.b',mutants.LateDrawValueMakesFact,'SC-16-M4-D-failure-value','',('Drain',)),
+    Case('MG-13','INV-2.g',mutants.GenerationRunClosed,'SC-09-M3-generation-evaluation','after:PublishUnit:initial',('Drain',)),
+    Case('MG-14','INV-2.g',mutants.GenerationTerminalSaveClosed,'SC-09-M3-generation-evaluation','after:RecognizeTerminal:wg',('Drain',)),
+    Case('MG-15','INV-2.g',mutants.GenerationHandleClosed,'SC-09-M3-generation-evaluation','after:RecognizeTerminal:wg',('Drain',)),
+    Case('MG-16','INV-2.g',mutants.CandidateIssueClosed,'SC-09-M3-generation-evaluation','before:PublishUnit:candidate',('Drain',)),
+    Case('MG-17','INV-2.g',mutants.CandidateSaveClosed,'SC-09-M3-generation-evaluation','after:PublishUnit:candidate',('Drain',)),
+    Case('MG-18','INV-2.g',mutants.EvaluationSaveClosed,'SC-09-M3-generation-evaluation','after:PublishUnit:evaluation',('Drain',)),
+    Case('MG-19','INV-2.g',mutants.EvaluationOmitsEp,'SC-09-M3-generation-evaluation','before:PublishUnit:evaluation',('PublishUnit',)),
+    Case('MG-20','INV-2.g',mutants.EvaluationOmitsRun,'SC-09-M3-generation-evaluation','after:PublishUnit:evaluation',('Drain',)),
+    Case('MG-21','INV-2.g',mutants.GenerationPurposeRebased,'SC-09-M3-context-missing','',('Drain',)),
+    Case('MG-22','INV-2.g',mutants.GenerationPurposeTruncated,'SC-09-M3-context-missing','',('Drain',)),
+    Case('MG-23','INV-16.c',mutants.GenerationReaderChanged,'SC-09-M3-generation-evaluation','before:EnterWorker:wg:wrapper:0',('EnterWorker',)),
+    Case('MG-24','INV-16.c',mutants.GenerationInputChanged,'SC-09-M3-generation-evaluation','before:EnterWorker:wg:wrapper:0',('EnterWorker',)),
+    Case('MG-25','INV-16.c',mutants.CandidateOrderChanged,'SC-09-M3-generation-evaluation','before:PublishUnit:candidate',('PublishUnit',)),
+    Case('MG-26','INV-16.c',mutants.CandidateMeasureChanged,'SC-09-M3-generation-evaluation','before:PublishUnit:candidate',('PublishUnit',)),
+    Case('MG-27','INV-16.c',mutants.EvaluationUsesGenerationView,'SC-09-M3-generation-evaluation','before:PublishUnit:evaluation',('PublishUnit',)),
+    Case('MG-28','INV-16.c',mutants.EvaluationCandidatesChanged,'SC-09-M3-generation-evaluation','before:PublishUnit:evaluation',('PublishUnit',)),
+    Case('MG-29','INV-16.c',mutants.GenerationLateValueOverwritesUnknown,'SC-16-M3-unknown-late-value','',('Drain',)),
+)
+CASES = LEGACY_CASES + MG_CASES
+CURRENT_RESULTS = {}
+CONDITION_ORDER = tuple(c.id for c in m.E0().completions)
+OG_CONDITION_CASES = {
+    'C-OG.run[Wg]': ('MG-13',), 'C-OG.save[T]': ('MG-14',),
+    'C-OG.handle[Wg]': ('MG-15',), 'C-OG.issue[CG]': ('MG-16',),
+    'C-OG.save[CG]': ('MG-17',), 'C-OG.issue[EQ]': ('MG-01','MG-02'),
+    'C-OG.save[EQ]': ('MG-18',),
+}
+
+
+@lru_cache(None)
+def mg_prepared_scene(scene_id, boundary, allowed):
+    base_id = 'SC-16-M4-D-failure-unknown' if scene_id == 'SC-16-M4-D-failure-value' else scene_id
+    scene = next(s for s in scenes.SCENES if s.id == base_id)
+    if scene_id == 'SC-16-M4-D-failure-value':
+        # Public E0 is changed BEFORE execution: same D, first Failure, late
+        # Success instead of Unknown. This is a structural M4 scene, not IE/ID.
+        programs=tuple(replace(p,replies=(p.replies[0],m.Outcome(m.OutcomeKind.RETURNED,
+            m.obj(generator='finite',stream_id='s',purpose='selection',context_key='k',ordinal=0,law='finite',args=m.obj(),value=1))))
+            if p.work=='d' else p for p in scene.e0.programs)
+        df=m.RecordPlan('df',m.Contract('draw_fact','1'),'Event',next(p for p in programs if p.work=='d').replies[1].content)
+        followup=m.AllowedPlan('late-draw','O-11',('d','draw_fact'),(df,),(),
+            (m.Guard('first','d'),m.Guard('outcome','d',('Success','DrawValue'))))
+        e0=replace(scene.e0,programs=programs,plans=scene.e0.plans+(followup,))
+        obs=replace(e0.observation_declarations,plans=m.declare_observation_e0(e0).plans)
+        scene=replace(scene,id=scene_id,e0=replace(e0,observation_declarations=obs))
+    scenario, states, edges, _ = scenes.instantiate(scene)
+    prefix=tuple(e.action for e in edges)
+    if boundary:
+        when, operation, target = boundary.split(':',2)
+        edge=next(e for e in edges if e.action.operation==operation and e.action.target==(target,))
+        index=edge.source if when=='before' else edge.target
+        scenario=replace(scenario,initial=states[index])
+        prefix=tuple(e.action for e in edges[:index])
+    cut=m.Cut('MG-06 single boundary',OPERATIONS-frozenset(allowed)-{'Wait'},
+        ('Only listed local operations; the same full legal prefix and ownership survive. Other continuations not tested.',))
+    return replace(scenario,id=scene_id+':'+(boundary or 'tail'),cut=cut,max_states=200),prefix
+
+
+def mg_purposes(custody):
+    return tuple(x for w in custody.work for x in w.purposes if x.obligation_id=='O-G') + tuple(
+        x for u in custody.units if u.generation for x in u.generation.shortages if x.obligation_id=='O-G')
+
+
+def mg_actual_premise(case, scenario, graph, witness):
+    if witness is None:
+        return dict(holds=False,reason='declared mutation not exercised; no target pass')
+    env=m.Environment(scenario.e0)
+    ordinary=m.CorrectWindow(scenario.e0)
+    for edge in graph.edges:
+        if edge.source==edge.target:
+            continue
+        before=graph.states[edge.source]
+        after=graph.states[edge.target]
+        view=m.View(before.core,before.controls,before.evidence)
+        good=ordinary.dispatch(view,edge.action)
+        bad=case.window(scenario.e0).dispatch(view,edge.action)
+        if good==bad:
+            continue
+        actual_changed=env.step(before,edge.action,ordinary).state!=after
+        common=dict(action=action_text(edge.action),actual_public_state_changed=actual_changed,
+                    paper_origin='C' if int(case.id[3:])<=12 else 'P')
+        number=int(case.id[3:])
+        if number in (1,2):
+            key=next(c.key for c in good.custody.conditions if c.key.obligation=='O-G'
+                     and c.key.kind=='issue' and getattr(c.key.target,'unit',None)=='evaluation')
+            missing=not any(c.key==key for c in bad.custody.conditions)
+            return dict(common,holds=actual_changed and missing,condition=repr(key),good_unmet=True,bad_missing=missing)
+        if number in (3,5,21,22):
+            a,b=mg_purposes(good.custody),mg_purposes(bad.custody)
+            original={x.obligation_key for x in a}
+            remaining={x.obligation_key for x in b}
+            return dict(common,holds=actual_changed and bool(original-remaining),original_parts=tuple(map(repr,original)),
+                        remaining_parts=tuple(map(repr,remaining)),good_carriers=len(a),bad_carriers=len(b))
+        if number==4:
+            plan=next(p for p in scenario.e0.plans if p.unit=='evaluation')
+            ordinary_wait=any(g.kind=='saved' for g in plan.guards) and not any(g.kind=='generation_context' for g in plan.guards)
+            return dict(common,holds=actual_changed and ordinary_wait and not mg_purposes(good.custody) and bool(mg_purposes(bad.custody)),
+                        ordinary_predecessor_wait=ordinary_wait)
+        if number in (6,7,8):
+            row=next(w for w in before.core.p.work if w.descriptor.stage=='Wg')
+            published=any(s.plan.contract.name=='candidate_declaration' for u in bad.custody.units for s in u.slots)
+            eligible=row.knowledge.kind==m.OutcomeKind.RETURNED and row.knowledge.content.get('variant')=='Candidates'
+            return dict(common,holds=actual_changed and published and not eligible,first_outcome=repr(row.knowledge),candidate_published=published)
+        if number==15:
+            receiver=next(c for c in good.custody.conditions if c.key.obligation=='O-G' and c.key.kind=='issue' and getattr(c.key.target,'unit',None)=='candidate')
+            return dict(common,holds=False,connection_status='unconnected',
+                reason='unconnected: Transfer acceptance not independently observable; live issue[CG] already has the same Wg carrier. C-05 same-P.work acceptance precedent is supplied technical information, not rerun evidence. Paper 1340,1586-1590,1943,1951: retain denominator, neither success nor violation.',
+                candidate_receiver=repr(receiver.owner),requires_public_transfer_contract=True)
+        if number in (13,14,16,17,18):
+            kind,unit,work={13:('run',None,'wg'),14:('save','terminal:wg',None),15:('handle',None,'wg'),
+                16:('issue','candidate',None),17:('save','candidate',None),18:('save','evaluation',None)}[number]
+            c=next(c for c in good.custody.conditions if c.key.obligation=='O-G' and c.key.kind==kind
+                and (unit is None or getattr(c.key.target,'unit',None)==unit)
+                and (work is None or getattr(c.key.target,'work',None)==work))
+            closed=not next(x for x in bad.custody.conditions if x.key==c.key).unmet
+            saved=any(e.header.record.contract.name=={'terminal:wg':'sui.fb.work_terminal','candidate':'candidate_declaration',
+                'evaluation':'sui.fb.evaluation_request'}.get(unit,'') for e in before.core.e)
+            return dict(common,holds=actual_changed and bool(c.unmet) and closed and not saved,condition=repr(c.key),
+                        originally_unmet=bool(c.unmet),closed=closed,target_already_saved=saved)
+        if number==11:
+            d=next(w for w in before.core.p.work if w.descriptor.stage=='D')
+            wrong=next(w for w in bad.custody.work if w.descriptor.work_id==d.descriptor.work_id)
+            return dict(common,holds=actual_changed and d.first is None and wrong.first is not None,
+                        saved_workfinished=True,ordinary_first=d.first,wrong_first=wrong.first)
+        if number==12:
+            d=next(w for w in before.core.p.work if w.descriptor.stage=='D')
+            notices=[e for e in before.evidence.eh.originals if e.event.kind=='DrawReturned']
+            first_failure=d.knowledge.kind==m.OutcomeKind.FAILURE
+            first_notice_failure=notices[0].event.fields.get('outcome').kind==m.OutcomeKind.FAILURE
+            late_value=notices[-1].event.fields.get('outcome').kind==m.OutcomeKind.RETURNED
+            published=any(s.plan.contract.name=='draw_fact' for u in after.core.p.units for s in u.slots)
+            broken=actual_changed and first_failure and first_notice_failure and late_value and published
+            return dict(common,holds=broken,window_violation=broken,
+                        violated_paper_row='INV-15.b (paper 885/1969)',target_rule_violation=broken,
+                        reason='paper 885/1969 fixes the first logical end kind: first Failure permits T only; a late DrawValue cannot authorize DF. Target was redeclared before this rerun.',
+                        first_failure=first_failure,first_notice_failure=first_notice_failure,
+                        late_value=late_value,draw_fact_published=published)
+        if number in (9,23,24):
+            correct=env.step(before,edge.action,ordinary).state
+            expected=next(x.value for x in reversed(correct.evidence.observation_trace.events) if x.tag=='ReadInputs')
+            observed=next(x.value for x in reversed(after.evidence.observation_trace.events) if x.tag=='ReadInputs')
+            field={9:'args',23:'reader',24:'numerical_view'}[number]
+            wanted=getattr(expected.descriptor,field) if number!=24 else expected.numerical_view
+            actual=getattr(observed.descriptor,field) if number!=24 else observed.numerical_view
+            return dict(common,holds=actual_changed and wanted!=actual,actual_observation='ReadInputs',field=field,
+                expected=repr(wanted),observed=repr(actual),generation_reply_not_yet_reached=True)
+        if number==29:
+            original=next(w for w in before.core.p.work if w.descriptor.stage=='Wg')
+            wrong=next(w for w in after.core.p.work if w.descriptor.stage=='Wg')
+            cg=any(s.plan.contract.name=='candidate_declaration' for u in after.core.p.units for s in u.slots)
+            return dict(common,holds=actual_changed and original.knowledge.kind==m.OutcomeKind.UNKNOWN
+                and wrong.knowledge.kind==m.OutcomeKind.RETURNED and cg,first_unknown=True,late_value_makes_cg=cg)
+        # For field correspondence, independently compare ordinary E0-driven
+        # Decision with the requested effect actually performed. A single
+        # descriptor/body field (or one declared atomic counterpart) differs.
+        return dict(common,holds=actual_changed,wrong_public_decision=type(bad.result).__name__,
+                    comparison='unchanged E0 / actual unchanged Program / altered public request or custody')
+    return dict(holds=False,reason='no changed actual edge localized')
+
+
+def mg_d6_result(case):
+    scene=next(s for s in scenes.SCENES if s.id==case.scene)
+    # R10 is explicitly missing. No positive executable pair can be claimed.
+    with pytest.raises(m.MissingContract,match='R10'):
+        scenes.instantiate(scene)
+    result=dict(id=case.id,target=case.target,status='unreached_or_incomplete',detected=False,
+        confirmation_status=CONFIRMATION_LABELS[2],execution='not_run',control='not_run: R10 missing',
+        control_complete=False,complete=False,states=0,control_states=0,scene=case.scene,
+        premise=dict(holds=False,reason='D6 / R10 generation draws have no connected legal control'),
+        limitations=('unconnected: R10 generation draws; normalization hook is not reached',),control_limitations=(),
+        normative_result='unjudged: no legal R10 prefix',checker_output='not_run',identification_result='unestablished',
+        shortest=dict(trace=(),paired_trace=(),minimum='not_run'),seconds=0,control_seconds=0,
+        other_rows=(),boundary_errors=(),checker_not_run=True,progress_complete=False)
+    # Python source is ASCII for reliable PowerShell stdin transport.
+    result['confirmation_status']=CONFIRMATION_LABELS[2]
+    return result
+
+
+def condition_table(results):
+    indexed={r['id']:r for r in results}
+    rows=[]
+    for condition in CONDITION_ORDER:
+        ids=OG_CONDITION_CASES.get(condition,())
+        branches=[dict(id=i,confirmation_status=case_confirmation(indexed[i]),
+            identification_result=indexed[i]['identification_result']) for i in ids if i in indexed]
+        if condition=='C-OG.issue[EQ]':
+            branches.append(dict(id='MG-01.atomic-birth',confirmation_status=CONFIRMATION_LABELS[1],identification_result='unestablished (not_run)'))
+        rows.append(dict(condition=condition,cases=list(ids),branches=branches,
+            confirmation_status=aggregate_confirmation(branches) if ids else CONFIRMATION_LABELS[1],
+            execution='current finite contrasts' if branches else 'condition-specific contrast not_run; ordinary row checks may have run',
+            scope='structural only; real F-a closures are not certified'))
+    assert all(r['confirmation_status'] in CONFIRMATION_LABELS for r in rows)
+    assert all(b['confirmation_status'] in CONFIRMATION_LABELS for r in rows for b in r['branches'])
+    return rows
+
+
+@pytest.fixture(scope='module',autouse=True)
+def immutable_record_and_current_summary():
+    before=RESULTS_PATH.read_bytes()
+    yield
+    assert RESULTS_PATH.read_bytes()==before, 'normal tests must never write the record'
+    if not CURRENT_RESULTS:
+        return
+    results=[CURRENT_RESULTS[c.id] for c in CASES if c.id in CURRENT_RESULTS]
+    evidence=load_record()['evidence']
+    rows=row_table(results,evidence)
+    validate_rows(rows,results,evidence)
+    conditions=condition_table(results)
+    payload=dict(state='current_in_memory_partial' if len(results)!=len(CASES) else 'current_in_memory_full',
+        historical_record_is_current=load_record()['source_sha256']==source_hashes(),
+        denominators=dict(rows=len(ROW_ORDER),conditions=len(CONDITION_ORDER),cases=len(CASES)),
+        cases=results,rows=rows,conditions=conditions,
+        row_totals=dict(Counter(r['label'] for r in rows)),
+        confirmation_totals=dict(Counter(r['confirmation_status'] for r in rows)),
+        record_unchanged=True)
+    payload['cases']=[{k:r.get(k) for k in ('id','target','status','confirmation_status','control','states','control_states','prefix_steps','detected','premise','other_rows','shortest','boundary_errors')} for r in results]
+    payload['rows']=[{k:r[k] for k in ('target','status','label','confirmation_status','branch_counts')} for r in rows]
+    print('\nMG06_CURRENT_REPORT',json.dumps(payload,ensure_ascii=True),flush=True)
+
+
+@pytest.mark.parametrize('case',MG_CASES,ids=lambda case:case.id)
+def test_mg06_mutant(case,capsys,recorded):
+    with capsys.disabled():
+        result=mg_d6_result(case) if case.id=='MG-10' else measure_case(case)
+        CURRENT_RESULTS[case.id]=result
+        if recorded['source_sha256']==source_hashes():
+            compare_case(next(r for r in recorded['cases'] if r['id']==case.id),result)
+        print('MG06_CASE',json.dumps({k:result.get(k) for k in ('id','target','status','detected','control','states','control_states','prefix_steps','premise','other_rows','shortest','boundary_errors')},ensure_ascii=True),flush=True)
+    if case.id=='MG-10':
+        pytest.skip('D6: R10 unconnected; no runnable normalization contrast')
+    if case.id=='MG-15':
+        # An executed observation-limit experiment, never a semantic pass.
+        assert result['control']=='zero violations' and result['control_complete']
+        assert result['complete'] and not result['boundary_errors']
+        assert not result['premise']['holds']
+        assert result['status']=='unreached_or_incomplete'
+        assert result['confirmation_status']==CONFIRMATION_LABELS[2]
+        assert result['connection_status']=='unconnected'
+        assert 'C-05' in result['disposition_reason'] and '1340' in result['disposition_reason']
+        return
+    assert_identified(result)
+
+
+def test_current_denominators_do_not_promote_history(recorded):
+    # No current contrast -> zero new confirmed/identified rows, even though
+    # the historical JSON contains successes. All 47/51 identities survive.
+    rows=row_table([],recorded['evidence'])
+    assert len(rows)==47 and len({r['target'] for r in rows})==47
+    assert all(r['status']!='identified' and r['confirmation_status']!=CONFIRMATION_LABELS[0] for r in rows)
+    conditions=condition_table([])
+    assert len(conditions)==51 and len({r['condition'] for r in conditions})==51
+    assert set(OG_CONDITION_CASES)=={r['condition'] for r in conditions if r['condition'].startswith('C-OG.')}
+    assert all(r['confirmation_status']!=CONFIRMATION_LABELS[0] for r in conditions)
+    old_ids={s['id'] for s in recorded['evidence']['scenes']}
+    new=[s for s in scenes.SCENES if s.id not in old_ids]
+    assert len(scenes.SCENES)==239 and len(new)==46
+    indexed={r['target']:r for r in rows}
+    for declared in new:
+        for target in declared.row_ids:
+            branch=next(b for b in indexed[target]['branches'] if b['id']=='current-scene:'+declared.id)
+            expected=(CONFIRMATION_LABELS[4] if target in OUT_OF_SCOPE or declared.scope_class=='b' else
+                CONFIRMATION_LABELS[2] if declared.blocker or declared.expected_missing_contract else CONFIRMATION_LABELS[1])
+            assert branch['confirmation_status']==expected
+            assert branch['execution'].startswith('not_run') and not branch['reached']
+    assert {s.id for s in new if s.blocker or s.expected_missing_contract}=={
+        'SC-14-M3-Hung-D-cap1','SC-14-M3-Hung-D-cap2','SC-09-M3-D6-generation-draw'}
+    validate_rows(rows,[],recorded['evidence'])
+    wrong=deepcopy(rows)
+    wrong[0]['branches'][0]['confirmation_status']='unknown-label'
+    with pytest.raises(AssertionError):
+        validate_rows(wrong,[],recorded['evidence'])
+    atomic={b['id']:b for b in indexed['INV-2.g']['branches'] if b['origin']=='public_hook_limit'}
+    assert set(atomic)=={'MG-01.atomic-birth','MG-20.atomic-birth'}
+    assert all(b['confirmation_status']==CONFIRMATION_LABELS[1] and b['known_review_gap'] for b in atomic.values())
+    assert all(b['execution'].startswith('not_run') and '1937' in b['detail'] for b in atomic.values())
+    assert next(c for c in MG_CASES if c.id=='MG-12').target=='INV-15.b'
+    assert len(LEGACY_CASES)==39 and len(MG_CASES)==29 and len(CASES)==68
+    assert len({c.id for c in CASES})==68
+    with pytest.raises(AssertionError,match='ALL 68'):
+        assert_full_population(recorded['cases'][:39])
+
+
+def test_record_is_current(recorded):
+    assert recorded['source_sha256']==source_hashes(), 'HISTORICAL RECORD: not current 47 rows / 51 conditions; --record-all not authorized in MG-06'
+    assert len(recorded['cases'])==len(CASES)
+    assert len(recorded['rows'])==47
+
 @pytest.fixture(scope='module')
 def recorded():
     record = load_record()
     assert record['state'] == 'complete_full_measurement', 'run the explicit --record-all command first'
-    assert record['source_sha256'] == source_hashes(), 'recorded target versions differ; explicit --record-all required'
+    # Immutable historical record; current contrasts still run independently.
+    assert record['source_sha256'], 'missing historical source identity'
     return record
 
 
-@pytest.mark.parametrize('case', CASES, ids=lambda case: case.id)
+@pytest.mark.parametrize('case', LEGACY_CASES, ids=lambda case: case.id)
 def test_mutant(case, capsys, recorded):
     with capsys.disabled():
         result = measure_case(case)
-    expected = next(r for r in recorded['cases'] if r['id'] == case.id)
-    compare_case(expected, result)
+    CURRENT_RESULTS[case.id] = result
+    if recorded['source_sha256'] == source_hashes():
+        expected = next(r for r in recorded['cases'] if r['id'] == case.id)
+        compare_case(expected, result)
     # Preserve the three unconnected red tests; recording never blesses them.
     assert_identified(result)
 
 
 def test_recorded_population(recorded):
-    assert_full_population(recorded['cases'])
-    validate_rows(recorded['rows'], recorded['cases'], recorded['evidence'])
-    assert sum(recorded['row_totals'].values()) == 45
-    assert recorded['row_totals'] == {label: sum(r['status'] == key for r in recorded['rows'])
-                                    for key, label in STATUS_LABELS.items()}
-    assert recorded['confirmation_totals'] == {label: sum(r['confirmation_status'] == label for r in recorded['rows'])
-                                             for label in CONFIRMATION_LABELS}
+    assert len(recorded['cases']) == recorded['measurement']['cases']
+    assert len(recorded['rows']) == sum(recorded['row_totals'].values())
+    assert len({r['id'] for r in recorded['cases']}) == len(recorded['cases'])
+    assert len({r['target'] for r in recorded['rows']}) == len(recorded['rows'])
+    assert set(r['target'] for r in recorded['rows']) <= set(ROW_ORDER)
     for case in CASES:
-        overrides = [n for n, v in vars(case.window).items() if callable(v) and hasattr(m.CorrectWindow, n)]
-        assert len(overrides) == 1, case.id + ': not a single public-method override'
-    assert all(r['shortest']['minimum'].startswith('BFS') for r in recorded['cases'] if r['status'] == 'identified')
-    assert recorded['report_markdown'] == measured_report(recorded)
+        overrides = [n for n,v in vars(case.window).items() if callable(v) and hasattr(m.CorrectWindow,n)]
+        assert len(overrides) == 1, case.id + ': not one public override'
+    assert len(ROW_ORDER) == 47 and len(CONDITION_ORDER) == 51
+    if recorded['source_sha256']==source_hashes():
+        assert_full_population(recorded['cases'])
+        validate_rows(recorded['rows'],recorded['cases'],recorded['evidence'])
+        assert recorded['conditions']==condition_table(recorded['cases'])
+        assert recorded['report_markdown']==measured_report(recorded)
 
 
 def test_mixed_row_marked_confirmed_is_rejected(recorded):
-    wrong = deepcopy(recorded['rows'])
+    wrong = row_table(recorded['cases'], recorded['evidence'])
     row = next(r for r in wrong if r['target'] == 'INV-2.a')
     assert row['branch_counts']['確認済み'] and row['branch_counts']['未接続']
     row['confirmation_status'] = '確認済み'
@@ -934,12 +1271,12 @@ def test_mixed_row_marked_confirmed_is_rejected(recorded):
 
 
 def test_7b_returned_to_unreached_is_rejected(recorded):
-    wrong = deepcopy(recorded['rows'])
+    wrong = row_table(recorded['cases'], recorded['evidence'])
     row = next(r for r in wrong if r['target'] == 'INV-7.b')
     row.update(status='unreached_or_incomplete', label='未到達・未完', confirmation_status='未確認')
     with pytest.raises(AssertionError, match='INV-7.b'):
         validate_rows(wrong, recorded['cases'], recorded['evidence'])
-    wrong = deepcopy(recorded['rows'])
+    wrong = row_table(recorded['cases'], recorded['evidence'])
     row = next(r for r in wrong if r['target'] == 'INV-7.b')
     row['branches'][0]['confirmation_status'] = '未接続'
     with pytest.raises(AssertionError, match='INV-7.b'):
@@ -958,7 +1295,7 @@ def test_record_execution_mismatch_is_rejected(recorded, corruption):
         left['target'], right['target'] = right['target'], left['target']
         assert Counter(r['target'] for r in wrong) == Counter(r['target'] for r in recorded['cases'])
     else:
-        rows = deepcopy(recorded['rows'])
+        rows = row_table(recorded['cases'], recorded['evidence'])
         row = next(r for r in rows if r['target'] == 'INV-2.a')
         branch = next(b for b in row['branches'] if b['origin'] == 'checker_author_issue_report')
         branch['id'] = 'issue:C-O99.nonexistent'
@@ -979,14 +1316,14 @@ def test_miss_priority_and_partial_record_rejected(recorded):
     assert discrimination_class('INV-2.a', [positive, missed, unknown]) == 'not_detected'
     assert discrimination_class('INV-7.b', [positive, missed]) == 'out_of_scope'
     assert discrimination_class('INV-2.a', [dict(confirmation_status='確認済み', identification_result='合法対照の誤検出')]) == 'unreached_or_incomplete'
-    with pytest.raises(AssertionError, match='ALL 39'):
+    with pytest.raises(AssertionError, match='ALL'):
         assert_full_population(recorded['cases'][:-1])
     with pytest.raises(SystemExit):
         cli_parser().parse_args(['--record-all', '-k', 'M-2a'])
 
 def cli_parser():
     parser = argparse.ArgumentParser(description='Explicit full measurement only; normal pytest never writes records.')
-    parser.add_argument('--record-all', required=True, action='store_true', help='run ALL 39 contrasts and replace the single results JSON')
+    parser.add_argument('--record-all', required=True, action='store_true', help='run ALL declared contrasts and replace the single results JSON')
     return parser
 
 
@@ -998,12 +1335,12 @@ def record_all():
     started = now()
     start = perf_counter()
     legal_control.cache_clear()
-    results = [measure_case(case) for case in CASES]
+    results = [mg_d6_result(case) if case.id=='MG-10' else measure_case(case) for case in CASES]
     assert_full_population(results)
     assert before == source_hashes(), 'target version changed during measurement; old record retained'
     rows = row_table(results, evidence)
     validate_rows(rows, results, evidence)
-    record = dict(schema_version=2, state='complete_full_measurement', source_sha256=before,
+    record = dict(schema_version=3, state='complete_full_measurement', source_sha256=before,
         command='.venv/Scripts/python.exe -B tests/test_fb_mutants.py --record-all',
         measurement=dict(started_at=started, finished_at=now(), seconds=round(perf_counter()-start, 3),
             cases=len(results), classes=len({c.window for c in CASES}),
@@ -1012,10 +1349,11 @@ def record_all():
             unresolved_cases=sum(r['status'] == 'unreached_or_incomplete' for r in results),
             max_states=max(max(r['states'], r['control_states']) for r in results),
             legal_control_violations=0, contract_violations=sum(len(r['boundary_errors']) for r in results)),
-        evidence=evidence, cases=results, rows=rows,
+        denominators=dict(rows=47,conditions=51,cases=len(CASES)),
+        evidence=evidence, cases=results, rows=rows, conditions=condition_table(results),
         row_totals={label: sum(r['status'] == key for r in rows) for key, label in STATUS_LABELS.items()},
         confirmation_totals={label: sum(r['confirmation_status'] == label for r in rows) for label in CONFIRMATION_LABELS},
-        historical_snapshots=old.get('historical_snapshots', []), audit=RESUMPTION_AUDIT,
+        historical_snapshots=old.get('historical_snapshots', []) + ([{k:v for k,v in old.items() if k!='historical_snapshots'}] if old else []), audit=MG06_AUDIT+'\n'+MG06_TURN2_AUDIT,
         source_disagreements=[])
     record['report_markdown'] = measured_report(record)
     encoded = json.dumps(record, ensure_ascii=False, indent=2) + '\n'
@@ -1084,6 +1422,265 @@ unupdated under the explicit three-file limit. Local audit replaces that log.
 Reused knowledge: keep observations, connection and identification separate;
 counts alone cannot prove identity. Applied in equal-count injection tests.
 Claude independent reproduction (closing condition 6) is not performed here.
+"""
+
+
+MG06_AUDIT = """
+TURN 1 HISTORICAL AUDIT; continuation decisions/results follow in MG06_TURN2_AUDIT.
+2026-10-17 / MG-06 / paper v0.18 (2112 lines), SHA256
+ a3605ac06bbb0657ec6a7078e4d1f7885f29ce257d40546c5f0b03064e8ffc6d.
+29 proposals were saved in fb_mutants.py BEFORE implementation. P=17/29;
+C=12 supplied examples. One public override per subclass, no data marker.
+Inherited A-M-XC and row-display conventions remain historical; new naming
+assumption A-MG-WIRE (1): finite conditional DF slot/key and late-value wire.
+Semantic additions=0. The finite D prefix does not certify real PR/IE/ID.
+
+Actual public observations drive the premise. In particular ReadInputs must
+show the changed args/reader/view; changing a window-owned copy alone is not
+enough. CG body changes keep the actual Program and E0 unchanged. E0, actual
+EH/EW/EL and observation contracts are never modified after execution starts.
+Cuts are local safety checks, not whole-path/progress certification. All
+outside continuations/atomic-hook limits remain in reports. The control uses
+identical E0, full legal prefix, initial State, Cut and operation availability.
+D6/R10 has no legal runnable control: the ordinary public scene raises
+MissingContract before entry; the normalization mutant is not_run/unconnected.
+This is not a successful zero-violation R10 pair and not a 58-condition claim.
+
+First design audits and repairs (not checker repairs):
+- Publish Decision does not yet include environment-installed condition births.
+  MG-01/MG-20 therefore test loss after PUB through drain, and keep the original
+  atomic omission clauses explicitly unconfirmed. No automatic-birth pass is
+  claimed from these loss tests.
+- Enter's public effect is (work-id, token, NumericalView), not a Descriptor.
+  Actual DescriptorRead/ReadInputs observe returned window custody; MG-09/23
+  were corrected before final population execution after this public probe.
+- pG also lives in GenerationContinuation.purpose. MG-03 initially erased only
+  diagnostic excuses, leaving that carrier. The final mutant erases the pG
+  purpose/target payload there too. MG-21/22 change every retained pG carrier.
+- A made-up DF without an E0 followup did not establish the originating Draw.
+  Final MG-12 declares a finite conditional plan before execution, with a
+  fixed late-value body. Its single fault uses that late value despite first
+  Failure. A Source(first outcome) version had generic plan-difference hits;
+  that does NOT prove discrimination of the first-Failure clause. The final
+  fixed-body version is the relevant measurement.
+- MG-29 now includes CG authorized by the same wrong late-success first-end
+  choice. Its earlier knowledge-only form reached INV-15.b but no 16.c chain;
+  that earlier result was a target-route design limit, not a 16.c hole.
+- MG-12 target audit: paper 885 explicitly owns the first-kind/DF prohibition
+  in INV-15.b; paper 887 does not make this same-Draw example a different
+  problem/purpose/context/value. The declared 16.b target is NOT retargeted to
+  its 15.b collateral hit. Mark target design unestablished, keep the old real
+  16.b scope bridge, and do not call this a checker hole.
+- MG-15 is STOPPED for interpretation/observation: after EndKnown the same
+  live Wg already owns issue[CG]. Clearing handle's unmet flag alone does not
+  prove that a permitted same-owner Transfer is absent. No loss is inferred
+  from that flag. Need a public acceptance contract/observation to distinguish
+  legal Transfer from abandonment (paper 1943-1944,1951,1961). No forced choice.
+
+- Report transport audit: PowerShell stdin converted some newly written
+  Japanese status literals to question marks. Final code uses the existing
+  CONFIRMATION_LABELS constants. validate_rows checks every branch label and
+  sum(branch_counts)==len(branches), preventing silent loss from counts.
+  The initial full run is superseded by the final rerun after this repair.
+
+- Current 239-scene public manifest is retained: 193 historical observations
+  plus 46 current declarations. Full-scene execution is not_run here, separate
+  from the local mutant prefixes. Hung-D cap1/cap2 and D6 stay unconnected;
+  the other new declarations remain unconfirmed, never promoted from another
+  agent's reported 43 passes. The final focused reporting tests check this.
+
+Read boundary: paper 1580-1630,1918-1973 and related row clauses; our two test
+files; public model contracts/AllowedPlan docstring, dataclass declarations,
+CorrectWindow/Environment signatures/docstrings, Scene E0/script/instantiate
+and actual public API outputs. Existing local Obsidian knowledge was read in
+relevant portions (A-G taxonomy in full); historical reports are information,
+not permission. Public scene result JSON is historical, not rerun here.
+External web sources: none. No test_fb_scenes.py full execution.
+Self-declared deviation: the first AST API inventory also printed signatures
+and docstrings of non-underscore checker helper/predicate functions. No body
+of CorrectWindow, Environment or checker was printed/read. This exposure
+prevents claiming perfect read-boundary compliance; paper remains the source
+of expected outcomes. Subsequent reads were narrowed to declared interfaces.
+SHA256-only file reads do not expose implementation content.
+
+Normal pytest never writes results JSON. An explicit --record-all remains the
+sole future writer and includes every case/disposition plus 47/51 identity;
+it was NOT executed for MG-06. Historical 39/45 results are not current passes.
+Obsidian Sessions/Projects/Knowledge/Heat are NOT updated under the two-file
+limit. This audit is the permitted local note; no artifact copied to vault.
+Reused knowledge: A-G taxonomy and independent declarations vs actual facts,
+applicable; it prevented counting redundant-carrier deletion and generic plan
+mismatch as the requested discrimination.
+Own Codex session: C:/Users/you11/.codex/sessions/2026/10/17/
+rollout-2026-10-17T03-14-39-01a145ec-596f-7ca2-a5f4-bb9998e77de5.jsonl.
+No direct Claude exchange; supplied handoff names were information only.
+"""
+
+MG06_LAST_RUN_NOTE = """
+2026-10-17 MG-06 TURN 1 HISTORICAL result; superseded by MG06_TURN2_AUDIT.
+This note is NOT a test oracle.
+9 failed, 67 passed, 1 skipped in 140.38 s; all 68 dispositions; 67 runnable controls zero violations; MG-10 not_run
+New MG cases: 23 identified; 3 target misses (09/23/24); 2 target-design/observation limits (12/15); 1 not_run (10/R10).
+All 67 runnable positive controls: zero violations and zero observation-contract violations. D6 has no runnable control.
+Final full command: .venv/Scripts/python.exe -B -m pytest tests/test_fb_mutants.py -q -s --tb=line -p no:cacheprovider
+Failure partition: MG-09/23/24 target misses; MG-12 wrong target; MG-15 Transfer unestablished;
+ M-2d/M-LD/M-13b prior unconnected cases; stale-record guard (expected under no-record-write instruction).
+After full run: reporting-only preservation of the 46 current scene declarations; 8 reporting tests passed / 69 deselected in 0.63 s.
+Full scene suite NOT run; 239 declaration identities retained (193 old records + 46 current not_run declarations).
+New blockers retained: SC-14-M3-Hung-D-cap1/cap2; SC-09-M3-D6-generation-draw.
+JSON unchanged SHA256 612cb775b8f86fe22055f8f8498739e84e15ca802b0c1924daa28843bb47de91; --record-all was NOT run.
+Rows 47: identified=36, not_detected=1, unreached_or_incomplete=3, out_of_scope=7.
+Row confirmation: unconnected=40, outside=7; independently confirmed contrasts do not certify whole rows.
+Conditions 51: confirmed finite slices=5, unconfirmed=45 (old44 + issue[EQ] atomic-birth clause), unconnected=1 (handle).
+MG-01/MG-20 test post-Publish loss; original atomic omission contrasts remain not_run/unconfirmed.
+
+Individual new cases: id | target | result | states wrong/control | legal prefix steps
+MG-01 | INV-2.g | identified | 2/1 | 49
+MG-02 | INV-2.g | identified | 2/1 | 54
+MG-03 | INV-2.g | identified | 2/1 | 54
+MG-04 | INV-2.g | identified | 2/1 | 54
+MG-05 | INV-2.g | identified | 2/2 | 60
+MG-06 | INV-16.c | identified | 2/1 | 48
+MG-07 | INV-16.c | identified | 2/1 | 48
+MG-08 | INV-16.c | identified | 2/1 | 48
+MG-09 | INV-16.c | not_detected | 2/2 | 32
+MG-10 | INV-16.c | unreached_or_incomplete | 0/0 | not_run
+MG-11 | INV-15.a | identified | 2/1 | 41
+MG-12 | INV-16.b | unreached_or_incomplete | 2/1 | 57
+MG-13 | INV-2.g | identified | 2/1 | 14
+MG-14 | INV-2.g | identified | 2/1 | 43
+MG-15 | INV-2.g | unreached_or_incomplete | 2/1 | 43
+MG-16 | INV-2.g | identified | 2/1 | 48
+MG-17 | INV-2.g | identified | 2/1 | 49
+MG-18 | INV-2.g | identified | 2/1 | 55
+MG-19 | INV-2.g | identified | 2/2 | 54
+MG-20 | INV-2.g | identified | 2/1 | 55
+MG-21 | INV-2.g | identified | 2/1 | 54
+MG-22 | INV-2.g | identified | 2/1 | 54
+MG-23 | INV-16.c | not_detected | 2/2 | 32
+MG-24 | INV-16.c | not_detected | 2/2 | 32
+MG-25 | INV-16.c | identified | 2/2 | 48
+MG-26 | INV-16.c | identified | 2/2 | 48
+MG-27 | INV-16.c | identified | 2/2 | 54
+MG-28 | INV-16.c | identified | 2/2 | 54
+MG-29 | INV-16.c | identified | 2/1 | 57
+
+Exclusive row groups (confirmation unconnected except out_of_scope rows):
+identified: INV-1.a, INV-1.b, INV-1.c, INV-2.a, INV-2.b, INV-2.c, INV-2.e, INV-2.f, INV-3.a, INV-3.b, INV-3.c, INV-4.a, INV-4.b, INV-4.c, INV-5.a, INV-5.b, INV-5.c, INV-6.a, INV-6.b, INV-6.c, INV-7.a, INV-7.c, INV-8.a, INV-8.b, INV-9.a, INV-10.a, INV-10.b, INV-11.a, INV-11.b, INV-11.c, INV-12.b, INV-13.a, INV-15.a, INV-15.b, L-RECEIPT, INV-2.g
+unreached_or_incomplete: INV-2.d, INV-13.b, L-DERIVE
+out_of_scope: INV-7.b, INV-9.b, INV-12.a, INV-14.a, INV-14.b, INV-16.a, INV-16.b
+not_detected: INV-16.c
+
+Scope decisions: paper v0.18:1880,1891-1892; original seven implementation-stage bridges remain.
+MG-12 is a paper-885/1969 first-kind fault, detected under INV-15.b. Its predeclared 16.b target was not silently retargeted.
+MG-15: stopped; the same live Wg already owns issue[CG]. Need public Transfer acceptance evidence; no owner meaning was forced.
+MG-09/23/24 actual ReadInputs differ from fixed Qgen; INV-16.c does not report them in the declared entry-local Cut.
+ Existing INV-8.b detects all three, so these are target-row discrimination gaps, not whole-checker escapes. CG/EQ continuation of these cases is untested.
+Only the two permitted Python files written; no commit, environment variable, vault/Heat or record write.
+Reuse: independent actual inputs vs window copies and alternate carriers (A-G taxonomy) were effective.
+Read-scope deviation is declared in MG06_AUDIT; no implementation bodies were displayed.
+"""
+
+MG06_TURN2_AUDIT = """
+2026-10-17 MG-06 continuation 2; NOT a test oracle.
+Position: F-b finite-model discrimination, before real F-a integration.
+Paper-absent assumptions: A-MG-WIRE representation 1, semantic additions 0;
+no additional assumption introduced by this continuation. Owner decisions 0.
+Same family: initial MG-06 investigation, second continuation measurement.
+
+The population amendment in fb_mutants.py was saved BEFORE code/target changes.
+MG-12 now targets INV-15.b, paper 885/1969: the first logical end kind is fixed;
+first Failure permits only T, so the later value must not authorize DF.
+The old INV-16.b declaration was a design error (paper 887 requires a different
+problem/purpose/context/Point/value). The mutant is unchanged. A fresh rerun,
+not a relabelled old collateral hit, is required to establish discrimination.
+MG-15 is unconnected, not a semantic pass/violation. Independent same-Wg Transfer
+acceptance remains unavailable; existing issue[CG] is an alternate live carrier.
+C-05 is supplied technical precedent, not independently rerun evidence.
+Paper 1340,1586-1590,1943,1951 requires retaining this unknown in the denominator.
+MG-01/MG-20 post-Publish loss contrasts remain; atomic omission contrasts are
+not_run/unconfirmed known review gaps, paper 1937/1944/1946. No same-step pass.
+MG-09/23/24: checker changes are user-supplied information. Only public outputs
+of a fresh measurement can confirm INV-16.c; checker internals remain unread.
+
+Read scope this continuation: paper selected sections (885/887,1334-1342,
+1584-1600,1931-1969); own two test modules; public SCENES/E0/execution outputs;
+Obsidian Home/Heat, sui project excerpt, relevant session excerpts. Historical
+A-G taxonomy reused for alternate-carrier/premise distinction; it is applicable.
+No implementation bodies of window, Environment or checker read this turn.
+Prior turn signature/docstring inventory overreach remains disclosed in the
+historical audit, not erased. No external web sources. No direct Claude message.
+No commit, --record-all, environment variable, vault/Heat or other file write.
+Explicit two-file permission overrides common vault log writing; this permitted
+module holds the audit pending later authorized vault transcription.
+Codex session: C:/Users/you11/.codex/sessions/2026/10/17/rollout-2026-10-17T03-14-39-01a145ec-596f-7ca2-a5f4-bb9998e77de5.jsonl
+Fresh continuation-2 execution (manual audit, NOT a test oracle):
+Targeted MG-09/12/15/23/24 + denominator helper: 6 passed, 71 deselected, 3.96s.
+Full normal pytest: 4 failed, 72 passed, 1 skipped, 137.66s (exit 1).
+Command: .venv/Scripts/python.exe -B -m pytest tests/test_fb_mutants.py -q -s --tb=line -p no:cacheprovider
+Only stdout was filtered in PowerShell; no output file or JSON record write.
+New 29: 27 identified; MG-10 R10 not_run/unconnected; MG-15 executed/unconnected.
+All 68 cases: 63 identified, 5 unestablished (old M-2d/M-LD/M-13b, MG-10/MG-15).
+All 67 runnable legal controls: zero findings and zero observation-contract violations;
+same E0, legal prefix, initial State and Cut. MG-10 has no runnable legal control.
+MG-15 pytest pass confirms retained unconnected disposition, never semantic correctness.
+MG-09/23/24 independently hit INV-16.c and retain collateral INV-8.b findings.
+MG-12 unchanged mutant was freshly detected at the redeclared INV-15.b target.
+Remaining failures: M-2d/M-LD paper premise unavailable (ReadyN/Match/Discharge);
+ M-13b cross-initial relational row not_run / target absent; stale-record guard.
+No confirmed new target misses. No checker fix was performed.
+Rows 47: identified=37, not_detected=0, unreached_or_incomplete=3, out_of_scope=7.
+Row confirmation: unconnected=40, outside=7; finite identification is not whole-row certification.
+Condition schemas 51: confirmed finite slices=5, unconfirmed=45, unconnected=1.
+Old 44 condition schemas remain unconfirmed here. issue[EQ] remains unconfirmed
+ because atomic birth is not_run; handle remains unconnected. MG-20 atomic run
+ obligation contrast also remains explicitly unconfirmed under INV-2.g branches.
+Historical record did not match current sources; it was NOT refreshed.
+JSON before/after SHA256: 612cb775b8f86fe22055f8f8498739e84e15ca802b0c1924daa28843bb47de91
+Closure: all new individual dispositions settled with reasons; executable positive
+ controls zero; JSON unchanged. Full CLI remains red for the four failures above.
+
+Individual fresh cases: id | target | result | states wrong/control | legal prefix steps
+MG-01 | INV-2.g | identified | 2/1 | 49
+MG-02 | INV-2.g | identified | 2/1 | 54
+MG-03 | INV-2.g | identified | 2/1 | 54
+MG-04 | INV-2.g | identified | 2/1 | 54
+MG-05 | INV-2.g | identified | 2/2 | 60
+MG-06 | INV-16.c | identified | 2/1 | 48
+MG-07 | INV-16.c | identified | 2/1 | 48
+MG-08 | INV-16.c | identified | 2/1 | 48
+MG-09 | INV-16.c | identified | 2/2 | 32
+MG-10 | INV-16.c | unreached_or_incomplete (not_run/unconnected) | 0/0 | not_run
+MG-11 | INV-15.a | identified | 2/1 | 41
+MG-12 | INV-15.b | identified | 2/1 | 57
+MG-13 | INV-2.g | identified | 2/1 | 14
+MG-14 | INV-2.g | identified | 2/1 | 43
+MG-15 | INV-2.g | unreached_or_incomplete (executed/unconnected) | 2/1 | 43
+MG-16 | INV-2.g | identified | 2/1 | 48
+MG-17 | INV-2.g | identified | 2/1 | 49
+MG-18 | INV-2.g | identified | 2/1 | 55
+MG-19 | INV-2.g | identified | 2/2 | 54
+MG-20 | INV-2.g | identified | 2/1 | 55
+MG-21 | INV-2.g | identified | 2/1 | 54
+MG-22 | INV-2.g | identified | 2/1 | 54
+MG-23 | INV-16.c | identified | 2/2 | 32
+MG-24 | INV-16.c | identified | 2/2 | 32
+MG-25 | INV-16.c | identified | 2/2 | 48
+MG-26 | INV-16.c | identified | 2/2 | 48
+MG-27 | INV-16.c | identified | 2/2 | 54
+MG-28 | INV-16.c | identified | 2/2 | 54
+MG-29 | INV-16.c | identified | 2/1 | 57
+
+Exclusive fresh row groups (confirmation unconnected except outside rows):
+identified: INV-1.a, INV-1.b, INV-1.c, INV-2.a, INV-2.b, INV-2.c, INV-2.e, INV-2.f, INV-3.a, INV-3.b, INV-3.c, INV-4.a, INV-4.b, INV-4.c, INV-5.a, INV-5.b, INV-5.c, INV-6.a, INV-6.b, INV-6.c, INV-7.a, INV-7.c, INV-8.a, INV-8.b, INV-9.a, INV-10.a, INV-10.b, INV-11.a, INV-11.b, INV-11.c, INV-12.b, INV-13.a, INV-15.a, INV-15.b, L-RECEIPT, INV-2.g, INV-16.c
+not_detected: (none)
+unreached_or_incomplete: INV-2.d, INV-13.b, L-DERIVE
+out_of_scope: INV-7.b, INV-9.b, INV-12.a, INV-14.a, INV-14.b, INV-16.a, INV-16.b
+
+Next: Claude can review these known limits and independently decide whether to
+ execute the explicit record-all flow after overall confirmation. It was not run here.
+Vault Session/Projects/Knowledge/Heat updates remain unperformed under the two-file limit.
+Reusable knowledge result: alternate carriers and actual-observation premises were useful.
 """
 
 if __name__ == '__main__':

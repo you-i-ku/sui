@@ -1,4 +1,4 @@
-"""F/F-b v0.12 explicit-state model, rebuilt from the paper.
+"""F/F-b explicit-state model: v0.12 base plus v0.18 M3/M4.
 
 Public subclass surface (all inputs/results are frozen values):
   enabled(View) -> tuple[Action]: operation provision (INV-2.e/11, WIN-PRE).
@@ -70,7 +70,7 @@ from fb_check import (
     Adopted, AdoptionReserved, CloseSave, HandoffPurpose, Applied,
     IntervalKey, IntervalUndertaken, IntervalObserved, CoverageClaimed, ArtifactValue, ArtifactIssued,
     ArtifactChecked, CompletionBinding, HostUnknownBinding, ReferenceBinding,
-    IntervalBinding, AcquisitionBinding, VerificationBinding, AdoptionBinding, ReceiptSource,
+    IntervalBinding, AcquisitionBinding, VerificationBinding, AdoptionBinding, ReceiptSource, PurposePart,
 )
 
 
@@ -494,6 +494,13 @@ COMPLETION_RULES = (
     CompletionRule("C-O13.handle[report/key/root]", "Saved reports requiring handling", "B/Xc/missing processing or handoff"),
     CompletionRule("C-O13.save[slot]", "Publish diagnostic/binding", "Saved each processing slot"),
     CompletionRule("C-O14.stop[w]", "work undertaking BEFORE reservation", "actual stop or known never-started, one release"),
+    CompletionRule("C-OG.run[Wg]", "initial plan promises Wg", "EndKnown Wg"),
+    CompletionRule("C-OG.save[T]", "EndKnown Wg", "Saved corresponding T"),
+    CompletionRule("C-OG.handle[Wg]", "EndKnown Wg", "transfer to CG issuer or retained pG"),
+    CompletionRule("C-OG.issue[CG]", "first corresponding nonempty generation, usable", "CG Publish with save CG and issue EQ custody"),
+    CompletionRule("C-OG.save[CG]", "Publish CG", "Saved CG"),
+    CompletionRule("C-OG.issue[EQ]", "Publish CG, independently of EQ readiness", "EQ Publish with Ep/run and original purpose custody"),
+    CompletionRule("C-OG.save[EQ]", "Publish EQ", "Saved EQ"),
 )
 
 
@@ -614,6 +621,63 @@ PUBLIC_MODEL_CONTRACTS = (
      "F-a 66 / F-b 1511: Event clock_reading/1 {source:Point, reading:Reading}; source PlanRefs resolve separately, reading Sources use actual clock inputs; Unavailable disables publication; A-READING-NS is the only time_ns mapping."),
     ("terminal_plans", "terminal_plans(descriptors: tuple[Descriptor, ...]) -> tuple[AllowedPlan, ...]",
      "F-b 769/1044/1510: T's seven logical items use eight flat keys (request and stage are one item): work, request, stage, first_receipt, terminal_kind, returned, basis, view. Failure basis is validated Generation; Unknown basis is whole content; definite reply basis is None; V is separate."),
+    ("candidate_request_content", "candidate_request_content(d: Descriptor) -> Object",
+     "M3 / A-GENERATION-WIRE: full fixed Qgen input declaration; Wg args.draws=() declares no generation draws. Guard generation plus Source candidate_declaration links the whole first output to CG; Guard evaluation links Saved CG to a separately fixed EQ/Ep plan. See AllowedPlan for symbolic variant/field/guard spellings."),
+    ("sui.fb.candidate_request/1 fields", "Qgen Record(contract=sui.fb.candidate_request/1, category='Event', content=Object)",
+     "M3 / A-GENERATION-WIRE (name-only): Qgen.content has exactly these keys, each copied from the SAME Wg Descriptor field: "
+     "process<-process, trigger<-trigger, reader<-reader, purpose<-purpose, stage_slot<-stage_slot, method<-method, "
+     "output_contract<-output_contract, args<-args (whole Object; args.draws must be ()), input_points<-input_points (sorted tuple), "
+     "numerical_view<-Object(points=sorted numerical_view.points, application_order=numerical_view.application_order, context=numerical_view.context), "
+     "allocation<-allocation, need<-need, permissions<-permissions (sorted tuple). No request/self Point and no work_id are stored. "
+     "PlanRefs stay PlanRefs in the declaration and resolve to Saved Points at preparation; the stored Record compares to the resolved Object. "
+      "Actual numerical inputs also resolve the whole context, including model/generation_basis and nested typed PlanRefs, at use; the declaration stays unchanged. "
+     "Wg Descriptor: stage='Wg', output_contract=sui.fb.candidate_generation/1, request=PlanRef(initial unit, Qgen slot), "
+     "numerical_view.context.model=<Point|PlanRef of the model input>, numerical_view.context.generation_basis=<tuple of Point|PlanRef within the fixed input read>."),
+    ("generation E0 plans", "initial O-02 plan + CG plan + EQ plan (all declared before execution)",
+     "M3 / A-GENERATION-WIRE (name-only): (1) the initial O-02 plan publishes the Qgen record and the Wg Descriptor in the same unit. "
+     "(2) exactly one CG plan: obligation_id='O-G', guards include Guard('generation', Wg.work_id), no works, one record "
+     "RecordPlan(slot, Contract('candidate_declaration','1'), category, content=Source('candidate_declaration', Wg.work_id)). "
+     "(3) exactly one EQ plan: obligation_id='O-G', guards include Guard('evaluation', Wg.work_id, PlanRef(CG unit, CG slot)) and optionally "
+     "Guard('generation_context', Ref) per evaluation-use input; one record Contract('sui.fb.evaluation_request','1') whose content names "
+     "candidates/reader/model/preferences/context/o/j; exactly one Ep Descriptor with request=PlanRef(EQ unit, EQ slot). "
+     "Wg replies: Outcome(Success, Object(variant='Candidates', declaration=<candidate_declaration/1 Object with keys model, input_order, measure, generation{generator,args,basis,draws}, continuation{after}>)) "
+     "or Outcome(Success, Object(variant='NoCandidates', basis=<whole evidence>)); Failure/Unknown as for other Compute works."),
+    ("Source-expanded references", "PrepareOne: declared TypedReference -> Saved Point, compared with the same body path",
+     "A-SOURCE / REF-5: a Source-expanded body may already contain the Saved Point while its reference declaration retains a PlanRef. Preparation accepts the identical declared Ref or its resolved Saved Point; a different target is rejected. Path/role/use declarations remain mandatory."),
+    ("sui.fb.evaluation_request/1 fields", "EQ Record(category='Event', content=Object with exactly seven keys)",
+     "M3 / A-GENERATION-WIRE (finite symbolic wire, not a F-a DTO): candidates: Ref copied from the declared CG slot; "
+     "reader: Ref copied from Wg.reader; model: Ref copied from the separately declared evaluation model and matching Ep.numerical_view.context.model; "
+     "preferences: Ref or nonempty tuple[Ref,...] copied from the evaluation preference declaration (tuple order retained); "
+     "context: Ref copied from the evaluation context declaration and matching Ep.numerical_view.context.context; "
+     "o/j: Ref or tuple[Ref,...] copied from the explicitly declared observation/judgment evidence bindings. "
+     "Empty o/j tuples explicitly declare no separately modelled clock evidence; they do not certify F-a observation/judgment boundaries. "
+     "Bare integers are not evidence bindings. Actual F-a boundaries refer to context_observed.observation_reading/judgment_reading Points "
+     "(F-a 4453-4477); their complete clock/math closure is still unconnected. All typed refs resolve to Saved Points at EQ PUB, "
+     "including every member of tuples; literal strings/integers are never guessed to be Points. All reference paths/roles must be declared."),
+    ("EQ / Ep correspondence", "AllowedPlan('...', 'O-G', ..., (EQ,), (Ep,), guards)",
+     "M3 1935/1937: Ep.stage='Ep', Ep.request=PlanRef(EQ unit, EQ slot), Ep.reader=Wg.reader and Ep.purpose=Wg.purpose. "
+     "Ep.numerical_view.context is Object with model and context matching EQ; any mirrored preferences/o/j keys must also match EQ. "
+     "Every candidates/model/preferences/context/o/j Point belongs to Ep.input_points | Ep.numerical_view.points; "
+     "numerical_view.application_order is the separately fixed tuple[Ref,...] of ordered numerical reads; each target must be Saved. Never infer its order from a set. "
+     "input_points and numerical_view.points may differ. Reader/process/request/permissions are also required by the Descriptor contract. "
+     "EQ's request identity fixes its whole body, including o/j, even if context does not duplicate those keys. "
+     "Do not copy Wg's generation view as Ep's evaluation view or insert CG into Qgen. "
+     "Guard('evaluation', Wg.work_id, CG Ref) checks CG/full reply/use correspondence; "
+     "Guard('saved', Ref) is an ordinary predecessor save wait and creates no pG. "
+     "Guard('generation_context', Ref) explicitly declares a concrete evaluation-use shortage (model/preferences/context/o/j), "
+     "not an ordinary save wait: an unresolved target seen after EndKnown(Wg) creates a target-bearing pG with the original run[Wg] origin "
+     "(kept even when the target is saved before CG PUB); after CG PUB an unresolved target also keeps issue[EQ]. "
+     "Later saving/EQ PUB does not clear that pG. See AllowedPlan's literal EQ declaration example."),
+    ("CG single-field negative input", "CorrectWindow.publish_unit(View, plan_id) -> Decision (public subclass boundary)",
+     "Keep E0's Source('candidate_declaration', work) and the actual Program reply unchanged. "
+     "A test subclass can replace only a returned CG slot.plan.content field in Decision.custody, Decision.result and the matching Publish Effect payload. "
+     "Run the ordinary Environment.step so EU/observer record the changed publication. This is a deliberately faulty window, not a legal alternative CG plan; "
+     "a candidate-order/measure change in both Program and CG is a different legal output, not this negative control. "
+     "No State/Evidence/observation-contract edit is needed; see the executable MG-05 window-owned tests."),
+    ("Wg Hung / legal PR to D", "Unconnected: full Ep artifact/FProblem -> PR -> D adapter",
+     "Paper 949/1932/1979: a separate bootstrap D or a Record named PR is not a legal Ep/FProblem/PR prefix. "
+     "The finite artifact port does not provide the full F-a math_artifact/2/compiler/root/registry closure. "
+     "Keep SC-14-M3-Hung-D-cap1/cap2 in the denominator as unconnected; do not replace them with Wg-only occupation or raw D entry."),
 )
 
 
@@ -669,7 +733,7 @@ class Descriptor:
     allocation: str
     permissions: frozenset[Ref]
     request: Ref
-    stage: str  # Wr / Wp / Wv / Ep / D / Ee / MeasureSegment
+    stage: str  # Wg / Wr / Wp / Wv / Ep / D / Ee / MeasureSegment
     need: tuple[tuple[str, int], ...]
     required: frozenset[Ref]
     use_keys: frozenset[object] = frozenset()
@@ -729,6 +793,60 @@ class AllowedPlan:
 
     T/V は実行前の E0.publication_plans / terminal_plans(Descriptor 群) が宣言し、ObservationE0.plans へ運ぶ (A-T-PLAN)。
     参照・親の Source は宣言だけに許す。発行時に Source を解決し、保存する Record の参照・Header/PreparedEntry の親は Point にする。
+
+    M3 / A-GENERATION-WIRE (名前だけの仮定): Wg.output_contract is
+    sui.fb.candidate_generation/1. Returned Object(variant='Candidates',
+    declaration=<full candidate_declaration/1 Object>) or
+    Object(variant='NoCandidates', basis=<whole evidence>) distinguishes the
+    two definite replies. Qgen is sui.fb.candidate_request/1; its full content
+    is candidate_request_content(Wg Descriptor). No new FWork variant.
+    A CG recipe has Guard('generation', Wg.work_id), one candidate_declaration/1
+    record with content=Source('candidate_declaration', Wg.work_id). Its EQ
+    recipe has Guard('evaluation', Wg.work_id, PlanRef(CG unit, CG slot)), one
+    sui.fb.evaluation_request/1 record, and the Ep descriptor in the same plan.
+    EQ names candidates/reader/model/preferences/context/o/j, all fixed at PUB.
+    Guard('generation_context', Ref) names a concrete missing evaluation-use
+    input (and hence pG), unlike Guard('saved', Ref)'s predecessor-save wait.
+    These field/guard/variant/contract spellings are symbolic names, not new
+    mathematical claims. Full F-a generator/measure validation remains H-03.
+    Wg.args.draws=() explicitly declares no generation draws for the finite
+    method; absent/nonempty draws are a MissingContract, never rewritten to an
+    empty draw list or a constant. numerical_view.context.generation_basis
+    explicitly declares the finite method's basis correspondence, independently
+    of numerical application_order; context.model names its model input.
+
+    Literal EQ declaration fragment (A-GENERATION-WIRE, name-only wire; the
+    initial/evaluation-input records and Wg/CG are declared separately in E0).
+    Only frozen constructors are used; no window/checker body supplies a value::
+
+        process = PlanRef('initial', 'process')
+        reader = PlanRef('initial', 'reader')
+        cg, eq = PlanRef('candidate', 'cg'), PlanRef('evaluation', 'eq')
+        model, pref, ctx, o, j = (PlanRef('eval-inputs', name)
+                                 for name in ('model', 'preferences', 'context', 'observation', 'judgment'))
+        body = obj(candidates=cg, reader=reader, model=model,
+                   preferences=pref, context=ctx, o=o, j=j)
+        inputs = frozenset((cg, model, pref, ctx, o, j))
+        ep = Descriptor('ep', process, cg, 'generate-and-compare', 'evaluation', reader,
+            Contract('model.prepare', '1'), Contract('model.artifact', '1'), body,
+            inputs, NumericalView(inputs, (model, pref, ctx, cg, o, j),
+                obj(model=model, context=ctx, o=o, j=j)),
+            'bootstrap', frozenset((process,)), eq, 'Ep', (('think', 1),),
+            inputs | frozenset((process, reader, eq)))
+        refs = tuple(TypedReference('PATH-EQ-INPUT', (key,), value, 'UE', 'math')
+                     for key, value in body.items)
+        record = RecordPlan('eq', Contract('sui.fb.evaluation_request', '1'), 'Event', body, refs)
+        evaluation = AllowedPlan('evaluation', 'O-G', ('wg', 'evaluation'), (record,), (ep,),
+            (Guard('evaluation', 'wg', cg), Guard('generation_context', ctx)))
+        roles = tuple(FieldRole(record.contract, 'PATH-EQ-INPUT', ref.path, 'UE', 'math') for ref in refs)
+        rule = ReferencePath('PATH-EQ-INPUT', ('sui.fb.evaluation_request/1',), (), 'UE', 'math', 'direct')
+
+    Add evaluation/roles/rule to E0.plans/field_roles/references before I0.
+    'generate-and-compare' and 'wg' must be the same purpose/work ID as Wg.
+    At EQ PUB every Ref above must resolve to its own Saved input. For a plain
+    predecessor save wait use Guard('saved', ctx), not generation_context.
+    The finite wire checks identities/retention, not F-a mathematical validity;
+    model.*, PATH-EQ-INPUT and these slot names are name-only examples.
     """
     unit: str
     obligation_id: str
@@ -782,7 +900,7 @@ def terminal_plans(descriptors: tuple[Descriptor, ...]) -> tuple[AllowedPlan, ..
     for d in descriptors:
         if d.stage == "MeasureSegment":
             continue
-        oid = {"Wr": "O-05", "Wp": "O-07", "Wv": "O-09.a", "Ep": "O-10", "D": "O-11", "Ee": "O-12"}[d.stage]
+        oid = {"Wg": "O-G", "Wr": "O-05", "Wp": "O-07", "Wv": "O-09.a", "Ep": "O-10", "D": "O-11", "Ee": "O-12"}[d.stage]
         work, first = d.work_id, Source("first_receipt", d.work_id)
         t = RecordPlan("T", Contract("sui.fb.work_terminal", "1"), "Event",
                        obj(work=work, request=d.request, stage=d.stage,
@@ -1334,6 +1452,20 @@ class Slot:
 
 
 @dataclass(frozen=True, slots=True)
+class GenerationContinuation:
+    """M3: reconstructible custody before EQ; pG keeps the original run key.
+
+    A-GENERATION-WIRE names the container only. Missing input witnesses and pG
+    survive later EQ publication; D3 supplies no purpose-achievement operation.
+    """
+    descriptor: Descriptor
+    candidate: PlanRef
+    evaluation: PlanRef
+    purpose: PurposePart
+    shortages: tuple[Excuse, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class Unit:
     id: str
     obligation_id: str
@@ -1341,6 +1473,7 @@ class Unit:
     slots: tuple[Slot, ...]
     works: tuple[str, ...]
     issued_view: frozenset[Point]
+    generation: GenerationContinuation | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1679,6 +1812,17 @@ def _plan_refs(value: object) -> frozenset[PlanRef]:
     return frozenset()
 
 
+def _generation_refs(value: object) -> frozenset[Ref]:
+    """Typed EQ input values only; strings are never guessed to be Points."""
+    if isinstance(value, (Point, PlanRef)):
+        return frozenset((value,))
+    if isinstance(value, Object):
+        return frozenset().union(*(_generation_refs(v) for _, v in value.items))
+    if isinstance(value, (tuple, frozenset)):
+        return frozenset().union(*(_generation_refs(v) for v in value))
+    return frozenset()
+
+
 def _descriptor_refs(d: Descriptor) -> frozenset[Ref]:
     # INV-5.b: ALL declared needed Points, not just the request/next-stage Point.
     return (d.required | d.input_points | d.permissions | d.numerical_view.points
@@ -1689,7 +1833,7 @@ def _descriptor_refs(d: Descriptor) -> frozenset[Ref]:
 def _resolved_numerical(core: Core, d: Descriptor) -> NumericalView:
     return NumericalView(frozenset(_resolve(core, p) for p in d.numerical_view.points),
                          tuple(_resolve(core, p) for p in d.numerical_view.application_order),
-                         d.numerical_view.context)
+                         _env_value(core, d.numerical_view.context))
 
 
 def _receipt_saved(core: Core, receipt: Receipt) -> bool:
@@ -1718,10 +1862,13 @@ class FirstEnd:
 
 def _first_end(view: View, work: str) -> FirstEnd:
     # EndKnown / INV-15.a / paper 794-802,1187. Receipt storage may overtake.
+    row = _work(view.core.p, work)
+    notice_kind = "DrawReturned" if row.descriptor.stage == "D" else "WorkFinished"
     candidates = []
     for receipt in view.core.p.receipts:
         generation = _generation_for(view.core, receipt.envelope)
-        if generation is not None and generation.work == work:
+        if (generation is not None and generation.work == work
+                and receipt.envelope.event.kind == notice_kind):
             candidates.append((receipt.envelope.r.rank, receipt.envelope.receipt_seq, receipt, generation))
     if not candidates:
         raise Disabled("await report")
@@ -1735,13 +1882,98 @@ def _first_end(view: View, work: str) -> FirstEnd:
         raise Disabled("earlier Post not accepted")
     if not _receipt_saved(view.core, receipt):
         raise Disabled("first terminal receipt not saved")
-    row = _work(view.core.p, work)
     if (_resolve(view.core, row.descriptor.request) != generation.request
             or row.descriptor.stage != generation.stage):
         raise Disabled("generation does not correspond to work request/stage")
     slot = receipt.unit.slots[0]
     assert slot.prepared is not None
     return FirstEnd(envelope, slot.prepared.point, generation)
+
+
+def _generation_route(e0: E0, work: str) -> tuple[AllowedPlan, AllowedPlan]:
+    """A-GENERATION-WIRE: links are explicit E0 guards, never slot-name guesses."""
+    cg = tuple(p for p in e0.plans if Guard("generation", work) in p.guards)
+    eq = tuple(p for p in e0.plans if any(g.kind == "evaluation" and g.key == work for g in p.guards))
+    if len(cg) != 1 or len(eq) != 1 or len(cg[0].records) != 1 or len(eq[0].records) != 1:
+        raise MissingContract("Wg requires one declared CG and EQ route")
+    candidate = PlanRef(cg[0].unit, cg[0].records[0].slot)
+    if (Guard("evaluation", work, candidate) not in eq[0].guards
+            or cg[0].obligation_id != "O-G" or eq[0].obligation_id != "O-G" or cg[0].works
+            or cg[0].records[0].contract != Contract("candidate_declaration", "1")
+            or cg[0].records[0].content != Source("candidate_declaration", work)
+            or eq[0].records[0].contract != Contract("sui.fb.evaluation_request", "1")
+            or len(eq[0].works) != 1 or eq[0].works[0].stage != "Ep"
+            or eq[0].works[0].request != PlanRef(eq[0].unit, eq[0].records[0].slot)):
+        raise MissingContract("undeclared generation/evaluation correspondence")
+    return cg[0], eq[0]
+
+
+def candidate_request_content(d: Descriptor) -> Object:
+    """M3 / A-GENERATION-WIRE: Qgen's symbolic full fixed-input field names.
+
+    request itself is the record being named; no circular self Point is stored.
+    PlanRefs in this declaration need ordinary TypedReference paths at prepare.
+    """
+    return obj(process=d.process, trigger=d.trigger, reader=d.reader, purpose=d.purpose,
+               stage_slot=d.stage_slot, method=d.method, output_contract=d.output_contract,
+               args=d.args, input_points=_sorted(tuple(d.input_points)),
+               numerical_view=obj(points=_sorted(tuple(d.numerical_view.points)),
+                                  application_order=d.numerical_view.application_order,
+                                  context=d.numerical_view.context),
+               allocation=d.allocation, need=d.need, permissions=_sorted(tuple(d.permissions)))
+
+
+def _generation_candidate(view: View, work: str) -> Object:
+    """M3: compare whole output to the fixed request/input; no success flag oracle."""
+    d = _work(view.core.p, work).descriptor
+    first = _first_end(view, work)
+    q = _find(view.core.e, lambda e: e.point == first.generation.request)
+    if (d.stage != "Wg" or q is None
+            or q.header.record.contract != Contract("sui.fb.candidate_request", "1")
+            or q.header.record.content != _env_value(view.core, candidate_request_content(d))):
+        raise Disabled("generation request does not match full descriptor")
+    out = first.generation.outcome
+    if out.kind != OutcomeKind.RETURNED or not isinstance(out.content, Object) or out.content.get("variant") != "Candidates":
+        raise Disabled("no nonempty generation reply")
+    c = out.content.get("declaration")
+    if not isinstance(c, Object) or set(k for k, _ in c.items) != {"model", "input_order", "measure", "generation", "continuation"}:
+        raise Disabled("incomplete candidate declaration")
+    g, order = c.get("generation"), c.get("input_order")
+    if (not isinstance(g, Object) or not isinstance(order, tuple) or not order
+            or any(not isinstance(v, str) for v in order) or len(set(order)) != len(order)
+            or not isinstance(c.get("continuation"), Object)
+            or set(k for k, _ in g.items) != {"generator", "args", "basis", "draws"}):
+        raise Disabled("incomplete/nonempty candidate generation")
+    if d.args.get("draws") != () or g.get("draws") != ():
+        raise MissingContract("R10 generation draws are not connected")
+    after = c.get("continuation").get("after")
+    if (set(k for k, _ in c.get("continuation").items) != {"after"} or not isinstance(after, tuple)
+            or any(not isinstance(a, Object) or set(k for k, _ in a.items) != {"candidate", "policy"}
+                   or a.get("candidate") not in order for a in after)):
+        raise Disabled("incomplete candidate continuation")
+    model = d.numerical_view.context.get("model")
+    if not isinstance(model, (Point, PlanRef)):
+        raise MissingContract("Wg requires an explicit model input")
+    basis = d.numerical_view.context.get("generation_basis")
+    if not isinstance(basis, tuple) or any(not isinstance(p, (Point, PlanRef)) for p in basis):
+        raise MissingContract("Wg requires an explicit generation basis correspondence")
+    basis_points = tuple(_resolve(view.core, p) for p in basis)
+    if not frozenset(basis_points) <= frozenset(_resolve(view.core, p) for p in _descriptor_refs(d)):
+        raise MissingContract("generation basis is outside the fixed input read")
+    if (d.output_contract != Contract("sui.fb.candidate_generation", "1")
+            or g.get("generator") != d.method or g.get("args") != _env_value(view.core, d.args)
+            or g.get("basis") != basis_points
+            or c.get("model") != _resolve(view.core, model)
+            or not isinstance(first.generation.started, Reading)
+            or not isinstance(first.generation.finished, Reading)
+            or first.generation.started.run != view.core.h.run
+            or first.generation.finished.run != view.core.h.run
+            or first.generation.started.rank > first.generation.finished.rank):
+        raise Disabled("generation output/input/clock correspondence differs")
+    refs = _descriptor_refs(d)
+    if not _permit(view, d.use_keys | {("work", work)}, refs):
+        raise Disabled("generation use conflict")
+    return c
 
 
 @dataclass(frozen=True, slots=True)
@@ -1919,7 +2151,7 @@ def declare_observation_e0(e0: E0) -> ObservationE0:
                                                  (target,), Owner("P.units", plan.unit)))
         for work in plan.works:
             oid = {"MeasureSegment": "O-04", "Wr": "O-05", "Wp": "O-07", "Wv": "O-09.a",
-                   "Ep": "O-10", "D": "O-11", "Ee": "O-12"}[work.stage]
+                   "Wg": "O-G", "Ep": "O-10", "D": "O-11", "Ee": "O-12"}[work.stage]
             target = WorkKey(work.work_id)
             identity = ("work", work.work_id)
             for obligation, kind in ((oid, "run"), ("O-14", "stop")):
@@ -1931,6 +2163,13 @@ def declare_observation_e0(e0: E0) -> ObservationE0:
                     "EndKnown", target, (terminal,), Owner("P.work", work.work_id)))
                 completions.append(CompletionBinding(CompletionKey(oid, identity, "handle", target),
                     "EndKnown", target, (), Owner("P.work", work.work_id)))
+            if work.stage == "Wg":
+                cg, eq = _generation_route(e0, work.work_id)
+                for successor, trigger, source in ((cg, "EndKnown", target), (eq, "Publish", UnitKey(cg.unit))):
+                    slot = SlotKey(successor.unit, successor.records[0].slot)
+                    completions.append(CompletionBinding(
+                        CompletionKey("O-G", identity, "issue", slot), trigger, source,
+                        (slot,), Owner("P.work", work.work_id) if trigger == "EndKnown" else Owner("P.units", cg.unit)))
     unknowns = tuple(HostUnknownBinding(n.work, "host:" + n.id,
                                        d.request, d.stage, n.basis)
                      for n in e0.unknown_notices for d in descriptors if d.work_id == n.work)
@@ -2022,8 +2261,51 @@ class CorrectWindow:
             if declaration.get("initial") != self.e0.initial:
                 raise Disabled("Boot declaration differs from fixed initial declaration")
         for guard in plan.guards:
-            if guard.kind == "saved":
+            if guard.kind in ("saved", "generation_context"):
                 _resolve(view.core, guard.key)
+            elif guard.kind == "generation":
+                cg, _ = _generation_route(self.e0, str(guard.key))
+                if plan != cg:
+                    raise Disabled("different CG route")
+                _generation_candidate(view, str(guard.key))
+            elif guard.kind == "evaluation":
+                cg, eq = _generation_route(self.e0, str(guard.key))
+                if plan != eq:
+                    raise Disabled("different EQ route")
+                candidate_point = _resolve(view.core, guard.value)
+                candidate = _find(view.core.e, lambda e: e.point == candidate_point)
+                if candidate.header.record.content != _generation_candidate(view, str(guard.key)):
+                    raise Disabled("saved CG differs from first generation")
+                content = _env_value(view.core, self._source(view, eq.records[0].content))
+                d = _work(view.core.p, str(guard.key)).descriptor
+                if (not isinstance(content, Object) or {k for k, _ in content.items} !=
+                        {"candidates", "reader", "model", "preferences", "context", "o", "j"}
+                        or content.get("candidates") != candidate_point
+                        or content.get("reader") != _resolve(view.core, d.reader)
+                        or any(content.get(k) is None for k in ("model", "preferences", "context", "o", "j"))):
+                    raise Disabled("incomplete evaluation request/context")
+                if any(not isinstance(content.get(k), Point) for k in ("candidates", "reader", "model", "context")):
+                    raise Disabled("evaluation input must be a typed reference")
+                for key in ("preferences", "o", "j"):
+                    value = content.get(key)
+                    if (not isinstance(value, Point) and
+                            (not isinstance(value, tuple) or any(not isinstance(p, Point) for p in value)
+                             or key == "preferences" and not value)):
+                        raise Disabled("evaluation evidence binding type differs")
+                refs = frozenset(_resolve(view.core, r) for r in _generation_refs(content))
+                ep = eq.works[0]
+                ep_inputs = frozenset(_resolve(view.core, r) for r in _descriptor_refs(ep) if r != ep.request)
+                numerical = _resolved_numerical(view.core, ep)
+                input_points = frozenset(_resolve(view.core, r) for r in ep.input_points) | numerical.points
+                evaluation_points = _generation_refs(obj(**{k: v for k, v in content.items if k != "reader"}))
+                if (not refs <= ep_inputs or ep.purpose != d.purpose or ep.reader != d.reader
+                        or not evaluation_points <= input_points
+                        or not isinstance(numerical.context, Object)
+                        or any(content.get(k) != numerical.context.get(k) for k in ("model", "context"))
+                        or any(content.get(k) != v for k, v in numerical.context.items if k in ("preferences", "o", "j"))):
+                    raise Disabled("EQ inputs differ from fixed Ep inputs")
+                if not _permit(view, eq.use_keys | {("work", str(guard.key))}, refs | {candidate_point}):
+                    raise Disabled("evaluation use conflict")
             elif guard.kind == "initial":
                 if self.e0.initial is None:
                     raise Disabled("NoInitial")
@@ -2062,6 +2344,8 @@ class CorrectWindow:
                 return generation
             if value.kind == "outcome":
                 return _first_end(view, value.key).generation.outcome
+            if value.kind == "candidate_declaration":
+                return _generation_candidate(view, value.key)
             if value.kind in ("outcome_kind", "outcome_content", "terminal_basis", "terminal_view"):
                 first = _first_end(view, value.key)
                 if value.kind == "outcome_kind":
@@ -2166,8 +2450,23 @@ class CorrectWindow:
         if self.e0.initial is None and any(w.stage != "MeasureSegment" for w in plan.works):
             raise Disabled("NoInitial cannot issue bootstrap computation")
         records = tuple(self._publication_record(view, r) for r in plan.records)
+        continuation = None
+        for guard in plan.guards:
+            if guard.kind not in ("generation", "evaluation"):
+                continue
+            d = _work(p, str(guard.key)).descriptor
+            cg, eq = _generation_route(self.e0, d.work_id)
+            candidate, evaluation = PlanRef(cg.unit, cg.records[0].slot), PlanRef(eq.unit, eq.records[0].slot)
+            origin = CompletionKey("O-G", ("work", d.work_id), "run", WorkKey(d.work_id))
+            purpose = PurposePart(origin, (d.purpose, d.process, d.reader, d.request, d.stage_slot), d.request)
+            continuation = GenerationContinuation(d, candidate, evaluation, purpose, _work(p, d.work_id).purposes)
+            if guard.kind == "evaluation":
+                # EQ's usable inputs are fixed NOW, after CG, not backfilled into Qgen.
+                records = tuple(replace(r, content=_env_value(view.core, r.content),
+                    references=tuple(replace(t, ref=_env_value(view.core, t.ref)) for t in r.references),
+                    parents=frozenset(_env_value(view.core, ref) for ref in r.parents)) for r in records)
         unit = Unit(plan.unit, plan.obligation_id, plan.key, tuple(Slot(r) for r in records),
-                    tuple(w.work_id for w in plan.works), _visible(view.core))
+                    tuple(w.work_id for w in plan.works), _visible(view.core), continuation)
         new_p = replace(p, units=p.units + (unit,),
                         work=p.work + tuple(WorkRow(w) for w in plan.works))
         # EU is observed by Environment, not written here.
@@ -2223,9 +2522,11 @@ class CorrectWindow:
                                and r.use == ref.use and r.role == ref.role)
             if conversion is None:
                 raise MissingContract("E0-01/03: exact record/field/use/role conversion is undeclared")
-            if _path(body, ref.path) != ref.ref:
-                raise Disabled("reference path differs from fixed plan")
             point = _resolve(view.core, ref.ref)
+            # Source expansion may already have materialized this body field.
+            # Compare against the declared target; never infer it from the body.
+            if _path(body, ref.path) not in (ref.ref, point):
+                raise Disabled("reference path differs from fixed plan")
             body = _put_path(body, ref.path, point)
             resolved.append(replace(ref, ref=point))
         if not raw and _plan_refs(body):
@@ -2360,6 +2661,18 @@ class CorrectWindow:
             raise MissingContract(",".join(row.descriptor.semantic_limits))
         if row.descriptor.method == Contract("finite_update", "2"):
             raise MissingContract("PATH-QOBS: bootstrap finite_update/2 numerical projection")
+        if row.descriptor.stage == "Wg":
+            d = row.descriptor
+            if d.args.get("draws") != ():
+                raise MissingContract("R10 generation draws are not connected")
+            request = _resolve(view.core, d.request)
+            q = _find(view.core.e, lambda e: e.point == request)
+            if (q.header.record.contract != Contract("sui.fb.candidate_request", "1")
+                    or q.header.record.content != _env_value(view.core, candidate_request_content(d))):
+                raise Disabled("generation request does not match full descriptor")
+        for unit in view.core.p.units:
+            if unit.generation is not None and row.descriptor.work_id in unit.works:
+                _generation_candidate(view, unit.generation.descriptor.work_id)
         if row.descriptor.stage == "Wv":
             args = row.descriptor.args
             if (not isinstance(args.get("target"), UpdateTarget)
@@ -2819,6 +3132,8 @@ class Environment:
         if binding.trigger == "EndKnown":
             try:
                 _first_end(View(core, state.controls, state.evidence), source.work)
+                if binding.key.obligation == "O-G" and binding.key.kind == "issue":
+                    _generation_candidate(View(core, state.controls, state.evidence), source.work)
             except Disabled:
                 return None
             return Owner("P.work", source.work)
@@ -2851,6 +3166,62 @@ class Environment:
                 return Owner("P.receipts", receipt.envelope.key) if receipt else Owner("P.units", unit.id)
         return None  # no invented carrier for an unrepresented seed/foreign Point
 
+    def _generation_custody(self, state: State) -> State:
+        """M3: retain concrete pG witnesses; never infer a purpose from a wait bit.
+
+        Ordinary receipt/CG save waits do not create pG. Explicit context-use
+        shortages, Conflict and non-success do. Existing pG is never discharged.
+        """
+        p = state.core.p
+        view = View(state.core, state.controls, state.evidence)
+        for row in p.work:
+            d = row.descriptor
+            if d.stage != "Wg":
+                continue
+            try:
+                first = _first_end(view, d.work_id)
+            except Disabled:
+                continue
+            cg, eq = _generation_route(self.e0, d.work_id)
+            origin = CompletionKey("O-G", ("work", d.work_id), "run", WorkKey(d.work_id))
+            purpose = PurposePart(origin, (d.purpose, d.process, d.reader, d.request, d.stage_slot), d.request)
+            reasons = []
+            try:
+                _generation_candidate(view, d.work_id)
+            except Disabled as error:
+                reasons.append((str(error), first.generation))
+            # 1956: a declared CG/EQ use shortage seen after EndKnown enters the
+            # pG branch then, even if the context is saved before CG PUB.
+            for guard in cg.guards + eq.guards:
+                if guard.kind == "generation_context":
+                    try:
+                        _resolve(state.core, guard.key)
+                    except Disabled:
+                        reasons.append(("evaluation context unavailable", guard.key))
+            if any(e.tag == "Publish" and e.key == UnitKey(cg.unit)
+                   for e in state.evidence.observation_trace.events):
+                eq_content, ep = eq.records[0].content, eq.works[0]
+                # M3: an unconfirmed predecessor Point is a save wait, not pG.
+                if (eq_content.get("model") != ep.numerical_view.context.get("model")
+                        or ep.reader != d.reader or ep.purpose != d.purpose):
+                    reasons.append(("evaluation input correspondence differs", eq_content))
+                if eq.semantic_limits:
+                    reasons.append(("evaluation contract unavailable", eq.semantic_limits))
+                if not _permit(view, eq.use_keys | {("work", d.work_id)}):
+                    reasons.append(("evaluation use conflict", eq.use_keys))
+            excuses = tuple(Excuse("O-G", purpose, reason, witness, _visible(state.core), ("pG",))
+                            for reason, witness in reasons)
+            # Keep the first witness for each reason/target; repeated drains do
+            # not grow custody merely because the visible root has grown.
+            additions = tuple(e for e in excuses if not any(
+                (old.reason_id, old.witness) == (e.reason_id, e.witness) for old in row.purposes))
+            if additions:
+                p = _with_work(p, replace(row, purposes=row.purposes + additions))
+        units = tuple(replace(u, generation=replace(u.generation,
+                      shortages=_work(p, u.generation.descriptor.work_id).purposes))
+                      if u.generation is not None else u for u in p.units)
+        return replace(state, core=replace(state.core, p=replace(p, units=units)))
+
     def _refresh_conditions(self, state: State) -> State:
         # C-O01..14 instances: all five kinds are retained, with explicit targets.
         # The independent occurrence journal prevents repairs hiding P deletions.
@@ -2864,6 +3235,7 @@ class Environment:
                 births |= {binding.key}
                 if not any(c.key == binding.key for c in rows):
                     rows += (ConditionCustody(binding.key, owner, frozenset((binding.key,))),)
+        state = self._generation_custody(state)
         changed = []
         for row in rows:
             key, reached = row.key, False
@@ -2877,6 +3249,20 @@ class Environment:
             elif key.kind == "issue" and isinstance(key.target, SlotKey):
                 reached = any(u.id == key.target.unit and any(s.plan.slot == key.target.slot for s in u.slots)
                               for u in state.core.p.units)
+                if key.obligation == "O-G":
+                    plan = _find(self.e0.plans, lambda p: p.unit == key.target.unit)
+                    unit = _find(state.core.p.units, lambda u: u.id == key.target.unit)
+                    published = any(e.tag == "Publish" and e.key == UnitKey(key.target.unit)
+                                    for e in state.evidence.observation_trace.events)
+                    reached = reached and published and unit.generation is not None
+                    if reached:
+                        reached = all(any(c.key == CompletionKey("O-10", ("work", d.work_id), "run", WorkKey(d.work_id))
+                                          for c in rows) for d in plan.works)
+                        if not plan.works:  # CG must simultaneously own save[CG] and issue[EQ].
+                            reached = all(any(c.key == required for c in rows) for required in (
+                                CompletionKey("O-G", plan.key, "save", key.target),
+                                CompletionKey("O-G", key.obligation_key, "issue",
+                                              SlotKey(unit.generation.evaluation.unit, unit.generation.evaluation.slot))))
             elif key.kind == "run" and isinstance(key.target, WorkKey):
                 try:
                     _first_end(View(state.core, state.controls, state.evidence), key.target.work)
@@ -2886,6 +3272,15 @@ class Environment:
             elif key.kind == "stop" and isinstance(key.target, WorkKey):
                 reached = (any(f.kind == "Stop" and f.key == key.target.work for f in state.evidence.ew.events)
                            and not _actual_held(state.evidence.ew, key.target.work))
+            elif key.obligation == "O-G" and key.kind == "handle":
+                work = _work(state.core.p, key.target.work)
+                successor = _find(state.core.p.units, lambda u: u.generation is not None
+                                  and u.generation.descriptor.work_id == key.target.work)
+                if successor is not None:
+                    row = replace(row, owner=Owner("P.units", successor.id))
+                    reached = True  # Transfer to the retained generation continuation.
+                else:
+                    reached = bool(work.purposes)  # Same-owner acceptance of pG; no Direct(pG).
             # handle conclusions require their branch semantics; handoff alone
             # NEVER clears them. Unsupported meanings remain explicitly unmet.
             changed.append(replace(row, unmet=frozenset()) if reached and row.unmet else row)

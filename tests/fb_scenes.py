@@ -1,4 +1,4 @@
-"""Paper-authored SC inventory and finite E0 declarations (v0.12).
+"""Paper-authored SC inventory and finite E0 declarations (v0.18; MG-04).
 
 Only public types/entry points are used. No window/checker implementation is
 imported as an oracle. Expectations are frozen before Environment is created.
@@ -11,6 +11,10 @@ Codex session: 01a13663-40de-7180-9b8c-82a60fe24c29
 Record: C:/Users/you11/.codex/sessions/2026/10/14/rollout-2026-10-14T02-50-36-01a13663-40de-7180-9b8c-82a60fe24c29.jsonl
 Reused knowledge: historical missing dependencies must not be added on replay;
 applicable as a constraint, not new validation. No commit; no external sources.
+
+MG-04 / 2026-10-17: see MG04_SESSION_LOG at the end of this file for the
+current 47-row / 51-condition / 239-branch inventory and individual checks.
+Short and heavy command routes are in test_fb_scenes.py's module docstring.
 """
 from __future__ import annotations
 
@@ -20,7 +24,7 @@ import re
 
 import fb_check as check
 from fb_machine import (
-    Action, AllowedPlan, Budget, Contract, CorrectWindow, Cut, Descriptor, E0,
+    Action, AllowedPlan, Budget, Contract, CorrectWindow, Cut, Descriptor, E0, MissingContract,
     Environment, Event, Guard, Interval, IntervalRequest, NumericalView,
     Outcome, OutcomeKind, PlanRef, Posting, Program, RecordPlan, Scenario,
     Source, TypedReference, UnknownNotice, declare_observation_e0, obj,
@@ -29,7 +33,7 @@ from fb_machine import (
 )
 
 PAPER_PATH = "specs/関所F_Fb_今の約束.md"
-PAPER_VERSION = "v0.12"
+PAPER_VERSION = "v0.18"
 PAPER_ROWS = json.loads(r'''
 [
     {
@@ -1400,9 +1404,15 @@ class Scene:
     scope_reason: str = "紙の構造を模型で確かめる。"
     implementation_scope: tuple[str, ...] = ()
     parts: tuple[Scene, ...] = ()
+    row_ids: tuple[str, ...] = ()
+    script: tuple[tuple, ...] = ()
+    expected_missing_contract: str = ""
+    publication_exchange: str = ""
 
     @property
     def applicable_rows(self):
+        if self.row_ids:
+            return self.row_ids
         overrides = {
             "SC-04-DESC": ("INV-3.b",), "SC-04-RELEASE": ("INV-3.c",),
             "SC-03-RETRY": ("INV-4.b",), "SC-03-FIRST": ("INV-4.c",),
@@ -1421,7 +1431,7 @@ class Scene:
         if self.paper_id.startswith("SC-19-"):
             return ("L-RECEIPT",) if "-T" in self.paper_id else ("L-DERIVE",)
         key = self.paper_id.removeprefix("SC-")
-        rows = tuple(row for row, n in CONDITION_TABLE.items()
+        rows = tuple(row for row, n in LEGACY_CONDITION_TABLE.items()
                      if key in re.findall(r"(?<!\d)(\d{2}[ab]?)(?!\d)", ROWS_BY_LINE[n][1]))
         if self.paper_id == "SC-15" and "-tie-" in self.id:
             # Paper 794-801/944/1366: Post/Accept order, ownership and saving
@@ -1855,7 +1865,7 @@ def connection_snapshot(state, actions):
         "records": [(e.point.cid, e.header.record.contract.name, e.header.record.name) for e in state.core.e],
         "work": [{"id": w.descriptor.work_id, "stage": w.descriptor.stage, "required": repr(w.descriptor.required),
                   "phase": w.phase, "held": w.held, "stopped": w.stopped, "released": w.released,
-                  "token": w.token, "first": w.first, "knowledge": repr(w.knowledge)} for w in state.core.p.work],
+                  "token": w.token, "first": w.first, "knowledge": repr(w.knowledge), "purposes": repr(w.purposes)} for w in state.core.p.work],
         "unmet": [repr(c) for c in state.core.p.conditions if c.unmet],
         "EH": {"originals": [(e.key, e.source, e.event.kind, e.receipt_seq, repr(e.r)) for e in state.evidence.eh.originals],
                "acknowledgements": state.evidence.eh.acknowledgements},
@@ -1878,6 +1888,8 @@ def instantiate(scene):
     """
     if scene.e0 is None:
         raise ValueError(scene.blocker)
+    if scene.prefix == "mg04":
+        return instantiate_mg04(scene)
     if scene.prefix.startswith("v2:"):
         return instantiate_v2(scene)
     if not scene.prefix:
@@ -2018,7 +2030,7 @@ def update_structure_e0():
 
 def instantiate_v2(scene):
     """Public-operation prefix. No fabricated ledger/history or expected CID."""
-    from fb_machine import Edge, View
+    from fb_machine import Edge, View, MissingContract
     env, window = Environment(scene.e0), CorrectWindow(scene.e0)
     state = env.initial()
     states, edges, enabled, actions = [state], [], [], []
@@ -2728,4 +2740,843 @@ def fourth_round_scenes(original):
     return tuple(result)
 
 
-SCENES = fourth_round_scenes(third_round_scenes(second_round_scenes(make_scenes())))
+LEGACY_CONDITION_TABLE = dict(CONDITION_TABLE)
+LEGACY_SCENES = fourth_round_scenes(third_round_scenes(second_round_scenes(make_scenes())))
+
+# The embedded v0.12 row keys remain stable for the historical 193 branches.
+# Current source locations are separate: a historical line is not a v0.18 line.
+CURRENT_ROW_LINES = dict(zip(LEGACY_CONDITION_TABLE, range(1770, 1815)))
+CONDITION_TABLE = {**LEGACY_CONDITION_TABLE, "INV-2.g": 1961, "INV-16.c": 1961}
+CURRENT_ROW_LINES.update({"INV-2.g": 1961, "INV-16.c": 1961})
+NEW_ROW_REQUIREMENTS = {
+    "INV-2.g": "生成から評価への所有、issue[EQ]とpGの実保持 (1937-1959)",
+    "INV-16.c": "Qgen・実生成・CGの全内容・別に固定したEQの対応 (1930-1935)",
+}
+GENERATION_CONDITIONS = {
+    "C-OG.run[Wg]": 1941, "C-OG.save[T]": 1942,
+    "C-OG.handle[Wg]": 1943, "C-OG.issue[CG]": 1944,
+    "C-OG.save[CG]": 1945, "C-OG.issue[EQ]": 1946, "C-OG.save[EQ]": 1947,
+}
+# Authored from the paper's C-O table, not from the checker or window.
+LEGACY_COMPLETION_TYPES = (
+    "C-O01.save[receipt_slot]", "C-O02.issue[initial]", "C-O02.save[slot]",
+    "C-O03.issue[Q]", "C-O03.save[Q]", "C-O04.save[k]",
+    "C-O04.run[MeasureSegment]", "C-O04.handle[cells]", "C-O05.run[Wr]",
+    "C-O05.save[T]", "C-O05.handle[Wr]", "C-O06.issue[R]", "C-O06.save[R]",
+    "C-O07.run[Wp]", "C-O07.save[T]", "C-O07.handle[Wp]", "C-O07.issue[P,Cq]",
+    "C-O07.save[P]", "C-O07.save[Cq]", "C-O08.handle[intent]", "C-O08.issue[G]",
+    "C-O08.save[G]", "C-O09a.run[Wv]", "C-O09a.save[T]", "C-O09a.save[V]",
+    "C-O09b.handle[purpose]", "C-O09b.save[slot]", "C-O10.run[Ep]",
+    "C-O10.save[T]", "C-O10.issue[artifact,PR]", "C-O10.save[slot]",
+    "C-O11.run[D]", "C-O11.save[T]", "C-O11.issue[DF/DU]", "C-O11.save[slot]",
+    "C-O12.run[Ee]", "C-O12.save[T]", "C-O12.handle[end]",
+    "C-O12.issue[artifact,EV]", "C-O12.issue[S]", "C-O12.save[slot]",
+    "C-O13.handle[report/key/root]", "C-O13.save[slot]", "C-O14.stop[w]",
+)
+COMPLETION_TYPES = LEGACY_COMPLETION_TYPES + tuple(GENERATION_CONDITIONS)
+MG04_ASSUMPTIONS = LIFECYCLE_ASSUMPTIONS + (
+    "A-GENERATION-WIRE (名前だけ): 公開契約のQgen/CG/EQ・variant・guard名を使う。紙1930-1962。",
+    "A-MG04-FINITE (意味の制限): 2個の記号候補と不透明な測度を持つ有限入力。"
+    "生成器/測度のF-a数学的合法性、全順序、実LLMは未検証。紙931/1963。",
+    "A-EQ-WIRE (名前だけ): 公開EQ契約の参照配線。有限のo/jは保存済みreaderへの"
+    "参照を明示し、Epのmodel/contextと対応させる。実F-aの時計/数学の合法性は"
+    "A-INITIAL-WIREの範囲外。旧A-EQ-WIRE-UNCONFIRMEDは入力誤りとして置換。",
+)
+MG04_ROWS = ("INV-1.a", "INV-2.a", "INV-2.b", "INV-2.c", "INV-2.e", "INV-2.f",
+    "INV-2.g", "INV-3.a", "INV-3.b", "INV-3.c", "INV-4.a", "INV-4.b", "INV-4.c",
+    "INV-5.a", "INV-5.b", "INV-6.b", "INV-6.c", "INV-7.a", "INV-7.b", "INV-8.a",
+    "INV-10.a", "INV-10.b", "INV-11.a", "INV-11.b", "INV-13.a", "INV-13.b",
+    "INV-15.a", "INV-16.c")
+
+
+def generation_e0(*, branch="success", swap="", context="ready", external=False,
+                  capacity=1, draws=(), late="", stop=False, budget=Budget()):
+    """M3, paper 1930-1963: independent inputs, full return, and recipes.
+
+    All values precede Environment creation. No observed output is fed into E0.
+    Symbolic F-a content is a structural boundary, never certified mathematics.
+    """
+    from fb_machine import FieldRole, Object
+    base = lifecycle_e0(stop=stop, capacity=capacity)
+    process, reader, qgen = (PlanRef("initial", s) for s in ("process", "reader", "q"))
+    cg, eq = PlanRef("candidate", "cg"), PlanRef("evaluation", "eq")
+    method = Contract("model.generator", "1")
+    args = obj(draws=draws, mode="finite")
+    view = NumericalView(frozenset((reader,)), (reader,), obj(model=reader, generation_basis=(reader,)))
+    wg = Descriptor("wg", process, reader, "generate-and-compare", "generation", reader,
+        method, Contract("sui.fb.candidate_generation", "1"), args, frozenset((reader,)),
+        view, "bootstrap", frozenset((process,)), qgen, "Wg", (("think", 1),),
+        frozenset((process, reader, qgen)))
+    qcontent = obj(process=process, trigger=reader, reader=reader, purpose=wg.purpose,
+        stage_slot=wg.stage_slot, method=method, output_contract=wg.output_contract,
+        args=args, input_points=(reader,), numerical_view=obj(points=(reader,),
+        application_order=(reader,), context=view.context), allocation=wg.allocation,
+        need=wg.need, permissions=(process,))
+    declaration = obj(model=reader, input_order=("a", "b"), measure=obj(a=1, b=1),
+        generation=obj(generator=method, args=args, basis=(reader,), draws=()),
+        continuation=obj(after=(obj(candidate="a", policy=None), obj(candidate="b", policy=None))))
+    # Exchange precisely ONE field of the actual output; the request is fixed.
+    if swap == "generator":
+        declaration = _mg_object_replace(declaration, generation=_mg_object_replace(
+            declaration.get("generation"), generator=Contract("model.other_generator", "1")))
+    elif swap == "input-view":
+        declaration = _mg_object_replace(declaration, generation=_mg_object_replace(
+            declaration.get("generation"), basis=(process,)))
+    elif swap == "candidate-order":
+        declaration = _mg_object_replace(declaration, input_order=("b", "a"))
+    elif swap == "measure":
+        declaration = _mg_object_replace(declaration, measure=obj(a=2, b=1))
+    returned = Outcome(OutcomeKind.RETURNED, obj(variant="Candidates", declaration=declaration))
+    if branch == "no-candidates":
+        returned = Outcome(OutcomeKind.RETURNED, obj(variant="NoCandidates", basis=obj(reason="empty")))
+    elif branch == "failure":
+        returned = Outcome(OutcomeKind.FAILURE, obj(reason="generator-failed"))
+    elif branch == "unknown":
+        returned = Outcome(OutcomeKind.UNKNOWN, obj(reason="generator-result-unavailable"))
+    replies = () if branch == "hung" else (returned,)
+    if late:
+        success = Outcome(OutcomeKind.RETURNED, obj(variant="Candidates", declaration=declaration))
+        other = Outcome(OutcomeKind.RETURNED, obj(variant="Candidates",
+            declaration=_mg_object_replace(declaration, measure=obj(a=3, b=1))))
+        replies += (success, other) if late == "values" else (success,) if late == "value" else (other,)
+    evaluation_input = PlanRef("evaluation-context", "context") if context != "ready" else reader
+    # Explicit finite evidence bindings, not integer clock readings. These
+    # aliases test the symbolic Ref wire, not F-a observation/judgment clocks.
+    observation_evidence, judgment_evidence = reader, reader
+    eqcontent = obj(candidates=cg, reader=reader, model=reader, preferences=(reader,),
+                    context=evaluation_input, o=observation_evidence, j=judgment_evidence)
+    ep = Descriptor("ep", process, cg, "generate-and-compare", "prepare", reader,
+        Contract("model.prepare", "1"), Contract("model.artifact", "1"), eqcontent,
+        frozenset((reader, cg, evaluation_input)),
+        NumericalView(frozenset((reader, cg, evaluation_input)), (cg, reader),
+            obj(model=reader, context=evaluation_input, preferences=(reader,),
+                o=observation_evidence, j=judgment_evidence)),
+        "bootstrap", frozenset((process,)), eq, "Ep", (("think", 1),),
+        frozenset((process, reader, cg, evaluation_input, eq)))
+    roles = []
+
+    def record(slot, contract, content, reference_content=None):
+        refs = []
+
+        def visit(value, path):
+            if isinstance(value, PlanRef):
+                # Exact paths are declared, not discovered from saved bodies.
+                refs.append(TypedReference("PATH-ARTIFACT-INPUT", path, value, "UE", "math"))
+                roles.append(FieldRole(contract, "PATH-ARTIFACT-INPUT", path, "UE", "math"))
+            elif isinstance(value, Object):
+                for key, item in value.items:
+                    visit(item, path + (key,))
+            elif isinstance(value, tuple):
+                for i, item in enumerate(value):
+                    visit(item, path + (i,))
+        visit(content if reference_content is None else reference_content, ())
+        return RecordPlan(slot, contract, "Prediction" if contract.name == "candidate_declaration" else "Event", content, tuple(refs))
+
+    initial = replace(base.plans[0], works=(wg,), records=base.plans[0].records[:2] + (
+        record("q", Contract("sui.fb.candidate_request", "1"), qcontent),))
+    candidate = AllowedPlan("candidate", "O-G", ("wg", "candidate"), (
+        record("cg", Contract("candidate_declaration", "1"), Source("candidate_declaration", "wg"), declaration),),
+        guards=(Guard("generation", "wg"),))
+    guards = (Guard("evaluation", "wg", cg),)
+    if context != "ready":
+        guards += (Guard("generation_context" if context == "missing" else "saved", evaluation_input),)
+    evaluation = AllowedPlan("evaluation", "O-G", ("wg", "evaluation"), (
+        record("eq", Contract("sui.fb.evaluation_request", "1"), eqcontent),), (ep,), guards)
+    plans = (initial, candidate, evaluation)
+    if context != "ready":
+        plans += (AllowedPlan("evaluation-context", "O-02", ("bootstrap", "context"), (
+            RecordPlan("context", Contract("model.context", "1"), "Event", obj(value="late-context")),)),)
+    initial_content = obj(generator="bootstrap", initial_slot="q1", reader=reader, method=method)
+    declaration_boot = _mg_object_replace(base.postings[0].event.fields.get("declaration"), initial=initial_content)
+    posts = (replace(base.postings[0], event=Event("Boot", obj(declaration=declaration_boot))),)
+    if external:
+        posts += (Posting("incoming", received(b"during-generation"), 1, frozenset((qgen,))),)
+    return fixed(replace(base, initial=initial_content, plans=plans, programs=(Program("wg", replies, stop), Program("ep", (), False)),
+        postings=posts, budget=budget, presentation_limit=1, delivery_limit=2 if late == "duplicate" else 1,
+        receipt_kinds=(), field_roles=base.field_roles + tuple(dict.fromkeys(roles)),
+        paper_version=PAPER_VERSION, observation_declarations=None))
+
+
+def _mg_object_replace(value, **changes):
+    return obj(**{**dict(value.items), **changes})
+
+
+def generation_update_e0():
+    """SC-21: existing /1 delta plus Wg, reusing A-DELTA-FINITE; two seats."""
+    generated, update = generation_e0(branch="hung", capacity=2), single_received_publish_e0()
+    merged = fixed(replace(generated,
+        allocation=(("think", 2), ("measure", 1)),
+        plans=generated.plans + tuple(p for p in update.plans if p.unit != "initial"),
+        programs=generated.programs + tuple(p for p in update.programs if p.work != "wr"),
+        postings=generated.postings + tuple(p for p in update.postings if p.id != "boot"),
+        field_roles=tuple(dict.fromkeys(generated.field_roles + update.field_roles)), observation_declarations=None))
+    return replace(merged, observation_declarations=replace(merged.observation_declarations,
+        receipt_sources=update.observation_declarations.receipt_sources,
+        derivations=update.observation_declarations.derivations))
+
+
+def empty_generation_e0():
+    base = interval_structure_e0()
+    boot = Event("Boot", obj(declaration=obj(initial=None, capacity=base.capacity, scope="one",
+        routes=("route-0",), environment="finite")))
+    posts = (Posting("boot", boot, 0), Posting("empty-e1", received(b"one"), 1),
+             Posting("empty-e2", received(b"two"), 2))
+    declared = replace(base, postings=posts, receipt_kinds=(), observation_declarations=None)
+    expected = fixed(declared)
+    return replace(expected, observation_declarations=replace(expected.observation_declarations,
+        completions=tuple(c for c in expected.observation_declarations.completions if c.key.obligation != "O-04")
+        + tuple(c for c in base.observation_declarations.completions if c.key.obligation == "O-04")))
+
+
+class SingleFieldCGWindow(CorrectWindow):
+    """Deliberate negative input through the public publish_unit boundary.
+
+    Paper 1933/1961 requires CG to retain the whole actual reply. E0, Program,
+    State and Evidence are untouched; Environment records the returned decision.
+    PUBLIC_MODEL_CONTRACTS: 'CG single-field negative input' is the only wire
+    description used here. This class is not a correct-window alternative.
+    """
+
+    def __init__(self, e0, field):
+        super().__init__(e0)
+        if field not in ("candidate-order", "measure"):
+            raise ValueError("unknown single-field CG exchange")
+        self.exchange_field = field
+
+    def publish_unit(self, view, plan_id):
+        decision = super().publish_unit(view, plan_id)
+        if plan_id != "candidate":
+            return decision
+        unit = decision.result
+        slot = next(s for s in unit.slots if s.plan.contract == Contract("candidate_declaration", "1"))
+        content = slot.plan.content
+        if self.exchange_field == "candidate-order":
+            changed = _mg_object_replace(content, input_order=tuple(reversed(content.get("input_order"))))
+        else:
+            changed = _mg_object_replace(content, measure=obj(a=2, b=1))
+        changed_slot = replace(slot, plan=replace(slot.plan, content=changed))
+        changed_unit = replace(unit, slots=tuple(changed_slot if s == slot else s for s in unit.slots))
+        # The public Publish payload observed on the legal control is
+        # (Unit, work_rows). Preserve the work rows and replace only that Unit.
+        publish = [e for e in decision.effects if e.kind == "Publish"
+                   and isinstance(e.value, tuple) and len(e.value) == 2 and e.value[0] == unit]
+        if len(publish) != 1 or sum(u == unit for u in decision.custody.units) != 1:
+            raise ValueError("public CG decision/custody/Publish binding unavailable")
+        return replace(decision, result=changed_unit,
+            custody=replace(decision.custody, units=tuple(changed_unit if u == unit else u
+                                                        for u in decision.custody.units)),
+            effects=tuple(replace(e, value=(changed_unit, e.value[1])) if e == publish[0]
+                          else e for e in decision.effects))
+
+
+def scene_window(scene):
+    return (SingleFieldCGWindow(scene.e0, scene.publication_exchange) if scene.publication_exchange
+            else CorrectWindow(scene.e0))
+
+
+def instantiate_mg04(scene):
+    """Execute the declared macro path exclusively through public operations.
+
+    Paths are partial order witnesses, not exhaustive searches. Full enabled
+    sets and every prefix state remain inputs to the independent checker.
+    A frozen read can route an actual envelope/slot, but never redefine E0.
+    """
+    from time import perf_counter
+    from fb_machine import Edge, View
+    started = perf_counter()
+    env, window = Environment(scene.e0), scene_window(scene)
+    state = env.initial()
+    states, edges, enabled, actions = [state], [], [], []
+
+    def take(action):
+        nonlocal state
+        offered = tuple(window.enabled(View(state.core, state.controls, state.evidence))) + tuple(env.actions(state))
+        if action not in offered:
+            # Public rejection is diagnostic. An omitted action is never used
+            # to advance the actual prefix even if the direct step accepts it.
+            try:
+                env.step(state, action, window)
+            except MissingContract as error:
+                error.scene_prefix_states = len(states)
+                error.scene_elapsed_seconds = perf_counter() - started
+                raise
+            except Exception as error:
+                raise ValueError(f"{action!r}: {type(error).__name__}: {error}; public operations="
+                                 f"{sorted({a.operation for a in offered})}") from None
+            raise ValueError(f"public operation omitted from Enabled: {action!r}")
+        enabled.append(offered)
+        step = env.step(state, action, window)
+        state = step.state
+        edges.append(Edge(len(states)-1, len(states), action, step.events, step.result))
+        states.append(state)
+        actions.append(action)
+
+    def save(unit, slots):
+        for slot in slots:
+            for op in ("PrepareReceipt" if unit.startswith("receipt/") else "PrepareOne",
+                       "PutBody", "AddEntry", "ConfirmWrite", "CompleteWrite"):
+                take(Action(op, (unit, slot)))
+
+    def accept():
+        envelope = state.core.h.queue[0]
+        take(Action("Accept", (envelope,)))
+        take(Action("HostAck", envelope.key))
+        save(receipt_unit_id(scene.e0.run, envelope.number),
+             ("boot", "declaration") if envelope.event.kind == "Boot" else ("receipt",))
+
+    for command in scene.script:
+        op, *args = command
+        if op == "boot":
+            take(Action("Post", ("boot",)))
+            accept()
+        elif op == "save":
+            save(args[0], args[1:])
+        elif op == "start":
+            work = args[0]
+            for operation in ("ResolveWork", "ClaimStart", "Launch"):
+                take(Action(operation, (work,)))
+            take(Action("EnterWorker", (work + ":wrapper:0",)))
+        elif op == "reply":
+            work, index = args
+            take(Action("WorkerStep", (work,)))
+            take(Action("Deliver", (f"report:{work}:{index}",)))
+            accept()
+        elif op == "redeliver":
+            work, index = args
+            take(Action("Deliver", (f"report:{work}:{index}",)))
+            accept()
+        elif op == "post-save":
+            take(Action("Post", (args[0],)))
+            accept()
+        elif op == "terminal":
+            take(Action("RecognizeTerminal", (args[0],)))
+            save("terminal:" + args[0], ("T",))
+        elif op == "fault":
+            unit, slot, operation, outcome = args
+            take(Action("PrepareOne", (unit, slot)))
+            if operation == "AddEntry":
+                take(Action("PutBody", (unit, slot)))
+            take(Action(operation, (unit, slot), outcome))
+            take(Action("FaultWindow"))
+            take(Action("RebuildWindow"))
+        elif op == "reject":
+            from fb_machine import Disabled
+            attempted = Action(args[0], tuple(args[1:]))
+            try:
+                env.step(state, attempted, window)
+            except Disabled:
+                pass
+            else:
+                raise ValueError(f"paper-forbidden public call accepted: {attempted!r}")
+        else:
+            take(Action(op, tuple(args)))
+    enabled.append(tuple(window.enabled(View(state.core, state.controls, state.evidence))) + tuple(env.actions(state)))
+    return (Scenario(scene.id, scene.e0, scene.max_states, state, scene.cut,
+                     json.dumps(connection_snapshot(state, actions), ensure_ascii=False)),
+            tuple(states), tuple(edges), tuple(enabled))
+
+
+MG_BOOT = (("boot",), ("PublishUnit", "initial"))
+MG_INPUTS = MG_BOOT + (("save", "initial", "process", "reader", "q"),)
+MG_STARTED = MG_INPUTS + (("start", "wg"),)
+MG_REPLIED = MG_STARTED + (("reply", "wg", 0), ("terminal", "wg"))
+MG_CG = MG_REPLIED + (("PublishUnit", "candidate"),)
+MG_CG_SAVED = MG_CG + (("save", "candidate", "cg"),)
+MG_EQ = MG_CG_SAVED + (("PublishUnit", "evaluation"),)
+
+
+def mg04_scenes():
+    """New IDs never borrow a historical result. All cuts are explicit."""
+    result = []
+    # This local tail explores persistence; other boundary choices are explicit
+    # prefix steps, checked with their complete public enabled sets retained.
+    cut = Cut("K-MG04-save", frozenset(("PublishUnit", "ResolveWork", "ClaimStart", "Launch",
+        "EnterWorker", "WorkerStep", "Stop", "Release", "Acquire", "Adopt", "Post",
+        "Deliver", "RecognizeTerminal", "RebuildWindow", "HandoffPurpose")),
+        ("局所保存の探索。前置の別順序・後続の評価/抽選/選択・全体進行性は未検証。",))
+
+    def add(id, e0, script, goals, lines=(1979,), **kw):
+        result.append(Scene(id, id[:5], lines, "I0から公開操作の全前置履歴", cut, 500, e0,
+            tuple(goals), "mg04", assumptions=MG04_ASSUMPTIONS,
+            remaining=cut.untested, implementation_scope=(STRUCTURAL_LIMIT,),
+            row_ids=MG04_ROWS, script=script, **kw))
+
+    for unit, slot, prefix in (("initial", "q", MG_BOOT + (("save", "initial", "process", "reader"),)),
+                               ("candidate", "cg", MG_CG), ("evaluation", "eq", MG_EQ)):
+        for fault, operation, outcome in (("precommit", "PutBody", "precommit_failure"),
+                ("body-lost", "PutBody", "lost_response"), ("entry-lost", "AddEntry", "lost_response")):
+            budget = Budget(window_faults=1, precommit_failures=int(fault == "precommit"),
+                            lost_responses=int(fault != "precommit"))
+            add(f"SC-03-M3-{unit}-{fault}", generation_e0(budget=budget),
+                prefix + (("fault", unit, slot, operation, outcome),),
+                (_goal("fault", "指定slotの保存障害と再建", "mg_fault", unit, slot, operation, outcome),
+                 _goal("saved", "同じ準備から対象slot保存", "saved_slots", unit, slot)), (937, 1931, 1933, 1935, 1979))
+    add("SC-04-M3-Qgen-Wg", generation_e0(), MG_INPUTS + (("start", "wg"),),
+        (_goal("publish", "Qgen未保存でWgとrun所有が同じ歩に成立", "mg_publish", "initial", "wg"),
+         _goal("entered", "Qgen保存後Wgが開始", "work_entered", "wg")), (938, 1930, 1932, 1941))
+    add("SC-04-M3-EQ-Ep", generation_e0(stop=True), MG_EQ + (
+        ("save", "evaluation", "eq"), ("Stop", "wg"), ("Release", "wg"), ("start", "ep")),
+        (_goal("publish", "EQ未保存でEpとrun所有が同じ歩に成立", "mg_publish", "evaluation", "ep"),
+         _goal("entered", "EQ保存後にEpが開始", "work_entered", "ep")), (938, 1935, 1946))
+    add("SC-09-M3-generation-evaluation", generation_e0(), MG_EQ + (("save", "evaluation", "eq"),),
+        (_goal("linked", "Qgen・実生成・CG全内容・EQの参照対応", "mg_linked"),
+         _goal("no-pG", "成功と保存待ちだけではpGを作らない", "mg_no_purpose")), (944, 1931, 1933, 1935, 1951, 1959))
+    for context in ("missing", "save-wait"):
+        add("SC-09-M3-context-" + context, generation_e0(context=context), MG_CG_SAVED,
+            (_goal("waiting", "CG保存後もissue[EQ]を実保持しEQは未発行", "mg_eq_wait", context == "missing"),),
+            (1937, 1946, 1956, 1959))
+    add("SC-09-M3-pG-after-EQ", generation_e0(context="missing"), MG_CG_SAVED + (
+        ("PublishUnit", "evaluation-context"), ("save", "evaluation-context", "context"),
+        ("PublishUnit", "evaluation"), ("save", "evaluation", "eq")),
+        (_goal("waiting", "不足中にissue[EQ]とpGを保持", "mg_eq_wait", True),
+         _goal("retained", "EQ後も同じ起源pGは未達で保持", "mg_purpose_after_eq")), (1937, 1946, 1959))
+    for branch in ("no-candidates", "failure", "unknown"):
+        add("SC-15-M3-" + branch, generation_e0(branch=branch), MG_REPLIED,
+            (_goal("terminal", "指定の最初のTを保存しCG/EQを作らずpGを保持", "mg_non_success", branch),),
+            (950, 1952, 1953, 1954))
+    add("SC-15-M3-evidence-before-end", generation_e0(), MG_STARTED + (("WorkerStep", "wg"),),
+        (_goal("pending", "未配送でrun保持、T/handle/pGを先取りしない", "mg_before_end"),), (1955, 1959))
+    for field in ("generator", "input-view", "candidate-order", "measure"):
+        # A different candidate order/measure is NOT illegal by itself. The
+        # forbidden operation is substituting a different CG for the full reply.
+        # That negative control is declared below, at the publication API.
+        for mode in ("exchange", "redelivery"):
+            if mode == "exchange" and field in ("candidate-order", "measure"):
+                add(f"SC-10-M3-{field}-{mode}", generation_e0(late="duplicate"),
+                    MG_REPLIED + (("redeliver", "wg", 0), ("PublishUnit", "candidate"),
+                                  ("save", "candidate", "cg")),
+                    (_goal("negative-control", "実返答を保ちCGの一欄だけ交換して保存", "mg_cg_exchange", field),),
+                    (945, 1933, 1961), publication_exchange=field,
+                    negative_controls=("INV-16.c: CG単一欄交換",))
+                result[-1] = replace(result[-1], row_ids=("INV-16.c",))
+                continue
+            e0 = generation_e0(swap=field if mode == "exchange" and field in ("generator", "input-view") else "",
+                               late="duplicate")
+            prefix = MG_REPLIED + (("redeliver", "wg", 0),)
+            if mode == "exchange":
+                prefix += (("reject", "PublishUnit", "candidate"),)
+                goals = (_goal("rejected", "全返答/固定要求と違うCGを公開入口が拒む", "mg_bad_generation"),)
+            else:
+                prefix += (("PublishUnit", "candidate"), ("save", "candidate", "cg"))
+                goals = (_goal("full-output", "返答の候補順/測度を含む全内容をCGへ保持", "mg_candidate"),)
+            add(f"SC-10-M3-{field}-{mode}", e0, prefix, goals, (945, 1933, 1961))
+    for cap in (1, 2):
+        add(f"SC-13-M3-Hung-cap{cap}", generation_e0(branch="hung", external=True, capacity=cap),
+            MG_STARTED + (("post-save", "incoming"),),
+            (_goal("held", "Wg Hungの占有を保持したまま受信保存", "mg_hung_receipt"),), (948, 1932))
+    add("SC-14-M3-occupation", generation_e0(branch="hung"), MG_STARTED,
+        (_goal("held", "Wgの実占有1が停止未確認で保持", "mg_held", "wg"),), (949, 1932))
+    for stop in (False, True):
+        add("SC-15-M3-stop-" + str(stop).lower(), generation_e0(branch="unknown", stop=stop),
+            MG_REPLIED + ((("Stop", "wg"), ("Release", "wg")) if stop else ()),
+            (_goal("held-or-release", "Unknownは解放の根拠でなく実停止時だけ解放", "mg_stop", stop),), (950, 1954))
+    add("SC-16-M3-unknown-late-value", generation_e0(branch="unknown", late="value"),
+        MG_REPLIED + (("reply", "wg", 1),),
+        (_goal("first", "後着値でも最初のUnknownとpGを維持", "mg_non_success", "unknown", 2),
+         _goal("late-saved", "後着を含む2報告を保存", "work_reports", 2)), (951, 1954))
+    add("SC-16-M3-unknown-A-B", generation_e0(branch="unknown", late="values"),
+        MG_REPLIED + (("reply", "wg", 1), ("reply", "wg", 2), ("reject", "PublishUnit", "candidate")),
+        (_goal("first", "Unknown/A/Bの全報告保存後も最初のTとpGを保持", "mg_non_success", "unknown", 3),
+         _goal("reports", "Unknown/A/Bの3件を保存", "work_reports", 3)), (951, 1954, 1957))
+    add("SC-17-M3-A-A-B", generation_e0(late="duplicate"), MG_CG_SAVED + (
+        ("redeliver", "wg", 0), ("reply", "wg", 1), ("reject", "PublishUnit", "evaluation")),
+        (_goal("reports", "同値再配送と異値を含む3報告を保存", "work_reports", 3),
+         _goal("conflict", "既存CG/Tを保ちConflictで新EQを止める", "mg_conflict")), (952, 1957))
+    upstream = generation_e0(late="different", capacity=2)
+    upstream = fixed(replace(upstream, allocation=(("think", 2), ("measure", 1)), observation_declarations=None))
+    add("SC-18-M3-upstream-Conflict", upstream, MG_EQ + (
+        ("save", "evaluation", "eq"), ("ResolveWork", "ep"), ("ClaimStart", "ep"), ("Launch", "ep"),
+        ("reply", "wg", 1), ("reject", "EnterWorker", "ep:wrapper:0")),
+        (_goal("kept", "Ep確保・起動後の上流Conflictで入場を止め既存EQ/CG/Tを保持", "mg_upstream"),), (953, 1957))
+    add("SC-20-M3-empty", empty_generation_e0(), (("boot",), ("RequestInterval", "k1"),
+        ("PublishUnit", "segment"), ("save", "segment", "process", "route", "clock", "k"),
+        ("post-save", "empty-e1"), ("post-save", "empty-e2")),
+        (_goal("empty", "initial=NoneでWg/Epゼロ、受信2件と区間の責務を保持", "mg_empty"),), (955, 1930))
+    add("SC-21-M3-receive-during-generation", generation_e0(branch="hung", external=True),
+        MG_STARTED + (("post-save", "incoming"),),
+        (_goal("receive", "Wg進行中のReceivedを保存し生成用の固定像を保持", "mg_hung_receipt"),), (956, 1932))
+    add("SC-21-M3-update-during-generation", generation_update_e0(), MG_STARTED + (
+        ("post-save", "e1"), ("PublishUnit", "q-e1"), ("save", "q-e1", "q"), ("start", "wr-e1")),
+        (_goal("update", "Wgの固定像/占有を残したまま受信由来の新Q/更新を開始", "mg_concurrent_update"),),
+        (943, 956, 1932))
+    for cap in (1, 2):
+        reason = ("未接続: Wg Hungと合法なPR→Dの席" + str(cap) +
+                  "の接続。現行の構造的artifact口では合法FProblem/PRの全対応を確かめられない。"
+                  "Wg単独の占有をこの対照の合格へ流用しない。")
+        result.append(Scene(f"SC-14-M3-Hung-D-cap{cap}", "SC-14", (949, 1932, 1979),
+            "IT(Wg)+PR Saved", cut, 500, None,
+            (_goal("capacity", "Wg占有とDの開始/資源待ち", "unconnected", reason),),
+            blocker=reason, row_ids=("INV-2.e", "INV-2.f", "INV-10.a"), remaining=(reason,)))
+    add("SC-09-M3-D6-generation-draw", generation_e0(draws=("requires-generation-randomness",)), MG_INPUTS + (("start", "wg"),),
+        (_goal("R10", "生成用のくじはMissingContract、R10未接続", "unconnected", "D6/R10"),),
+        (1936, 2017), expected_missing_contract="R10 generation draws")
+    return tuple(result)
+
+
+def draw_notice_e0(mode):
+    """M4 structural terminal boundary. Legal F-a PR/Draw math is unconnected.
+
+    The public model permits a declared D at bootstrap. This is NOT evidence
+    for an Ep -> FProblem -> PR path or the correctness of a returned DrawValue.
+    """
+    from fb_machine import Unavailable
+    base = lifecycle_e0(stop=False)
+    work = replace(base.plans[0].works[0], work_id="d", stage="D")
+    plan = replace(base.plans[0], works=(work,))
+    failure = Outcome(OutcomeKind.FAILURE, obj(reason="draw-failed"))
+    unknown = Outcome(OutcomeKind.UNKNOWN, obj(reason="draw-unconfirmed"))
+    replies = () if mode == "workfinished" else (failure, unknown) if mode == "failure-unknown" else (failure,)
+    spoof = Posting("d-workfinished", Event("WorkFinished", obj(work="d", outcome=failure,
+                    started=Unavailable("external-start-unconfirmed"),
+                    finished=Unavailable("external-end-unconfirmed"))), 1,
+                    frozenset((work.request,)))
+    return fixed(replace(base, plans=(plan,), programs=(Program("d", replies, False),),
+        postings=base.postings + ((spoof,) if mode in ("workfinished", "late-workfinished") else ()),
+        presentation_limit=1, receipt_kinds=(), observation_declarations=None))
+
+
+def m4_scenes():
+    cut = Cut("K-M4-terminal", frozenset(("PublishUnit", "ResolveWork", "ClaimStart", "Launch", "EnterWorker",
+        "WorkerStep", "Post", "Deliver", "RecognizeTerminal", "Stop", "Release", "Acquire", "Adopt")),
+        ("終わりの外形/保存/順序の構造だけ。合法PRの数学とDF/DU/Eeの全接続は未検証。",))
+    rows = ("INV-1.a", "INV-2.a", "INV-2.c", "INV-3.a", "INV-4.a", "INV-6.b",
+            "INV-10.b", "INV-14.a", "INV-14.b", "INV-15.a", "INV-15.b")
+    cases = []
+    for paper_id, mode in (("SC-15", "workfinished"), ("SC-15", "failure"),
+                           ("SC-16", "failure-unknown"), ("SC-17", "late-workfinished")):
+        script = MG_INPUTS + (("start", "d"),)
+        if mode == "workfinished":
+            script += (("post-save", "d-workfinished"), ("reject", "RecognizeTerminal", "d"))
+        else:
+            script += (("reply", "d", 0), ("terminal", "d"))
+            if mode == "failure-unknown":
+                script += (("reply", "d", 1),)
+            if mode == "late-workfinished":
+                script += (("post-save", "d-workfinished"),)
+        cases.append(Scene(paper_id + "-M4-D-" + mode, paper_id, (787, 950, 951, 952, 1967, 1969),
+            "I0から宣言Dの終端境界まで", cut, 100, draw_notice_e0(mode),
+            (_goal("terminal-shape", "I-8のみ終端。Failureが先ならT(Failure)を保持", "mg_draw", mode),),
+            "mg04", assumptions=LIFECYCLE_ASSUMPTIONS + (
+                "A-M4-D-BOUNDARY (意味の制限): 公開E0の初期Dで終端の外形だけを観察。"
+                "合法PRを導くEp前段は未接続。WorkFinishedの対照は自己申告の原報告で実生成リンクなし。",),
+            remaining=cut.untested, implementation_scope=(STRUCTURAL_LIMIT,), row_ids=rows, script=script))
+    return tuple(cases)
+
+
+MG04_SCENES = mg04_scenes()
+MG04_SCENES += m4_scenes()
+SCENES = LEGACY_SCENES + MG04_SCENES
+
+# Documentary session note only. Never imported as expected model results.
+MG04_SESSION_LOG = r"""
+---
+date: 2026-10-17
+project: sui
+tool: codex
+tags: [session, sui, F-b, MG-04, scenes, black-box]
+---
+# MG-04 場面 M3/M4 と現行分母（未完・公開契約の確認待ち）
+[[Projects/sui]]
+Codex記録: C:/Users/you11/.codex/sessions/2026/10/17/rollout-2026-10-17T01-31-25-01a1458d-d489-70e3-9944-b31b44718e54.jsonl
+他AIとの直接の連絡は今回なし。依頼に記された前担当の会話を新規の承認とは扱わない。
+書込許可が場面2ファイルだけのため、この文字列が未反映ログ。
+Obsidian/Sessions・Projects/sui・Heat.mdは未更新。heat.pyも未実行。
+
+## やったこと
+実施済み: 47行（INV-2.g/INV-16.c追加）、51条件（44+O-Gの7）、
+193旧枝+46新枝=239枝を帳簿に保持。新枝を個別実行、代表3枝を個別実行、
+帳簿2試験を個別実行。M3/M4の公開E0と公開操作だけで場面を追加。
+未完: 7枝のEQ接続違反の帰属、CGの候補順/測度交換の負の入力口、
+Wg Hungと合法PR→Dの容量1/2対照。D6/R10は意図した未接続で合格に数えない。
+
+## 成果物（パス）
+版: MG-04 / 2026-10-17（未commit）。
+- C:/Users/you11/Desktop/iku/sui/tests/fb_scenes.py
+- C:/Users/you11/Desktop/iku/sui/tests/test_fb_scenes.py
+紙: C:/Users/you11/Desktop/iku/sui/specs/関所F_Fb_今の約束.md v0.18, 2112行。
+紙SHA256: a3605ac06bbb0657ec6a7078e4d1f7885f29ce257d40546c5f0b03064e8ffc6d
+歴史のJSONは未変更: tests/fb_scenes_results.json
+SHA256: 4c51b545f85433bebf5991b7e659d9ef26d5d77fd0111f5cdb019a637a0d7e4f
+本ログは試験の期待値・過去結果の合格再利用・現行の集計入力ではない。
+
+## 決めたこと / わかったこと
+- 旧JSONとの比較はLEGACY_SCENES193枝とLEGACY_CONDITION_TABLE45行だけ。
+  現行47行の判定は当該pytest呼出しのREPORTSだけ。新しい2行/7条件/46枝は
+  「記録なし (今回の実行の結果だけ)」。未実行も全分母に残す（紙1584-1592）。
+- 旧いPAPER_ROWSの行番号はv0.12の歴史キー。現行の行番号は別欄へ持つ。
+- 7枝は公開窓口がEQを発行した後、検査器がINV-16.cとINV-2.a/c/gを指摘。
+  pG後続/上流Conflictではissue[EQ]についてINV-2.fも指摘。
+  EQ.o/jとEp.numerical_view.contextの具体型・対応が公開契約だけでは未確定。
+  o=0,j=1,context={model}を仮置きした場面を合法と断定せず、期待は緩めない。
+- SC-18ではLaunch後の上流Conflictに対しEnterWorkerは拒まれ、公開観測上は
+  紙1957（新しい入場禁止）に沿う。一方検査器はINV-2.e「ready launched work
+  lacks EnterWorker」も指摘。EQ入力の合法性が未確定なので検査器誤りと断定しない。
+- 候補順/測度を実返答とCGで単独交換する負の宣言は、公開宣言口が
+  MissingContract('undeclared generation/evaluation correspondence')で拒否。
+  合法な候補自体の順/測度変更を違反に読み替えず、2枝を未接続として残した。
+- Wg単独のHung/占有とM4の初期D終端構造は、合法PR→Dの容量対照を証明しない。
+  PR/FProblemの公開合法例がない対照2枝も別に未接続として残した。
+- 記録再生成は提案のみ: Claudeの全体実行後に、明示の旗と版付き別ファイルを使う
+  専用出力を設け、既存JSONは保存する。今回、旗・更新処理を実装/実行していない。
+
+## 紙に無い仮定
+今回追加4件: 名前だけ1 / 意味・適用範囲3（このうちEQ配線は未検証）。
+- A-GENERATION-WIRE: 公開契約の欄/variant/guard名のみ。
+- A-MG04-FINITE: 2記号候補/不透明な測度の有限構造。F-a数学/実LLM/全順序は未検証。
+- A-EQ-WIRE-UNCONFIRMED: o=0,j=1,Ep.context={model}。合法性不明、7枝は失敗のまま。
+- A-M4-D-BOUNDARY: 初期Dの終端外形だけ。合法Ep→PR前段とDrawValue数学は未接続。
+既存のA-SHAPE/A-IO/A-PRESENT/A-INITIAL-WIREを継承。
+SC-21更新では既存A-DELTA-FINITE（/1有限関係、/2数値射影未確認）を再利用。
+E0の有限値は実生成器の出力を宣言する構造試験入力で、本番へ人の候補一覧を渡す提案ではない。
+価値判断、優先順位、生成の再試行義務や最低配分は追加しない。
+
+## 検証結果
+実行形式（全て -B、no:cacheprovider、--tb=line）:
+.venv/Scripts/python.exe -B -m pytest "tests/test_fb_scenes.py::test_scene[場面ID]" -q -p no:cacheprovider --tb=line
+帳簿2本は各関数のnodeを指定。重い全体試験とtest_fb_mutants.pyは未実行。
+下の秒は各pytestの報告時間。前置状態/探索状態は境界が重複し、合算して一意状態数としない。
+新46件: 34 passed / 7 failed / 5 skipped。スキップを模型の合格にしない。
+実行可能な41枝は宣言した必須状態に全到達。最終実行で状態数上限到達なし。
+M3の局所探索上限500、M4は100。固定前置の別順序や後段を切った局所試験であり全探索ではない。
+未接続4枝は状態なし。D6は前置31状態でMissingContract、探索0、R10必須状態未確認。
+試作段階のD6探索では500状態上限、R10未到達（探索1.264秒/検査57.327秒）。
+直接の公開開始の試行へ変更し、最終結果は0探索状態の未接続報告。
+
+| 場面 ID | 紙の行 (v0.18) | pytest | 秒 | 前置状態 / 探索状態 | 必須状態 |
+|---|---|---|---:|---:|---|
+| SC-03-M3-initial-precommit | 937,1931,1933,1935,1979 | passed | 2.86 | 29 / 5 | 全到達 |
+| SC-03-M3-initial-body-lost | 937,1931,1933,1935,1979 | passed | 4.29 | 29 / 9 | 全到達 |
+| SC-03-M3-initial-entry-lost | 937,1931,1933,1935,1979 | passed | 3.21 | 30 / 6 | 全到達 |
+| SC-03-M3-candidate-precommit | 937,1931,1933,1935,1979 | passed | 8.56 | 54 / 5 | 全到達 |
+| SC-03-M3-candidate-body-lost | 937,1931,1933,1935,1979 | passed | 10.92 | 54 / 9 | 全到達 |
+| SC-03-M3-candidate-entry-lost | 937,1931,1933,1935,1979 | passed | 9.08 | 55 / 6 | 全到達 |
+| SC-03-M3-evaluation-precommit | 937,1931,1933,1935,1979 | failed | 11.37 | 60 / 5 | 全到達 |
+| SC-03-M3-evaluation-body-lost | 937,1931,1933,1935,1979 | failed | 14.33 | 60 / 9 | 全到達 |
+| SC-03-M3-evaluation-entry-lost | 937,1931,1933,1935,1979 | failed | 12.47 | 61 / 6 | 全到達 |
+| SC-04-M3-Qgen-Wg | 938,1930,1932,1941 | passed | 2.52 | 34 / 1 | 全到達 |
+| SC-04-M3-EQ-Ep | 938,1935,1946 | failed | 11.66 | 67 / 1 | 全到達 |
+| SC-09-M3-generation-evaluation | 944,1931,1933,1935,1951,1959 | failed | 9.14 | 61 / 1 | 全到達 |
+| SC-09-M3-context-missing | 1937,1946,1956,1959 | passed | 6.26 | 55 / 1 | 全到達 |
+| SC-09-M3-context-save-wait | 1937,1946,1956,1959 | passed | 6.38 | 55 / 1 | 全到達 |
+| SC-09-M3-pG-after-EQ | 1937,1946,1959 | failed | 10.04 | 67 / 1 | 全到達 |
+| SC-15-M3-no-candidates | 950,1952,1953,1954 | passed | 4.33 | 49 / 1 | 全到達 |
+| SC-15-M3-failure | 950,1952,1953,1954 | passed | 4.30 | 49 / 1 | 全到達 |
+| SC-15-M3-unknown | 950,1952,1953,1954 | passed | 4.29 | 49 / 1 | 全到達 |
+| SC-15-M3-evidence-before-end | 1955,1959 | passed | 2.57 | 35 / 1 | 全到達 |
+| SC-10-M3-generator-exchange | 945,1933,1961 | passed | 6.20 | 57 / 1 | 全到達 |
+| SC-10-M3-generator-redelivery | 945,1933,1961 | passed | 8.39 | 63 / 1 | 全到達 |
+| SC-10-M3-input-view-exchange | 945,1933,1961 | passed | 6.39 | 57 / 1 | 全到達 |
+| SC-10-M3-input-view-redelivery | 945,1933,1961 | passed | 8.10 | 63 / 1 | 全到達 |
+| SC-10-M3-candidate-order-exchange | 945,1933,1961 | skipped | 0.53 | — / — | negative-control 未確認 |
+| SC-10-M3-candidate-order-redelivery | 945,1933,1961 | passed | 8.44 | 63 / 1 | 全到達 |
+| SC-10-M3-measure-exchange | 945,1933,1961 | skipped | 0.52 | — / — | negative-control 未確認 |
+| SC-10-M3-measure-redelivery | 945,1933,1961 | passed | 8.53 | 63 / 1 | 全到達 |
+| SC-13-M3-Hung-cap1 | 948,1932 | passed | 3.20 | 42 / 1 | 全到達 |
+| SC-13-M3-Hung-cap2 | 948,1932 | passed | 3.22 | 42 / 1 | 全到達 |
+| SC-14-M3-occupation | 949,1932 | passed | 2.70 | 34 / 1 | 全到達 |
+| SC-15-M3-stop-false | 950,1954 | passed | 4.25 | 49 / 1 | 全到達 |
+| SC-15-M3-stop-true | 950,1954 | passed | 4.51 | 51 / 1 | 全到達 |
+| SC-16-M3-unknown-late-value | 951,1954 | passed | 5.77 | 58 / 1 | 全到達 |
+| SC-16-M3-unknown-A-B | 951,1954,1957 | passed | 7.34 | 67 / 1 | 全到達 |
+| SC-17-M3-A-A-B | 952,1957 | passed | 11.02 | 72 / 1 | 全到達 |
+| SC-18-M3-upstream-Conflict | 953,1957 | failed | 13.85 | 73 / 1 | 全到達 |
+| SC-20-M3-empty | 955,1930 | passed | 3.13 | 52 / 1 | 全到達 |
+| SC-21-M3-receive-during-generation | 956,1932 | passed | 3.19 | 42 / 1 | 全到達 |
+| SC-21-M3-update-during-generation | 943,956,1932 | passed | 4.98 | 52 / 1 | 全到達 |
+| SC-14-M3-Hung-D-cap1 | 949,1932,1979 | skipped | 0.52 | — / — | capacity 未確認 |
+| SC-14-M3-Hung-D-cap2 | 949,1932,1979 | skipped | 0.51 | — / — | capacity 未確認 |
+| SC-09-M3-D6-generation-draw | 1936,2017 | skipped | 0.63 | 31 / 0 | R10 未確認 |
+| SC-15-M4-D-workfinished | 787,950,951,952,1967,1969 | passed | 2.52 | 42 / 1 | 全到達 |
+| SC-15-M4-D-failure | 787,950,951,952,1967,1969 | passed | 3.33 | 49 / 1 | 全到達 |
+| SC-16-M4-D-failure-unknown | 787,950,951,952,1967,1969 | passed | 4.61 | 58 / 1 | 全到達 |
+| SC-17-M4-D-late-workfinished | 787,950,951,952,1967,1969 | passed | 4.34 | 57 / 1 | 全到達 |
+
+代表3枝（各1 passed）:
+- SC-04-DESC: 5.54秒、前置45/探索7、上限300。
+- SC-04-publish-Q-Wr: 33.40秒、前置45/探索97、上限500。
+- SC-04-publish-R-Wp: 38.98秒、前置52/探索97、上限500。
+帳簿の最終実行:
+- test_paper_denominator_is_preserved: 1 passed / 0.57秒。
+- test_all_paper_scenes_and_rows_remain_in_final_report: 1 failed / 0.98秒。
+  旧部分集合のaggregate/disjoint照合と47行/51条件/239枝の保存確認は通過。
+  最後の未完ゲートが失敗。単独呼出しなので現行REPORTSは空、確認済み0、
+  入口不足4行、実装の段へ43行。この単独結果を上の個別実行の合算とはしない。
+  32未具体化対照/H-01..06/未実行を分母から除いて緑にしていない。
+
+## ハマった点
+場面の誤りとして修正済み: continuation.afterの形、CGのPrediction分類、
+BootとWgの生成方法一致、保存障害後FaultWindow→RebuildWindow、
+pGがWorkRow.purposes内の対象付きExcuseであること、保存待ち時のpG不存在probe。
+これらは紙/公開型を根拠に直し、窓口・検査器は修正していない。
+EQ違反は帰属未確認のため保留。公開契約への追記か本体を含まない合法E0例を依頼した。
+
+## 読んだ範囲と逸脱
+外部Web資料なし。紙v0.18は該当部分（場面表、確かめの行、9-3補-8、
+M3/M41930-1980、R10等）。F-a紙もcandidate_declaration等の該当部分のみ、全文読了ではない。
+公開形: fb_machine.PUBLIC_MODEL_CONTRACTS、AllowedPlan docstring、
+公開dataclass欄/型/署名、fb_check.PUBLIC_SCENE_API/PUBLIC_CHECK_CONTRACTS/PUBLIC_SHAPES。
+AST構文解析自体はファイル全体だが、本体の意味を読むために出力していない。
+ただし広すぎたrgでfb_machine.py:1837の内部条件行と3087/3113のEnvironmentコメントが
+偶発的に表示された。これらを期待結果の根拠には使っていない。
+初期の宣言一覧は非公開関数名/署名も表示した。本体を読んだとは扱わず、逸脱を隠さない。
+CorrectWindow/Environment/fb_checkの処理本体の通読・修正はなし。
+試作D6の終了確認前に短いNoCandidates診断を開始したため、短時間重複の可能性がある。
+正確な重複時間は未確認。その後の最終個別試験・再確認は直列に実行。
+環境変数追加なし、commitなし。変更先は許可された2ファイルだけ。
+
+## 再利用した知見と結果
+[[Knowledge/記録の参照と台帳の認証を分ける]]: 有効（過去記録の参照と現行分母の認証を分離）。
+現在の模型の正しさを示す独立した証拠として再利用したのではない。
+AIと人間の知見共有ルールも参照。新規Knowledge作成なし、vaultは未反映。
+
+## 次にやること
+- [ ] 公開EQのo/j型とEp context対応、合法E0例を提供してもらい7枝を再確認。
+- [ ] CGの候補順/測度の負の入力を表す公開口と合法PR→D前置例を確認し4枝を接続。
+- [ ] SC-18のConflict後EnterWorkerとINV-2.eを紙1957で窓口/検査担当へ切り分け。
+- [ ] Claudeが全体試験と記録再生成の必要性を判断する。現行47行全体の合格は未確認。
+- [ ] 許可範囲が広がったときに本記録をObsidian Sessionへ反映しProjects/Heatを更新。
+"""
+
+
+# Same-day continuation of the documentary log above; never a test oracle.
+MG04_SESSION_LOG += r"""
+
+## 2026-10-17 MG-04 続き・2通目（今回の閉じる条件は完了）
+上の7失敗/4枝未接続/needs_userは1通目時点の歴史。現在の結果はこの追記。
+date: 2026-10-17 / project: sui / tool: codex / tags: [session, sui, F-b, MG-04]
+[[Projects/sui]]
+道: 場面修正・個別検証完了。今回追加仮定: 名前だけ1、意味追加0。
+ゆう待ち0。同系統2周目。今回の閉じる条件は全て満たした（F-b全体の合格ではない）。
+Codex記録: C:/Users/you11/.codex/sessions/2026/10/17/rollout-2026-10-17T01-31-25-01a1458d-d489-70e3-9944-b31b44718e54.jsonl
+窓口係の引継ぎ出典: C:/Users/you11/.claude/codex-dialogues/sui-fb-model-impl2.turn3.json
+読んだのはユーザー提示の要約のみで、JSON全文ではない。
+検査係sui-fb-model-check3 4通目の修正/433 passedもユーザー提示の情報、記録ファイル位置は未確認。
+直接の他AI連絡はなし。担当の報告を承認や動作確認に読み替えず、今回の公開実行を根拠にした。
+
+### やったこと / 成果物
+実施済み（未commit、書込先はこの2つだけ）:
+- C:/Users/you11/Desktop/iku/sui/tests/fb_scenes.py
+- C:/Users/you11/Desktop/iku/sui/tests/test_fb_scenes.py
+版: MG-04 turn2 / 2026-10-17。
+EQのo/jを明示のRefへ変更し、Ep.numerical_view.contextのmodel/contextとEQを一致させた。
+preferencesタプルとo/jの鏡像も一致させ、実保存EQの全本文を独立宣言と照合するprobeを追加。
+有限のo/jはともに保存済みreaderを参照する。実F-a時計・異なるo/j間の識別力はこの入力で証明しない。
+旧A-EQ-WIRE-UNCONFIRMEDは場面入力の誤りとして撤回し、公開配線A-EQ-WIRE（名前だけ）へ置換。
+既存A-GENERATION-WIRE/A-MG04-FINITE/A-M4-D-BOUNDARYと継承した範囲制限は保持。
+
+CG交換2枝を公開CorrectWindow.publish_unitの継承口へ接続。
+E0のSourceとProgramの返答・再配送・操作列は合法対照と同一。
+変更するのはCGのinput_orderまたはmeasureの1欄だけ。
+Decision.custody/resultと対応するPublish payloadのUnitを同じ内容で差し替え、
+通常のEnvironment.stepを通す。State/Evidence/観測宣言を直接変更しない。
+2枝ともINV-16.cを必須の検出結果とし、実保存内容の差が指定1欄だけであることも確認。
+負の対照をpositive_structural_branchesへ入れず、
+negative_control_branches/negative_control_findingsとして47行の帳簿へ残す。
+副次のINV-2.a/b/c/g・INV-4.cも捨てず、正しい窓口の違反と分離した。
+紙の32未具体化対照や行全体の識別力が解消したとは扱わない。
+
+### 根拠・切り分け・未接続
+紙 specs/関所F_Fb_今の約束.md:1933/1935/1937/1957/1961。
+公開リテラル tests/fb_machine.py:647（EQ全キーと参照型）、
+657（EQ/Ep対応）、670（CG単一欄の負入力口）、676（合法PR→D未接続）。
+AllowedPlan:750の公開docstringも参照。
+(a) 場面入力のo=0/j=1とEp.contextの不足は紙と公開契約で誤りと確認して修正。
+(b)/(c) 窓口・検査器の修正本体は未読、未変更。
+現行公開動作で旧7失敗が全て解消し、preferencesタプルとConflict後の入場禁止を確認。
+SC-18のEnterWorker拒否・既存EQ/CG/T保持と占有保持は紙852/867/1957に対応。
+複数PlanRefを持つWg入力のソート修正そのものの独立回帰は今回は未実行。
+未接続2枝SC-14-M3-Hung-D-cap1/cap2は、現行artifact口に合法FProblem/PRの全対応がないため維持。
+Wg単独占有や初期Dをこの容量対照の代わりにしない。skip理由へ具体化。
+D6はMissingContractで止め、R10未接続を合格に数えない。
+残る失敗の切り分け・持ち主の判断事項はなし。
+
+### 検証結果（最終個別実行）
+各IDを1つずつ指定し、子pytestが終了してから次へ進んだ。重い試験の並列なし。
+.venv/Scripts/python.exe -B -m pytest "tests/test_fb_scenes.py::test_scene[場面ID]" -q -p no:cacheprovider --tb=line
+新46場面: 43 passed（正しい窓口41、負の対照検出2）/ 3 skipped / 想定外失敗0。
+実行可能な43場面は全必須状態へ到達。上限到達なし（M3 500、M4 100）。
+状態数は前置/探索を分離し、共有境界を二重計上して一意状態数にしない。
+局所の切断・固定前置の別順序未探索という制限はそのまま。
+D6は前置31状態/探索0、R10未確認。未接続容量2枝は状態なし、capacity未確認。
+
+| 場面 ID | 紙の行 (v0.18) | 最終結果 | pytest秒 | 前置/探索状態 |
+|---|---|---|---:|---:|
+| SC-03-M3-initial-precommit | 937,1931,1933,1935,1979 | passed | 3.16 | 29/5 |
+| SC-03-M3-initial-body-lost | 937,1931,1933,1935,1979 | passed | 4.08 | 29/9 |
+| SC-03-M3-initial-entry-lost | 937,1931,1933,1935,1979 | passed | 3.51 | 30/6 |
+| SC-03-M3-candidate-precommit | 937,1931,1933,1935,1979 | passed | 9.29 | 54/5 |
+| SC-03-M3-candidate-body-lost | 937,1931,1933,1935,1979 | passed | 11.91 | 54/9 |
+| SC-03-M3-candidate-entry-lost | 937,1931,1933,1935,1979 | passed | 10.13 | 55/6 |
+| SC-03-M3-evaluation-precommit | 937,1931,1933,1935,1979 | passed | 12.46 | 60/5 |
+| SC-03-M3-evaluation-body-lost | 937,1931,1933,1935,1979 | passed | 15.94 | 60/9 |
+| SC-03-M3-evaluation-entry-lost | 937,1931,1933,1935,1979 | passed | 13.78 | 61/6 |
+| SC-04-M3-Qgen-Wg | 938,1930,1932,1941 | passed | 2.82 | 34/1 |
+| SC-04-M3-EQ-Ep | 938,1935,1946 | passed | 12.10 | 67/1 |
+| SC-09-M3-generation-evaluation | 944,1931,1933,1935,1951,1959 | passed | 9.62 | 61/1 |
+| SC-09-M3-context-missing | 1937,1946,1956,1959 | passed | 7.10 | 55/1 |
+| SC-09-M3-context-save-wait | 1937,1946,1956,1959 | passed | 7.30 | 55/1 |
+| SC-09-M3-pG-after-EQ | 1937,1946,1959 | passed | 11.43 | 67/1 |
+| SC-15-M3-no-candidates | 950,1952,1953,1954 | passed | 4.90 | 49/1 |
+| SC-15-M3-failure | 950,1952,1953,1954 | passed | 4.91 | 49/1 |
+| SC-15-M3-unknown | 950,1952,1953,1954 | passed | 4.91 | 49/1 |
+| SC-15-M3-evidence-before-end | 1955,1959 | passed | 2.97 | 35/1 |
+| SC-10-M3-generator-exchange | 945,1933,1961 | passed | 6.87 | 57/1 |
+| SC-10-M3-generator-redelivery | 945,1933,1961 | passed | 9.21 | 63/1 |
+| SC-10-M3-input-view-exchange | 945,1933,1961 | passed | 6.87 | 57/1 |
+| SC-10-M3-input-view-redelivery | 945,1933,1961 | passed | 9.47 | 63/1 |
+| SC-10-M3-candidate-order-exchange | 945,1933,1961 | passed (INV-16.c検出) | 9.77 | 63/1 |
+| SC-10-M3-candidate-order-redelivery | 945,1933,1961 | passed | 9.57 | 63/1 |
+| SC-10-M3-measure-exchange | 945,1933,1961 | passed (INV-16.c検出) | 9.73 | 63/1 |
+| SC-10-M3-measure-redelivery | 945,1933,1961 | passed | 9.48 | 63/1 |
+| SC-13-M3-Hung-cap1 | 948,1932 | passed | 3.82 | 42/1 |
+| SC-13-M3-Hung-cap2 | 948,1932 | passed | 3.78 | 42/1 |
+| SC-14-M3-occupation | 949,1932 | passed | 3.14 | 34/1 |
+| SC-15-M3-stop-false | 950,1954 | passed | 5.05 | 49/1 |
+| SC-15-M3-stop-true | 950,1954 | passed | 5.30 | 51/1 |
+| SC-16-M3-unknown-late-value | 951,1954 | passed | 6.63 | 58/1 |
+| SC-16-M3-unknown-A-B | 951,1954,1957 | passed | 8.44 | 67/1 |
+| SC-17-M3-A-A-B | 952,1957 | passed | 12.66 | 72/1 |
+| SC-18-M3-upstream-Conflict | 953,1957 | passed | 15.18 | 73/1 |
+| SC-20-M3-empty | 955,1930 | passed | 3.57 | 52/1 |
+| SC-21-M3-receive-during-generation | 956,1932 | passed | 3.75 | 42/1 |
+| SC-21-M3-update-during-generation | 943,956,1932 | passed | 6.03 | 52/1 |
+| SC-14-M3-Hung-D-cap1 | 949,1932,1979 | skipped | 0.61 | —/— |
+| SC-14-M3-Hung-D-cap2 | 949,1932,1979 | skipped | 0.60 | —/— |
+| SC-09-M3-D6-generation-draw | 1936,2017 | skipped | 0.64 | 31/0 |
+| SC-15-M4-D-workfinished | 787,950,951,952,1967,1969 | passed | 2.92 | 42/1 |
+| SC-15-M4-D-failure | 787,950,951,952,1967,1969 | passed | 3.75 | 49/1 |
+| SC-16-M4-D-failure-unknown | 787,950,951,952,1967,1969 | passed | 4.90 | 58/1 |
+| SC-17-M4-D-late-workfinished | 787,950,951,952,1967,1969 | passed | 4.78 | 57/1 |
+
+帳簿・代表（すべて個別実行、最終値）:
+- SC-04-DESC: 1 passed in 5.36s; 前置/探索 45/7。
+- SC-04-publish-Q-Wr: 1 passed in 37.90s; 前置/探索 45/97。
+- SC-04-publish-R-Wp: 1 passed in 43.12s; 前置/探索 52/97。
+- test_paper_denominator_is_preserved: 1 passed in 0.62s; 前置/探索 —/—。
+- test_all_paper_scenes_and_rows_remain_in_final_report: 1 failed in 1.06s; 前置/探索 —/—。
+最終報告試験は旧部分集合のaggregate/disjoint照合と現行分母保存を通過し、最後だけ意図した未完判定。
+単独呼出しのREPORTSは空なので現行確認済み0・入口不足4行・実装の段へ43行。
+これは個別実行46件の合算ではない。47行・51条件・239枝を維持し、旧結果を現行合格へ流用しない。
+未実行（not_run）: 場面の全体約65分、test_fb_mutants.py、test_fb_machine.py全体、実F-a接続。
+歴史JSON未変更、SHA256:
+4c51b545f85433bebf5991b7e659d9ef26d5d77fd0111f5cdb019a637a0d7e4f
+紙v0.18も未変更、2112行/SHA256:
+a3605ac06bbb0657ec6a7078e4d1f7885f29ce257d40546c5f0b03064e8ffc6d
+
+### ハマった点
+負の継承口の試作ではPublish.valueをUnit単体と誤仮定し、2枝が場面側ValueErrorになった。
+公開の合法な返り値を観察し、実際は(Unit, work_rows)であることを確認。
+work_rowsを保ってUnitだけ置換する形へ直し、最終の2枝は検出成功。
+窓口・環境・検査器本体を読む回避策は取っていない。
+
+### 読んだ範囲 / 再利用 / 次の一手
+紙は場面表と852/861/867/1584/1592/1930-1961などの該当部分。全文読了ではない。Webなし。
+公開リテラル・AllowedPlan docstring・型の欄/署名だけをASTで抽出。
+AST解析対象はファイル全体だが、処理本体を表示・読解しない。今回の新たな読取り逸脱なし。
+前回の偶発表示については上の履歴に保持している。
+Home/Heat/Projects/suiとKnowledge/記録の参照と台帳の認証を分けるを再参照。
+再利用した知見と結果: 有効（旧記録の照合と現行結果の認証を分離）。現行正しさの証拠は今回の実行。
+許可が2ファイルだけなのでObsidian Sessions/Projects/Heatは未反映、heat.py未実行。
+次の一手: Claudeが全体実行へ進み、記録再生成の要否を判断する。
+記録再生成の明示旗/版付き別ファイル案は前回どおり提案のみ、実装・実行なし。
+"""

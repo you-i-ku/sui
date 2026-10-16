@@ -1,27 +1,27 @@
-"""F-b scene tests: short checks and the heavy denominator run.
+"""F-b v0.18 / MG-04: 47 rows and 51 completion-condition types.
 
-Short route: run these two commands sequentially from the repository root.
-  .venv/Scripts/python.exe -B -m pytest tests/test_fb_scenes.py -q -p no:cacheprovider -k "test_paper_denominator_is_preserved or test_all_paper_scenes_and_rows_remain_in_final_report"
-  .venv/Scripts/python.exe -B -m pytest tests/test_fb_scenes.py -q -p no:cacheprovider -k "SC-04-DESC or SC-04-publish-Q-Wr or SC-04-publish-R-Wp"
-2026-10-16 S-06 pre-migration measurements in this conversation: bookkeeping
-1 failed / 1 passed / 202 deselected in 0.69 s; representatives 3 passed /
-201 deselected in 78.33 s (allow about 80 seconds on this PC).
-The final denominator gate intentionally stays red with
-"45-row verdict remains incomplete" while required coverage is absent.
+Short bookkeeping route (the final verdict gate intentionally remains red):
+  .venv/Scripts/python.exe -B -m pytest tests/test_fb_scenes.py -q -p no:cacheprovider --tb=line -k "test_paper_denominator_is_preserved or test_all_paper_scenes_and_rows_remain_in_final_report"
+Representative route (run these three nodes separately, sequentially):
+  .venv/Scripts/python.exe -B -m pytest "tests/test_fb_scenes.py::test_scene[SC-04-DESC]" -q -p no:cacheprovider --tb=line
+  .venv/Scripts/python.exe -B -m pytest "tests/test_fb_scenes.py::test_scene[SC-04-publish-Q-Wr]" -q -p no:cacheprovider --tb=line
+  .venv/Scripts/python.exe -B -m pytest "tests/test_fb_scenes.py::test_scene[SC-04-publish-R-Wp]" -q -p no:cacheprovider --tb=line
+New M3/M4 nodes have -M3-/-M4- in their IDs. Run each node individually;
+SCENE includes prefix/graph states, seconds, cut, reachability and limits.
+D6 and the two Hung/PR/D capacity branches stay unconnected, never model passes.
+CG candidate-order/measure exchanges use the public publication subclass seam;
+their passes mean INV-16.c detected the fault, not correct-window success.
 
-Heavy route (about 65 minutes; Claude runs this after the cleanup):
-  .venv/Scripts/python.exe -B -m pytest tests/test_fb_scenes.py -q -p no:cacheprovider -k "not SC-01-same-rebuild and not SC-01-different-rebuild"
-This excludes the two 50,000-state SC-01 rebuild families (4 parameterized cases).
-Source: the 2026-10-16 S-06 user request reports Claude's prior result as
-14 failed / 77 passed / 109 skipped / 4 deselected. The duration estimate and
-these full-run totals are supplied evidence, not measurements by this cleanup.
-Failures are state limits, mandatory reachability not established, and the
-intentionally red final denominator gate.
+Heavy route: Claude only, previously about 65 minutes (new nodes add time):
+  .venv/Scripts/python.exe -B -m pytest tests/test_fb_scenes.py -q -p no:cacheprovider --tb=line -k "not SC-01-same-rebuild and not SC-01-different-rebuild"
+The four excluded SC-01 cases stay in the denominator. This full route was
+NOT run for MG-04. Never run it concurrently with another heavy test.
 
-Every paper branch remains in the report, including skipped/unconnected ones.
-Historical records are read from fb_scenes_results.json; normal tests never
-refresh them. Their original capture and paper_version remain unchanged.
--B and no:cacheprovider prevent bytecode/cache writes without environment changes.
+fb_scenes_results.json is the unchanged historical 193-branch/45-row record.
+Only that exact old subset is replayed against it. The current 47-row verdict
+uses this invocation's REPORTS exclusively; missing new observations are
+reported as no historical record. No implicit refresh command is provided.
+-B and no:cacheprovider avoid bytecode/cache writes without environment changes.
 """
 from __future__ import annotations
 
@@ -33,12 +33,15 @@ from time import perf_counter
 
 import pytest
 
-from fb_machine import Exploration, OutcomeKind, explore
+from fb_machine import Exploration, OutcomeKind, MissingContract, PlanRef, Object, explore
 from fb_check import check_exploration
 import fb_check as public_check
 from fb_scenes import (
     CONDITION_TABLE, FAIRNESS_TABLE, HUMAN_ROWS, IDENTIFICATION_TABLE, PAPER_PATH,
     ROWS_BY_LINE, SC_TABLE, SCENES, UNSPECIFIED_ROWS, ABSTRACT_FAIRNESS_CASES, instantiate,
+    LEGACY_SCENES, LEGACY_CONDITION_TABLE, CURRENT_ROW_LINES, NEW_ROW_REQUIREMENTS,
+    GENERATION_CONDITIONS, COMPLETION_TYPES, MG04_SCENES, PAPER_VERSION,
+    scene_window,
 )
 
 
@@ -109,6 +112,8 @@ def _saved_receipt_point(state, envelope):
 
 def _state_probe(goal, state, scene):
     p = state.core.p
+    if goal.probe.startswith("mg_"):
+        return _mg_state_probe(goal, state, scene)
     if goal.probe.startswith("tie_"):
         work, unknown_first = goal.args
         originals = _tied_originals(state, work, unknown_first)
@@ -260,9 +265,169 @@ def _state_probe(goal, state, scene):
     return False
 
 
+def _mg_resolve_input(value, state):
+    """Resolve ONLY declared input identities against actual saved slots.
+
+    No business result is inferred from the window. The complete expected
+    candidate body remains the E0 Program reply fixed before execution.
+    """
+    if isinstance(value, PlanRef):
+        return next((slot.prepared.point for unit in state.core.p.units if unit.id == value.unit
+                     for slot in unit.slots if slot.plan.slot == value.slot and slot.prepared is not None
+                     and any(e.point == slot.prepared.point for e in state.core.e)), value)
+    if isinstance(value, Object):
+        return replace(value, items=tuple((k, _mg_resolve_input(v, state)) for k, v in value.items))
+    if isinstance(value, tuple):
+        return tuple(_mg_resolve_input(v, state) for v in value)
+    return value
+
+
+def _mg_state_probe(goal, state, scene):
+    """Paper expectations over public frozen observations; no checker oracle."""
+    p = state.core.p
+    records = [e for e in state.core.e if e.header.seal in {b.seal for b in state.core.c}]
+    candidates = [e for e in records if e.header.record.contract.name == "candidate_declaration"]
+    evaluations = [e for e in records if e.header.record.contract.name == "sui.fb.evaluation_request"]
+    terminals = [e for e in records if e.header.record.contract.name == "sui.fb.work_terminal"]
+    wg = next((w for w in p.work if w.descriptor.work_id == "wg"), None)
+    purpose = [e for w in p.work for e in w.purposes
+               if isinstance(e.obligation_key, public_check.PurposePart)]
+    expected_wg = next((w for plan in scene.e0.plans for w in plan.works if w.work_id == "wg"), None)
+    expected_purpose = (public_check.PurposePart(
+        public_check.CompletionKey("O-G", ("work", "wg"), "run", public_check.WorkKey("wg")),
+        (expected_wg.purpose, expected_wg.process, expected_wg.reader, expected_wg.request, expected_wg.stage_slot),
+        expected_wg.request) if expected_wg else None)
+    purpose_held = bool(purpose) and all(e.obligation_key == expected_purpose and e.witness is not None
+                                       and "pG" in e.completion_conditions for e in purpose)
+    cg_unit = next((u for u in p.units if u.id == "candidate"), None)
+    eq_unit = next((u for u in p.units if u.id == "evaluation"), None)
+    issue_eq = [c for c in p.conditions if c.key.obligation == "O-G" and c.key.kind == "issue"
+                and c.key.target == public_check.SlotKey("evaluation", "eq")]
+    probe = goal.probe
+    if probe == "mg_publish":
+        unit, work = goal.args
+        published = next((u for u in p.units if u.id == unit), None)
+        return (published is not None and all(s.prepared is None for s in published.slots)
+                and any(w.descriptor.work_id == work for w in p.work)
+                and any(c.key.kind == "run" and c.key.target == public_check.WorkKey(work) and c.unmet
+                        for c in p.conditions))
+    if probe == "mg_candidate":
+        if not candidates or not wg:
+            return False
+        declared = next(x for x in scene.e0.programs if x.work == "wg").replies[0].content.get("declaration")
+        actual = candidates[0].header.record.content
+        return len(candidates) == 1 and actual == _mg_resolve_input(declared, state)
+    if probe == "mg_cg_exchange":
+        if len(candidates) != 1 or not wg:
+            return False
+        declared = next(x for x in scene.e0.programs if x.work == "wg").replies[0].content.get("declaration")
+        expected = _mg_resolve_input(declared, state)
+        actual = candidates[0].header.record.content
+        field = "input_order" if goal.args[0] == "candidate-order" else "measure"
+        changed_keys = {key for key, value in expected.items if actual.get(key) != value}
+        return (set(dict(actual.items)) == set(dict(expected.items)) and changed_keys == {field}
+                and len([e for e in _receipt_entries(state)
+                         if e.header.record.contract.name == "sui.fb.work_report"]) == 2)
+    if probe == "mg_linked":
+        if len(candidates) != 1 or len(evaluations) != 1 or not wg:
+            return False
+        ep = next((w for w in p.work if w.descriptor.work_id == "ep"), None)
+        eq_plan = next(p for p in scene.e0.plans if p.unit == "evaluation").records[0]
+        expected_eq = _mg_resolve_input(eq_plan.content, state)
+        actual_eq = evaluations[0].header.record.content
+        return (ep is not None and actual_eq == expected_eq
+                and actual_eq.get("candidates") == candidates[0].point
+                and all(_mg_resolve_input(ep.descriptor.numerical_view.context.get(key), state) == actual_eq.get(key)
+                        for key in ("model", "context"))
+                and len([e for e in records if e.header.record.contract.name == "sui.fb.candidate_request"]) == 1
+                and _mg_state_probe(replace(goal, probe="mg_candidate"), state, scene))
+    if probe == "mg_no_purpose":
+        return cg_unit is not None and not purpose
+    if probe == "mg_eq_wait":
+        return (len(candidates) == 1 and eq_unit is None and bool(issue_eq) and all(c.unmet for c in issue_eq)
+                and cg_unit is not None and cg_unit.generation is not None
+                and bool(purpose) == goal.args[0]
+                and (not purpose or purpose_held))
+    if probe == "mg_purpose_after_eq":
+        return (bool(evaluations) and bool(purpose) and purpose_held
+                and all(c.obligation_key.origin.obligation == "O-G" for c in purpose))
+    if probe == "mg_non_success":
+        branch = goal.args[0]
+        kind = {"no-candidates": OutcomeKind.RETURNED, "failure": OutcomeKind.FAILURE,
+                "unknown": OutcomeKind.UNKNOWN}[branch]
+        required_reports = goal.args[1] if len(goal.args) > 1 else 1
+        return (sum(e.event.kind == "WorkFinished" for e in state.evidence.eh.originals) >= required_reports
+                and any(e.header.record.content.get("work") == "wg"
+                    and e.header.record.content.get("terminal_kind") == kind for e in terminals)
+                and cg_unit is None and eq_unit is None and bool(purpose)
+                and purpose_held)
+    if probe == "mg_before_end":
+        return (wg is not None and any(e.kind == "Returned" for e in state.evidence.ew.events)
+                and not any(e.event.kind == "WorkFinished" for e in state.evidence.eh.originals)
+                and not terminals and not purpose
+                and any(c.key.obligation == "O-G" and c.key.kind == "run" and c.unmet for c in p.conditions)
+                and not any(c.key.obligation == "O-G" and c.key.kind == "handle" for c in p.conditions))
+    if probe == "mg_bad_generation":
+        return (wg is not None and len(terminals) == 1 and cg_unit is None and eq_unit is None
+                and len([e for e in _receipt_entries(state) if e.header.record.contract.name == "sui.fb.work_report"]) == 2)
+    if probe == "mg_held":
+        return wg is not None and wg.held == (("think", 1),) and not wg.stopped and not wg.released
+    if probe == "mg_hung_receipt":
+        return (_mg_state_probe(replace(goal, probe="mg_held"), state, scene)
+                and any(e.header.record.contract.name == "sui.fb.received" for e in records)
+                and any(r.descriptor_read is not None and r.descriptor_read.work_id == "wg" for r in state.core.runners))
+    if probe == "mg_stop":
+        return (bool(terminals) and wg is not None and wg.stopped == goal.args[0]
+                and wg.released == goal.args[0]
+                and (goal.args[0] or wg.held == (("think", 1),)))
+    if probe in ("mg_conflict", "mg_upstream"):
+        return (len(candidates) == 1 and len(terminals) == 1 and bool(purpose)
+                and sum(e.event.kind == "WorkFinished" for e in state.evidence.eh.originals) >= 2
+                and (eq_unit is None if probe == "mg_conflict" else bool(evaluations)
+                     and any(w.descriptor.work_id == "ep" and w.held for w in p.work)
+                     and any(w.id == "ep:wrapper:0" for w in state.core.wrappers)
+                     and not any(r.descriptor_read is not None and r.descriptor_read.work_id == "ep"
+                                 for r in state.core.runners)))
+    if probe == "mg_empty":
+        return (scene.e0.initial is None and _saved(state, scene)
+                and {w.descriptor.stage for w in p.work} == {"MeasureSegment"}
+                and len(state.core.h.interval_requests) == 1
+                and not candidates and not evaluations and not state.core.runners)
+    if probe == "mg_concurrent_update":
+        return (_mg_state_probe(replace(goal, probe="mg_hung_receipt"), state, scene)
+                and {r.descriptor_read.work_id for r in state.core.runners if r.descriptor_read is not None}
+                    == {"wg", "wr-e1"}
+                and any(e.header.record.name == "q-e1:q" for e in records))
+    if probe == "mg_draw":
+        mode = goal.args[0]
+        d = next((w for w in p.work if w.descriptor.work_id == "d"), None)
+        raw = [e for e in _receipt_entries(state)
+               if e.header.record.contract.name in ("sui.fb.work_report", "sui.fb.draw_report")]
+        expected_raw = 2 if mode in ("failure-unknown", "late-workfinished") else 1
+        if d is None or len(raw) != expected_raw:
+            return False
+        if mode == "workfinished":
+            return not terminals and d.first is None and d.knowledge is None and bool(d.held) and not d.released
+        if len(terminals) != 1:
+            return False
+        content = terminals[0].header.record.content
+        first = next((e for e in state.evidence.eh.originals if e.event.kind == "DrawReturned"), None)
+        return (first is not None and content.get("terminal_kind") == OutcomeKind.FAILURE
+                and content.get("first_receipt") == _saved_receipt_point(state, first)
+                and set(dict(content.items)) == {"work", "request", "stage", "first_receipt",
+                    "terminal_kind", "returned", "basis", "view"}
+                and {w.descriptor.work_id for w in p.work} == {"d"}
+                and not any(e.header.record.contract.name in ("draw_fact", "sui.fb.draw_unknown") for e in records))
+    return False
+
+
 def _edge_probe(goal, edge, before, after, scene):
     op = edge.action.operation
     probe = goal.probe
+    if probe == "mg_fault":
+        unit, slot, operation, outcome = goal.args
+        return (op == operation and edge.action.target == (unit, slot)
+                and edge.action.outcome == outcome)
     if probe == "reaccept":
         return op == "Accept" and bool(edge.action.target) and any(
             r.envelope == edge.action.target[0] and r.envelope.key not in before.evidence.eh.acknowledgements
@@ -371,17 +536,21 @@ def _row_results(scene, reports, reachability, complete):
         else:
             # This is positive structural observation, never full row coverage.
             # Violations stay separate and prevent a pass; all limitations and
-            # the 32 unspecified contrasts remain in the 45-row aggregate.
+            # the 32 unspecified contrasts remain in the 47-row aggregate.
             classification = "識別力未確認"
-        rows[condition] = {"paper_line": line, "classification": classification, "violations": violations,
+        rows[condition] = {"paper_line": CURRENT_ROW_LINES[condition], "historical_index_line": line, "classification": classification, "violations": violations,
                            "observations": seen, "limitations": limitations, "connected": connected,
                            "identification": "未具体化" if condition in UNSPECIFIED_ROWS else "条件差具体化済み・負の対照未実行"}
+        if scene.publication_exchange:
+            rows[condition]["identification"] = ("単一欄交換を検出・行全体は未確認" if condition == "INV-16.c" and violations
+                                                   else "負の対照の観測・正しい窓口の合格ではない")
     return rows
 
 
 def _print_report(result, capsys):
     compact = {key: result.get(key) for key in ("id", "paper", "initial", "cut", "max_states", "states", "edges",
-                                               "seconds", "check_seconds", "execution", "counts", "applicable")}
+                                                "seconds", "check_seconds", "execution", "counts", "applicable", "prefix_states", "historical",
+                                                "publication_exchange", "negative_control_detected")}
     compact["reach"] = {key: value["status"] for key, value in result["reach"].items()}
     compact["H-01..06"] = "未点検"
     with capsys.disabled():
@@ -420,16 +589,28 @@ def test_paper_denominator_is_preserved(capsys):
     assert len(SC_TABLE) == 22  # SC-07a and SC-07b are separate.
     assert len(IDENTIFICATION_TABLE) == 13
     assert len(FAIRNESS_TABLE) == 6
-    assert len(CONDITION_TABLE) == 45
+    assert len(CONDITION_TABLE) == 47
+    assert len(COMPLETION_TYPES) == len(set(COMPLETION_TYPES)) == 51
+    assert len(GENERATION_CONDITIONS) == 7
+    assert set(NEW_ROW_REQUIREMENTS) == {"INV-2.g", "INV-16.c"}
     assert len(UNSPECIFIED_ROWS) == 32
     assert {s.paper_id for s in SCENES} == set(SC_TABLE) | set(IDENTIFICATION_TABLE) | set(FAIRNESS_TABLE)
     assert len({s.id for s in SCENES}) == len(SCENES)
     assert all(0 < s.max_states <= 200_000 for s in SCENES)
     assert all(s.e0 is not None or s.blocker for s in SCENES)
-    assert len(SCENES) == 193
+    assert len(LEGACY_SCENES) == 193
+    assert len(SCENES) == 193 + len(MG04_SCENES)
+    assert not {s.id for s in LEGACY_SCENES} & {s.id for s in MG04_SCENES}
+    for field in ("candidate-order", "measure"):
+        negative = next(s for s in MG04_SCENES if s.id == f"SC-10-M3-{field}-exchange")
+        legal = next(s for s in MG04_SCENES if s.id == f"SC-10-M3-{field}-redelivery")
+        assert negative.e0 == legal.e0 and negative.script == legal.script
+        assert negative.publication_exchange == field and not legal.publication_exchange
+        assert negative.applicable_rows == ("INV-16.c",)
     assert all(s.scope_class in ("a", "b", "c") and s.scope_reason for s in SCENES)
     assert len(next(s for s in SCENES if s.id == "SC-04-other-publish-kinds").parts) == 9
     assert all(s.goals and s.applicable_rows for s in SCENES)
+    assert all(set(s.applicable_rows) <= set(CONDITION_TABLE) for s in SCENES)
     tied = [s for s in SCENES if s.id.startswith("SC-15-") and "-tie-" in s.id]
     assert len(tied) == 12 and Counter(s.scope_class for s in tied) == {"a": 6, "b": 6}
     for stage in ("Wr", "Wp", "Wv"):
@@ -441,9 +622,9 @@ def test_paper_denominator_is_preserved(capsys):
         assert {g.id for g in pair[0].goals} <= {g.id for g in pair[1].goals}
     # A replaced audit must preserve every declaration and every checker row;
     # these bookkeeping assertions do not certify its recorded model results.
-    assert {m["id"] for m in RECORDED_OBSERVATION_EVIDENCE["manifest"]} == {s.id for s in SCENES}
-    assert {r["id"] for r in RECORDED_OBSERVATION_EVIDENCE["latest_reports"]} == {s.id for s in SCENES}
-    assert {r["id"] for r in RECORDED_OBSERVATION_EVIDENCE["row_aggregate"]} == set(CONDITION_TABLE)
+    assert {m["id"] for m in RECORDED_OBSERVATION_EVIDENCE["manifest"]} == {s.id for s in LEGACY_SCENES}
+    assert {r["id"] for r in RECORDED_OBSERVATION_EVIDENCE["latest_reports"]} == {s.id for s in LEGACY_SCENES}
+    assert {r["id"] for r in RECORDED_OBSERVATION_EVIDENCE["row_aggregate"]} == set(LEGACY_CONDITION_TABLE)
     assert all(sum(r["counts"].values()) == 45 for r in RECORDED_OBSERVATION_EVIDENCE["latest_reports"]
                if "counts" in r)
     if RECORDED_OBSERVATION_EVIDENCE["schema_version"] >= 3:
@@ -456,7 +637,8 @@ def test_paper_denominator_is_preserved(capsys):
         notes = tuple(dict.fromkeys(text for s in SCENES for text in (s.blocker, *s.remaining, *s.assumptions) if text))
         print("\nMANIFEST-NOTES " + json.dumps(notes, ensure_ascii=False), flush=True)
         print("\nMANIFEST " + json.dumps([{
-            "id": s.id, "paper_id": s.paper_id, "paper": s.lines, "initial": s.initial_id,
+            "id": s.id, "paper_id": s.paper_id, "paper": s.lines, "paper_version": PAPER_VERSION if s in MG04_SCENES else "v0.12 historical row indices", "initial": s.initial_id,
+            "publication_exchange": s.publication_exchange,
             "cut": s.cut.id, "excluded": sorted(s.cut.excluded_operations), "max_states": s.max_states,
             "has_e0": s.e0 is not None, "applicable": s.applicable_rows,
             "goals": {g.id: g.text for g in s.goals}, "blocker_note": notes.index(s.blocker) if s.blocker else None,
@@ -517,8 +699,10 @@ def test_scene(scene, capsys):
               "assumptions": scene.assumptions, "remaining": scene.remaining,
               "negative_controls": scene.negative_controls, "human": dict(HUMAN_ROWS),
               "reach": {g.id: {"status": "未確認", "text": g.text} for g in scene.goals},
-              "counts": {name: 45 if name == "未接続 (入口不足)" else 0 for name in CLASSIFICATIONS},
+              "counts": {name: len(CONDITION_TABLE) if name == "未接続 (入口不足)" else 0 for name in CLASSIFICATIONS},
               "blocker": scene.blocker, "findings": []}
+    result["historical"] = "記録なし (今回の実行の結果だけ)" if scene in MG04_SCENES else "旧部分集合の記録あり・今回の結果と分離"
+    result["publication_exchange"] = scene.publication_exchange
     result.update(scope_class=scene.scope_class, scope_reason=scene.scope_reason,
                   implementation_scope=scene.implementation_scope)
     REPORTS.append(result)
@@ -533,15 +717,16 @@ def test_scene(scene, capsys):
         if scene.scope_class == "b":
             result["execution"] = "範囲外 (実装の段へ)"
             result["counts"] = {name: len(scene.applicable_rows) if name == "未接続 (実装の段へ)" else
-                                45 - len(scene.applicable_rows) if name == "未接続 (入口不足)" else 0
+                                len(CONDITION_TABLE) - len(scene.applicable_rows) if name == "未接続 (入口不足)" else 0
                                 for name in CLASSIFICATIONS}
         _print_report(result, capsys)
         pytest.skip(scene.blocker)
     try:
         scenario, prefix_states, prefix_edges, prefix_enabled = instantiate(scene)
         result["connection"] = scenario.initial_connection
+        result["prefix_states"] = len(prefix_states)
         frozen_expected = scene.e0.observation_declarations
-        graph = explore(scenario)
+        graph = explore(scenario, window=scene_window(scene) if scene.publication_exchange else None)
         result.update(states=len(graph.states), edges=len(graph.edges), seconds=round(graph.elapsed_seconds, 6),
                       execution="完走" if graph.complete else "探索未完", omitted=len(graph.omitted), frontier=list(graph.frontier))
         with capsys.disabled():
@@ -594,21 +779,45 @@ def test_scene(scene, capsys):
         result["unconnected"] = sorted({repr(v) for r in reports for v in r.unconnected_observations})
         assert scene.e0.observation_declarations == frozen_expected, "E0 changed during execution"
         assert {r.condition_id for r in report.rows} == set(CONDITION_TABLE), "checker denominator differs from paper"
-        assert sum(result["counts"].values()) == 45
+        assert sum(result["counts"].values()) == 47
+    except MissingContract as error:
+        if not scene.expected_missing_contract or scene.expected_missing_contract not in str(error):
+            result.update(execution="実行エラー", error=f"MissingContract: {error}")
+            _print_report(result, capsys)
+            pytest.fail(result["error"], pytrace=False)
+        result.update(execution="未接続 (D6/R10)", error=f"MissingContract: {error}", states=0,
+                      prefix_states=getattr(error, "scene_prefix_states", None),
+                      seconds=round(getattr(error, "scene_elapsed_seconds", 0.0), 6))
+        _print_report(result, capsys)
+        pytest.skip("D6/R10: MissingContract observed; no model pass credit")
     except Exception as error:
         # Do not expose or inspect the forbidden implementation in tracebacks.
         result["execution"] = "実行エラー"
         result["error"] = f"{type(error).__name__}: {error}"
         _print_report(result, capsys)
         pytest.fail(result["error"], pytrace=False)
+    result["negative_control_detected"] = bool(scene.publication_exchange and
+        any(f["row"] == "INV-16.c" for f in result["findings"]))
     _print_report(result, capsys)
     problems = []
+    if scene.expected_missing_contract:
+        problems.append("D6 must reject generation draws with MissingContract")
     if not graph.complete:
         problems.append("state limit reached; not a normal terminal")
     missing = [key for key, value in result["reach"].items() if value["status"] != "到達した"]
     if missing:
         problems.append("required states unreached/unconfirmed: " + ",".join(missing))
-    if result["findings"] or result["contract_violations"]:
+    if scene.publication_exchange:
+        if not result["negative_control_detected"]:
+            problems.append("CG single-field exchange was not detected by INV-16.c")
+        if result["contract_violations"]:
+            problems.append("negative input broke the public observation contract")
+        if not problems:
+            row = next(r for r in _paper_aggregate((result,)) if r["id"] == "INV-16.c")
+            assert scene.id in row["negative_control_branches"]
+            assert scene.id not in row["positive_structural_branches"]
+            assert row["negative_control_findings"] and not row["violations"]
+    elif result["findings"] or result["contract_violations"]:
         problems.append("correct-window report contains violations; scene expectations retained")
     if problems:
         pytest.fail("; ".join(problems), pytrace=False)
@@ -688,7 +897,7 @@ def _same_r_wv_historical_view_regression(capsys):
         pytest.fail("resolved P-10 regression has public edge violations; expectations retained", pytrace=False)
 
 
-def _paper_aggregate(reports):
+def _paper_aggregate(reports, *, scenes=SCENES, table=CONDITION_TABLE):
     """One item per paper row. Partial positive observations are not full rows.
 
     A row may have several deficits; all branch lists remain visible. The
@@ -697,18 +906,30 @@ def _paper_aggregate(reports):
     """
     by_id = {r["id"]: r for r in reports}
     aggregate = []
-    for row, line in CONDITION_TABLE.items():
+    for row, line in table.items():
         limits, implementation, entry, positive = [], [], [], []
         # A checker violation outside this scene's paper index must not vanish
-        # from the 45-row report (P-09 observes first preparation of T).
-        violations = [f for report in by_id.values() for f in report.get("findings", ()) if f["row"] == row]
-        for parent in SCENES:
+        # from the 47-row report (P-09 observes first preparation of T).
+        violations = [f for report in by_id.values() if not report.get("publication_exchange")
+                      for f in report.get("findings", ()) if f["row"] == row]
+        negative = []
+        for parent in scenes:
             if row not in parent.applicable_rows:
                 continue
             for scene in parent.parts or (parent,):
                 report = by_id.get(scene.id)
                 if scene.scope_class == "b":
                     implementation.append(scene.id)
+                elif scene.publication_exchange:
+                    if (report is not None and report.get("negative_control_detected")
+                        and report["execution"] == "完走" and not report.get("contract_violations")
+                        and all((g["status"] if isinstance(g, dict) else g) == "到達した"
+                                for g in report["reach"].values())):
+                        negative.append(scene.id)
+                    elif report is not None and report["execution"] == "探索未完":
+                        limits.append(scene.id)
+                    else:
+                        entry.append(scene.id)
                 elif scene.scope_class == "c" or report is None:
                     entry.append(scene.id)
                 elif report["execution"] == "探索未完":
@@ -722,11 +943,17 @@ def _paper_aggregate(reports):
                     entry.append(scene.id)
         status = ("未完 (上限)" if limits else "未接続 (実装の段へ)" if implementation else
                   "未接続 (入口不足)" if entry else "識別力未確認")
-        aggregate.append({"id": row, "paper_line": line, "classification": status,
+        aggregate.append({"id": row, "paper_line": CURRENT_ROW_LINES[row] if table is CONDITION_TABLE else line, "classification": status,
             "limit_branches": limits, "implementation_branches": implementation,
             "entry_or_observation_branches": entry, "positive_structural_branches": positive,
             "violations": violations, "identification": "未具体化" if row in UNSPECIFIED_ROWS else
             "条件差具体化済み・負の対照未実行"})
+        if table is CONDITION_TABLE:
+            aggregate[-1]["negative_control_branches"] = negative
+            if negative:
+                aggregate[-1]["identification"] = "単一欄交換を検出・行全体の識別力は未確認"
+            aggregate[-1]["negative_control_findings"] = [f for report in by_id.values()
+                if report.get("publication_exchange") for f in report.get("findings", ()) if f["row"] == row]
     return aggregate
 
 
@@ -735,7 +962,7 @@ def _aggregate_disjoint_breakdown(aggregate):
 
     'SC-01 50,000 only' refers to the state-limit cause, not to all reasons:
     implementation-stage and observation deficits remain explicit booleans.
-    Every one of the 45 rows appears in exactly one group.
+    Every one of the supplied rows appears in exactly one group.
     """
     retained_sc01 = {"SC-01-" + content + "-rebuild" + rebuild
                     for content in ("same", "different") for rebuild in ("0", "1")}
@@ -754,25 +981,45 @@ def _aggregate_disjoint_breakdown(aggregate):
 
 
 def test_all_paper_scenes_and_rows_remain_in_final_report(capsys):
-    # An audit replay is explicitly labelled; it is never model execution.
-    records = {r["id"]: r for r in RECORDED_OBSERVATION_EVIDENCE["latest_reports"]}
-    records.update({r["id"]: r for r in RECORDED_OBSERVATION_EVIDENCE.get("publish_reports", ())})
-    records.update({r["id"]: r for r in REPORTS})
-    rows = _paper_aggregate(tuple(records.values()))
-    if not REPORTS and RECORDED_OBSERVATION_EVIDENCE["schema_version"] >= 4:
-        assert rows == RECORDED_OBSERVATION_EVIDENCE["row_aggregate"], "recorded row aggregation is stale"
-        assert _aggregate_disjoint_breakdown(rows) == RECORDED_OBSERVATION_EVIDENCE["disjoint_breakdown"]
+    # Historical replay is restricted to exactly its original rows/branches.
+    historical = {r["id"]: r for r in RECORDED_OBSERVATION_EVIDENCE["latest_reports"]}
+    historical.update({r["id"]: r for r in RECORDED_OBSERVATION_EVIDENCE.get("publish_reports", ())})
+    old_rows = _paper_aggregate(tuple(historical.values()), scenes=LEGACY_SCENES,
+                                table=LEGACY_CONDITION_TABLE)
+    if RECORDED_OBSERVATION_EVIDENCE["schema_version"] >= 4:
+        assert old_rows == RECORDED_OBSERVATION_EVIDENCE["row_aggregate"], "historical subset aggregation changed"
+        assert _aggregate_disjoint_breakdown(old_rows) == RECORDED_OBSERVATION_EVIDENCE["disjoint_breakdown"]
+    # NO historical positives enter the current 47-row verdict. Current runs
+    # retain the complete inventory even when only one scene was selected.
+    rows = _paper_aggregate(REPORTS)
+    executed = {r["id"] for r in REPORTS}
+    inventory = [{"id": s.id, "historical": "記録なし (今回の実行の結果だけ)" if s in MG04_SCENES else
+                  "v0.12旧部分集合の記録のみ・現行分母へ流用しない",
+                  "current": "実行済み" if s.id in executed else "未実行",
+                   "publication_exchange": s.publication_exchange,
+                  "paper": s.lines, "rows": s.applicable_rows}
+                 for s in SCENES]
+    conditions = [{"id": key, "paper": GENERATION_CONDITIONS.get(key, "1206-1243"),
+                   "status": "未確認・接続種類の分母であり合格件数ではない",
+                   "historical": "記録なし" if key in GENERATION_CONDITIONS else "旧44種類"}
+                  for key in COMPLETION_TYPES]
     with capsys.disabled():
-        print("\nPAPER: 193 branches / 45 rows; SC-04 has 9 named subcases, not 9 additional denominator branches.")
+        print(f"\nPAPER: {len(SCENES)} branches / 47 rows / 51 condition types; historical 193 / 45 / 44 kept separate.")
+        print("CURRENT-INVENTORY " + json.dumps(inventory, ensure_ascii=False), flush=True)
+        print("CONDITION-TYPES " + json.dumps(conditions, ensure_ascii=False), flush=True)
+        print("NEW-ROWS " + json.dumps(NEW_ROW_REQUIREMENTS, ensure_ascii=False), flush=True)
         print("AGGREGATE " + json.dumps(rows, ensure_ascii=False), flush=True)
         print("COUNTS " + json.dumps({name: sum(r["classification"] == name for r in rows)
-                                     for name in CLASSIFICATIONS}, ensure_ascii=False), flush=True)
+                                      for name in CLASSIFICATIONS}, ensure_ascii=False), flush=True)
         print("DISJOINT " + json.dumps(_aggregate_disjoint_breakdown(rows), ensure_ascii=False), flush=True)
-        print("Recorded data not rerun in this invocation retain their capture/version; H-01..06: 未点検.")
-    assert len(rows) == 45
+        print("Historical JSON unchanged. H-01..06: 未点検. Unexecuted current scenes receive no historical pass credit.")
+    assert len(rows) == 47 and len(conditions) == 51
+    assert {r["id"] for r in rows} == set(CONDITION_TABLE)
+    assert {r["id"] for r in inventory} == {s.id for s in SCENES}
     if any(r["classification"] != "確認済み" or r["violations"] for r in rows):
-        pytest.fail("45-row verdict remains incomplete: finite/implementation/connection limits, "
-                    "32 unspecified contrasts, all negative controls and H-01..06 remain in the denominator.", pytrace=False)
+        pytest.fail("47-row verdict remains incomplete: current-only execution, finite/implementation/connection limits, "
+                    "32 unspecified contrasts, negative controls and H-01..06 remain in the denominator.", pytrace=False)
+
 
 
 # Historical execution audit only; not used by E0, reach probes or behavioral oracles.
