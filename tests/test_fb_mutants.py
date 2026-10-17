@@ -574,7 +574,10 @@ def now():
 
 def source_hashes():
     # Digest only; never display or interpret machine/checker implementation.
-    return {name: sha256((ROOT / name).read_bytes()).hexdigest() for name in SOURCE_PATHS}
+    # FBM3-R04-B: digest the content git stores (LF), so a checkout's line endings
+    # (core.autocrlf, editors) do not decide whether the record is current.
+    return {name: sha256((ROOT / name).read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+            for name in SOURCE_PATHS}
 
 
 def report_data(value):
