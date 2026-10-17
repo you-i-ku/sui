@@ -6396,7 +6396,8 @@ def evaluate_condition_custody(contract: ObservationE0, trace: ObservationTrace,
                    if b.key.obligation != 'O-G'}
     issue_carriers = {}
     issue_instances = set()
-    for occurrence in issue_occurrences(facts):
+    independent_issues = issue_occurrences(facts)
+    for occurrence in independent_issues:
         matches = [b for b in contract.completions if issue_instance_matches(b, occurrence, facts)]
         if occurrence.binding is not None and not matches:
             matches = [occurrence.binding]
@@ -6408,10 +6409,17 @@ def evaluate_condition_custody(contract: ObservationE0, trace: ObservationTrace,
                 if occurrence.carrier is not None:
                     issue_carriers[binding.key] = occurrence.carrier
         else:
+            for binding in matches:
+                if occurrences.get(binding.key) is not True:
+                    occurrences[binding.key] = None
             target = UnconnectedCompletion(occurrence.condition_id, occurrence.witness)
             reason = 'issue occurrence/instance: ' + repr(target) + ': ' + '; '.join(occurrence.reasons)
             facts.gap(reason)
             judgements.append(CustodyJudgement(target, '未接続', None, None, (reason,)))
+    check_excess_occurrences(facts, bindings,
+        lambda b: excess_occurrence(b, facts, independent_issues),
+        clauses, judgements, ('INV-2.a', 'INV-2.c'),
+        exclude_generation=any(d.stage == 'Wg' for d in contract.descriptors))
     born = {key for key, occurred in occurrences.items() if occurred is True}
     for key, occurred in occurrences.items():
         if occurred is None:
@@ -6434,7 +6442,7 @@ def evaluate_condition_custody(contract: ObservationE0, trace: ObservationTrace,
                     'actual promised work lost its matching P.work responsibility', WorkKey(descriptor.work_id))
         for record in plan.records:
             slot = SlotKey(plan.unit, record.slot)
-            matches = [b.key for b in contract.completions if slot in b.slots]
+            matches = [b.key for b in contract.completions if b.key.kind == 'save' and slot in b.slots]
             if matches:
                 promised.update(matches)
             else:
@@ -6442,6 +6450,9 @@ def evaluate_condition_custody(contract: ObservationE0, trace: ObservationTrace,
                 promised.add(key)
                 bindings.setdefault(key, CompletionBinding(key, 'Publish', UnitKey(plan.unit), (slot,), Owner('P.units', plan.unit)))
     for key in sorted((k for k in born | previous | promised if k.obligation != 'O-G'), key=repr):
+        # 1199/1311/1588: unknown birth is not unknown discharge. Previous
+        # unmet and actual promises remain subject to independently evaluated
+        # Direct/Transfer/Owner; the birth limitation above is still reported.
         held = current.get(key)
         binding = bindings.get(key)
         retained = condition_owner(binding, held, facts)
@@ -6489,7 +6500,156 @@ def evaluate_condition_custody(contract: ObservationE0, trace: ObservationTrace,
     generation = evaluate_generation_custody(contract, trace, state, before_state=before_state)
     return ObservationEvaluation(BoundaryReport("約束接続・部分判定", ()), tuple(clauses) + generation.clauses,
                                  tuple(sorted(limitations | set(generation.limitations))),
-                                 tuple(judgements) + generation.custody)
+                                 merge_unconnected_judgements((*judgements, *generation.custody)))
+
+
+def merge_unconnected_judgements(judgements):
+    """One unknown target, retaining both occurrence and conclusion reasons."""
+    merged, positions = [], {}
+    for item in judgements:
+        if item.classification != '未接続':
+            merged.append(item)
+            continue
+        if item.target not in positions:
+            positions[item.target] = len(merged)
+            merged.append(item)
+            continue
+        index = positions[item.target]
+        previous = merged[index]
+        merged[index] = CustodyJudgement(item.target, '未接続',
+            previous.direct if previous.direct is not None else item.direct,
+            previous.transfer if previous.transfer is not None else item.transfer,
+            tuple(dict.fromkeys((*previous.reasons, *item.reasons))))
+    return tuple(merged)
+
+
+def claimed_conditions(state):
+    """Actual claims are the population to audit, never evidence of birth."""
+    return (set(getattr(state.evidence, 'condition_births', ()))
+            | {c.key for c in state.core.p.conditions}
+            | {key for c in state.core.p.conditions for key in c.unmet})
+
+
+def check_excess_occurrences(facts, bindings, occurrence, clauses, judgements, rows,
+                             *, exclude_generation=False, generation_only=False, exclude_keys=frozenset()):
+    # 1192/1200/1311/1327: audit even cleared rows and historical birth claims.
+    # A real (also unlawful) Publish still creates save/run custody; its legality
+    # is checked separately. A claim cannot manufacture its own occurrence.
+    for key in sorted(claimed_conditions(facts.state), key=repr):
+        if key in exclude_keys:
+            continue
+        if exclude_generation and key.obligation == 'O-G':
+            continue
+        if generation_only and key.obligation != 'O-G':
+            continue
+        binding = bindings.get(key)
+        occurred = occurrence(binding) if binding is not None else None
+        if occurred is None:
+            reason = 'excess occurrence adapter unconnected: ' + repr(key)
+            facts.gap(reason)
+            judgements.append(CustodyJudgement(key, '未接続', None, None, (reason,)))
+        elif occurred is False:
+            clauses.extend(ClauseResult(row, False,
+                'condition claimed before independent occurrence', key) for row in rows)
+
+
+def excess_occurrence(binding, facts, issues):
+    """1192-1243: tri-state historical birth, not present operation readiness.
+
+    Known absent necessary premises give False. Missing full use/intent/instance
+    adapters give None; no issue witness is not by itself proof of absence.
+    """
+    predicate = completion_predicate(binding, facts)
+    if predicate is None:
+        return None
+    key = binding.key
+    if key.obligation == 'O-G':
+        return None  # no Wg declaration: leave the claimed instance unconnected
+    if key.kind == 'issue':
+        matches = [o for o in issues if issue_instance_matches(binding, o, facts)]
+        if any(o.occurred is True for o in matches):
+            return True
+        if matches:
+            return None
+        if key.obligation == 'O-02':
+            boots = [e for e in facts.trace.events if e.tag == 'Accept'
+                     and e.value.envelope.event.kind == 'Boot']
+            if not boots or all(_get(_get(e.value.envelope.event.fields, 'declaration'), 'initial') is None
+                                for e in boots):
+                return False
+            for event in boots:
+                layout = next(r for r in facts.contract.receipt_layouts if r.kind == 'Boot')
+                try:
+                    for slot, _, _ in layout.slots:
+                        facts.resolver.point(SlotKey(event.value.unit, slot))
+                except UnresolvedDeclaration:
+                    continue
+                return None
+            return False
+        if key.obligation == 'O-03':
+            derivations = [d for d in facts.contract.derivations if d.request in binding.slots]
+            if not derivations:
+                return None
+            for d in derivations:
+                try:
+                    facts.resolver.point(d.receipt)
+                except UnresolvedDeclaration:
+                    continue
+                return None  # full delta adapter, never ReadyN or Publish
+            return False
+        if key.obligation == 'O-08':
+            intents = [a for a in facts.contract.acquisitions
+                       if a.key in (binding.source, key.target)]
+            if not intents:
+                return None
+            for intent in intents:
+                try:
+                    if ledger_saved(facts.resolver.resolve(intent.completion), facts.trace, facts.contract.codec):
+                        return None  # acceptance of intent is a separate fact
+                except UnresolvedDeclaration:
+                    pass
+            return False
+        stage = {'O-06': 'Wr', 'O-07': 'Wp', 'O-10': 'Ep', 'O-11': 'D', 'O-12': 'Ee'}.get(key.obligation)
+        work = getattr(binding.source, 'work', None)
+        if work is None:
+            plans = [facts.plans[s.unit] for s in binding.slots if s.unit in facts.plans]
+            works = {w for p in plans for w in issue_plan_sources(p, facts)
+                     if w in facts.descriptors and facts.descriptors[w].stage == stage}
+            work = next(iter(works)) if len(works) == 1 else None
+        descriptor = facts.descriptors.get(work)
+        if descriptor is None or stage is None or descriptor.stage != stage:
+            return None
+        known = facts.end(work)
+        if known is None:
+            return False
+        outcome = _get(known[0].event.fields, 'outcome')
+        if stage == 'D':
+            return None if outcome.kind in ('Success', 'Unknown') else False
+        if outcome.kind != 'Success':
+            return False
+        if stage in ('Wr', 'Wp') and _get(outcome.content, 'variant') != 'Success':
+            return False
+        if predicate is direct_o12_issue_s and _get(outcome.content, 'variant') != 'Selected':
+            return False
+        return None
+    if predicate in (direct_o08_handle, direct_o13_handle):
+        return None  # intent undertaking / processing need not wired by Acquire/Post
+    if predicate is direct_o09b_handle:
+        if binding.trigger != 'Publish':
+            return None
+        return None if completion_occurred(binding, facts.contract, facts.trace) else False
+    if predicate is direct_o14_stop and binding.trigger != 'Publish':
+        return None  # 1243: undertaking, not the later Reserve
+    if predicate is direct_o09a_v:
+        work = getattr(binding.source, 'work', None)
+        known = facts.end(work)
+        if known is None:
+            return False if work in facts.descriptors else None
+        outcome = _get(known[0].event.fields, 'outcome')
+        if outcome.kind in ('Failure', 'Unknown'):
+            return False
+        return None  # definite verification response correspondence
+    return completion_occurred(binding, facts.contract, facts.trace)
 
 
 @dataclass(frozen=True, slots=True)
@@ -7290,6 +7450,10 @@ def check_inv_2g(f, d, *, before_state=None):
             direct_og_issue_eq: cg_lawful,
             direct_og_save_eq: f.published(eq)}
     born[direct_og_issue_cg] = f.issue_cg_occurred(d)
+    check_excess_occurrences(f, {b.key: b for b in bindings.values()},
+        lambda b: born.get(completion_predicate(b, f)), clauses, judgements,
+        ('INV-2.g',), generation_only=True, exclude_keys={b.key for b in f.contract.completions
+            if b.key.obligation == 'O-G' and f.descriptor_for(b) is not None and f.descriptor_for(b) != d})
     previous = {c.key for c in before_state.core.p.conditions if c.key in c.unmet} if before_state else set()
     for cid, fn, _ in GENERATION_PREDICATES:
         binding = bindings.get(fn)
@@ -7366,4 +7530,5 @@ def evaluate_generation_custody(contract, trace, state, *, before_state=None):
         judgements.extend(custody)
     limits = tuple((row, '約束の未接続: ' + reason) for reason in sorted(f.gaps)
                    for row in ('INV-2.g', 'INV-16.c'))
-    return ObservationEvaluation(BoundaryReport('約束接続・部分判定', ()), tuple(clauses), limits, tuple(judgements))
+    return ObservationEvaluation(BoundaryReport('約束接続・部分判定', ()), tuple(clauses), limits,
+                                 merge_unconnected_judgements(judgements))

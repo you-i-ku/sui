@@ -6161,6 +6161,41 @@ def test_fbm3_r02_generation_args_compare_resolved_planrefs(reply):
     assert not report.contract_violations and not report.violations, report
 # Pre-commit review FBM3-R01/R02 END
 
+
+# Post-commit review FBM3-R03 BEGIN (sui-fb-model-review3, window side).
+@pytest.mark.parametrize('where', (None, 'eq', 'cg'))
+def test_fbm3_r03_issue_cg_birth_waits_for_cg_generation_context(where):
+    # 1327/1937/1956: issue[CG] is born only when the CG use conditions hold.
+    # A CG-side shortage leaves handle with Wg; an EQ-side one does not delay it.
+    from fb_machine import declare_observation_e0
+    e0 = _mg02_generation_e0(wait='generation_context' if where == 'eq' else None)
+    if where == 'cg':  # the same concrete shortage, declared on CG itself
+        cg_wait = Guard('generation_context', PlanRef('mg-context', 'context'))
+        e0 = replace(e0, plans=tuple(replace(q, guards=q.guards + (cg_wait,)) if q.unit == 'mg-cg' else q
+                                     for q in e0.plans), observation_declarations=None)
+        e0 = replace(e0, observation_declarations=declare_observation_e0(e0))
+    _, states, _, take, save = _mg02_generation_path(e0, 'end')
+    issue = observation_check.CompletionKey('O-G', ('work', 'mg-wg'), 'issue', observation_check.SlotKey('mg-cg', 'cg'))
+    def born():
+        state = states[-1]
+        row = any(c.key == issue for c in state.core.p.conditions)
+        assert row is (issue in state.evidence.condition_births)
+        assert not _mg02_result(e0, state).violations
+        return row
+    assert born() is (where != 'cg')
+    take(Action('RecognizeTerminal', ('mg-wg',)))
+    assert born() is (where != 'cg')
+    if where == 'cg':
+        with pytest.raises(RuntimeError, match='Disabled'):
+            take(Action('PublishUnit', ('mg-cg',)))
+        take(Action('PublishUnit', ('mg-context',)))
+        assert born() is False
+        save('mg-context', 'context')
+        assert born() is True
+    take(Action('PublishUnit', ('mg-cg',)))
+    assert born() is True
+# Post-commit review FBM3-R03 END
+
 # MG-02 follow-up 4 BEGIN: MG05-C independent public-contract contrasts.
 @pytest.mark.parametrize('shape', ('single', 'singleton', 'multiple'))
 def test_mg05_preferences_reference_members_and_fixed_content(shape):
@@ -6383,3 +6418,482 @@ def test_mg06_inv16c_actual_wg_read_matches_fixed_qgen(field):
     assert {(v.row, v.target, v.message) for v in checked.violations} == {
         ('INV-16.c', target, 'actual Wg input differs from the fixed Qgen descriptor/numerical view')}
 # MG-02 follow-up 5 END
+
+
+# MG-02 follow-up 6 BEGIN: FBM3-R03 excess occurrence.
+def _r03_claim(e0, binding):
+    from fb_machine import ConditionCustody
+    bc = observation_check
+    row = ConditionCustody(binding.key, binding.owner, frozenset((binding.key,)))
+    return _mg02_change(e0, lambda custody: replace(custody,
+        conditions=tuple(c for c in custody.conditions if c.key != binding.key) + (row,)))
+
+
+def _r03_e0(where=None):
+    from fb_machine import declare_observation_e0
+    e0 = _mg02_generation_e0(typed_cg=True, wait='generation_context' if where == 'eq' else None)
+    if where == 'cg':
+        e0 = replace(e0, plans=tuple(replace(p,
+            guards=p.guards + (Guard('generation_context', PlanRef('mg-context', 'context')),))
+            if p.unit == 'mg-cg' else p for p in e0.plans), observation_declarations=None)
+        e0 = replace(e0, observation_declarations=declare_observation_e0(e0))
+    return e0
+
+
+@pytest.mark.parametrize('where', (None, 'eq', 'cg'))
+def test_r03_generation_waits_have_no_excess_occurrence(where):
+    # 1944/1946/1956: EQ readiness is not issue[CG] birth, nor issue[EQ] birth.
+    bc = observation_check
+    e0 = _r03_e0(where)
+    scenario, states, edges, take, save = _mg02_generation_path(e0, 'end')
+    key = bc.CompletionKey('O-G', ('work', 'mg-wg'), 'issue', bc.SlotKey('mg-cg', 'cg'))
+    def assert_birth(expected):
+        state = states[-1]
+        assert any(c.key == key for c in state.core.p.conditions) is expected
+        assert (key in state.evidence.condition_births) is expected
+        assert not _mg02_result(e0, state).violations
+    assert_birth(where != 'cg')
+    take(Action('RecognizeTerminal', ('mg-wg',)))
+    assert_birth(where != 'cg')
+    if where == 'cg':
+        with pytest.raises(RuntimeError, match='Disabled'):
+            take(Action('PublishUnit', ('mg-cg',)))
+        take(Action('PublishUnit', ('mg-context',)))
+        assert_birth(False)
+        save('mg-context', 'context')
+        assert_birth(True)
+    take(Action('PublishUnit', ('mg-cg',)))
+    assert_birth(True)
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations and not report.violations, report
+
+
+def test_r03_cg_wait_cannot_claim_issue_cg_even_with_an_owner():
+    bc = observation_check
+    e0 = _r03_e0('cg')
+    scenario, states, edges, _, _ = _mg02_generation_path(e0, 'end')
+    before = states[-1]
+    binding = next(b for b in e0.observation_contract.completions if b.key.obligation == 'O-G'
+                   and b.key.kind == 'issue' and b.key.target == bc.SlotKey('mg-cg', 'cg'))
+    assert not any(c.key == binding.key for c in before.core.p.conditions)
+    good = Environment(e0).step(before, Action('Drain'), CorrectWindow(e0)).state
+    assert not _mg02_result(e0, good, before).violations
+    after = Environment(e0).step(before, Action('Drain'), _r03_claim(e0, binding)).state
+    assert any(c.key == binding.key and c.owner == bc.Owner('P.work', 'mg-wg')
+               and c.unmet == frozenset((binding.key,)) for c in after.core.p.conditions)
+    result = _mg02_result(e0, after, before)
+    assert {(v.row, v.target) for v in result.violations
+            if v.message == 'condition claimed before independent occurrence'} == {
+        (row, binding.key) for row in ('INV-2.g', 'INV-2.a', 'INV-2.c')}
+    # A previous invented claim cannot legitimate itself on the next edge.
+    again = Environment(e0).step(after, Action('Drain'), _r03_claim(e0, binding)).state
+    assert any(v.row == 'INV-2.g' and v.target == binding.key
+               and v.message == 'condition claimed before independent occurrence'
+               for v in _mg02_result(e0, again, after).violations)
+
+
+_R03_OG = (
+    ('run', 'work', 'mg-wg', 1941), ('save', 'terminal:mg-wg', 'T', 1942),
+    ('handle', 'work', 'mg-wg', 1943), ('issue', 'mg-cg', 'cg', 1944),
+    ('save', 'mg-cg', 'cg', 1945), ('issue', 'mg-eq', 'eq', 1946),
+    ('save', 'mg-eq', 'eq', 1947),
+)
+
+
+@pytest.mark.parametrize('kind,unit,target,paper_line', _R03_OG)
+def test_r03_each_og_condition_rejects_a_claim_before_its_trigger(kind, unit, target, paper_line):
+    bc = observation_check
+    e0 = _r03_e0()
+    identity = bc.WorkKey(target) if unit == 'work' else bc.SlotKey(unit, target)
+    binding = next(b for b in e0.observation_contract.completions
+                   if b.key.obligation == 'O-G' and b.key.kind == kind and b.key.target == identity)
+    before = Environment(e0).initial()
+    if kind == 'handle':
+        # Public transport needs the real Wg carrier; EndKnown is still absent.
+        _, states, _, _, _ = _mg02_generation_path(e0, 'initial')
+        before = states[-1]
+    good = Environment(e0).step(before, Action('Drain'), CorrectWindow(e0)).state
+    assert not _mg02_result(e0, good).violations
+    after = Environment(e0).step(before, Action('Drain'), _r03_claim(e0, binding)).state
+    result = _mg02_result(e0, after, before)
+    assert any(v.row == 'INV-2.g' and v.target == binding.key
+               and v.message == 'condition claimed before independent occurrence'
+               for v in result.violations), (paper_line, result)
+
+
+# The population and expected branches below come from 1206-1243, not a
+# completion predicate's return value. Each negative is a public Drain subclass.
+_R03_REGISTERED = (
+    ('C-O01.save[receipt_slot]', 1206, 'SC-04-publish-initial', 'O-01', 'save', None),
+    ('C-O02.save[\u5404slot]', 1208, 'SC-04-publish-initial', 'O-02', 'save', ('initial', 'process')),
+    ('C-O03.save[Q]', 1210, 'SC-04-publish-Q-Wr', 'O-03', 'save', ('q-e1', 'q')),
+    ('C-O04.save[k]', 1211, 'SC-04-publish-interval-MeasureSegment', 'O-04', 'save', ('segment', 'k')),
+    ('C-O04.run[MeasureSegment]', 1212, 'SC-04-publish-interval-MeasureSegment', 'O-04', 'run', None),
+    ('C-O04.handle[cells]', 1213, 'SC-04-publish-interval-MeasureSegment', 'O-04', 'handle', None),
+    ('C-O05.run[Wr]', 1214, 'SC-04-publish-initial', 'O-05', 'run', None),
+    ('C-O05.save[T]', 1215, 'SC-04-publish-initial', 'O-05', 'save', None),
+    ('C-O05.handle[Wr]', 1215, 'SC-04-publish-initial', 'O-05', 'handle', None),
+    ('C-O06.save[R]', 1217, 'SC-04-publish-R-Wp', 'O-06', 'save', None),
+    ('C-O07.run[Wp]', 1218, 'SC-04-publish-R-Wp', 'O-07', 'run', None),
+    ('C-O07.save[T]', 1219, 'SC-04-publish-R-Wp', 'O-07', 'save', ('terminal:wp', 'T')),
+    ('C-O07.handle[Wp]', 1219, 'SC-04-publish-R-Wp', 'O-07', 'handle', None),
+    ('C-O07.save[P]', 1221, 'SC-04-publish-R-Wp', 'O-07', 'save', ('proof', 'p')),
+    ('C-O07.save[Cq]', 1221, 'SC-04-publish-R-Wp', 'O-07', 'save', ('completed', 'c')),
+    ('C-O08.save[G]', 1223, 'SC-04-publish-G-Wv', 'O-08', 'save', ('acquisition', 'g')),
+    ('C-O09a.run[Wv]', 1224, 'SC-04-publish-G-Wv', 'O-09.a', 'run', None),
+    ('C-O09a.save[T]', 1225, 'SC-04-publish-G-Wv', 'O-09.a', 'save', ('terminal:wv', 'T')),
+    ('C-O09b.save[\u51e6\u7406slot]', 1227, 'SC-04-publish-G-Wv', 'O-09.b', 'save', None),
+    ('C-O10.run[Ep]', 1228, 'SC-09-structure-artifact-port', 'O-10', 'run', None),
+    ('C-O10.save[T]', 1229, 'SC-09-structure-artifact-port', 'O-10', 'save', None),
+    ('C-O14.stop[w]', 1243, 'SC-04-publish-initial', 'O-14', 'stop', None),
+)
+
+
+@pytest.mark.parametrize('cid,paper_line,scene,obligation,kind,slot', _R03_REGISTERED)
+def test_r03_registered_condition_rejects_premature_claim(cid, paper_line, scene, obligation, kind, slot):
+    bc = observation_check
+    e0 = _c05_scene(scene).e0
+    binding = next(b for b in e0.observation_contract.completions
+                   if b.key.obligation == obligation and b.key.kind == kind
+                   and (slot is None or b.key.target == bc.SlotKey(*slot)))
+    before = Environment(e0).initial()
+    good = Environment(e0).step(before, Action('Drain'), CorrectWindow(e0)).state
+    result = bc.evaluate_condition_custody(e0.observation_contract, good.evidence.observation_trace, good)
+    assert not result.boundary.violations and not result.violations, (cid, result)
+    bad = Environment(e0).step(before, Action('Drain'), _r03_claim(e0, binding)).state
+    result = bc.evaluate_condition_custody(e0.observation_contract, bad.evidence.observation_trace, bad)
+    assert {(v.row, v.target) for v in result.violations
+            if v.message == 'condition claimed before independent occurrence'} == {
+        ('INV-2.a', binding.key), ('INV-2.c', binding.key)}, (cid, paper_line, result)
+
+
+_R03_EXTRA = (
+    ('C-O02.issue[initial]', 1207, 'SC-04-publish-initial', 'O-02', 'issue', 'initial', 'q', None),
+    ('C-O03.issue[Q]', 1209, 'SC-04-publish-Q-Wr', 'O-03', 'issue', 'q-e1', 'q', None),
+    ('C-O06.issue[R]', 1216, 'SC-04-publish-R-Wp', 'O-06', 'issue', 'result', 'r', 'wr'),
+    ('C-O07.issue[P,Cq]', 1220, 'SC-04-publish-R-Wp', 'O-07', 'issue', 'proof', 'p', 'wp'),
+    ('C-O08.issue[G]', 1222, 'SC-04-publish-G-Wv', 'O-08', 'issue', 'acquisition', 'g', None),
+    ('C-O09a.save[V]', 1225, 'SC-04-publish-G-Wv', 'O-09.a', 'save', 'verification:wv', 'V', 'wv'),
+    ('C-O09b.handle[\u76ee\u7684]', 1226, 'SC-04-publish-G-Wv', 'O-09.b', 'handle', 'acquisition', 'g', 'wv'),
+)
+
+
+def _r03_extra_binding(case):
+    bc = observation_check
+    cid, line, scene, obligation, kind, unit, slot, work = case
+    e0 = _c05_scene(scene).e0
+    contract = e0.observation_contract
+    plan = next(p for p in contract.plans if p.unit == unit)
+    target = bc.WorkKey(work) if kind == 'handle' else bc.SlotKey(unit, slot)
+    source = bc.WorkKey(work) if work else bc.UnitKey(unit)
+    trigger = 'EndKnown' if work else 'Publish'
+    if obligation == 'O-08':
+        source, trigger = contract.acquisitions[0].key, 'Acquire'
+    if kind == 'handle':
+        source, trigger = bc.UnitKey(unit), 'Publish'
+    binding = bc.CompletionBinding(bc.CompletionKey(obligation, plan.key, kind, target),
+        trigger, source, (bc.SlotKey(unit, slot),),
+        bc.Owner('P.work', work) if work else bc.Owner('P.units', unit))
+    contract = replace(contract, completions=contract.completions + (binding,))
+    return replace(e0, observation_declarations=contract), binding
+
+
+@pytest.mark.parametrize('case', _R03_EXTRA, ids=lambda case: case[0])
+def test_r03_additional_declared_condition_rejects_premature_claim(case):
+    bc = observation_check
+    e0, binding = _r03_extra_binding(case)  # fixed before I0; no observation copied
+    before = Environment(e0).initial()
+    good = Environment(e0).step(before, Action('Drain'), CorrectWindow(e0)).state
+    assert not bc.evaluate_condition_custody(e0.observation_contract,
+        good.evidence.observation_trace, good).violations
+    bad = Environment(e0).step(before, Action('Drain'), _r03_claim(e0, binding)).state
+    checked = bc.evaluate_condition_custody(e0.observation_contract, bad.evidence.observation_trace, bad)
+    assert {(v.row, v.target) for v in checked.violations
+            if v.message == 'condition claimed before independent occurrence'} == {
+        ('INV-2.a', binding.key), ('INV-2.c', binding.key)}, (case[0], checked)
+
+
+@pytest.mark.parametrize('stage,kind', (('D', 'run'), ('D', 'save'), ('Ee', 'run'), ('Ee', 'save'), ('Ee', 'handle')))
+def test_r03_terminal_condition_cannot_precede_its_promise_or_end(stage, kind):
+    # 1232/1233/1236/1237. Only the pre-publication cut is asserted here;
+    # this does not claim a connected full F-a PR/DF/Ee prefix.
+    bc = observation_check
+    e0 = _mg02_terminal_e0(stage=stage)
+    obligation = 'O-11' if stage == 'D' else 'O-12'
+    binding = next(b for b in e0.observation_contract.completions
+                   if b.key.obligation == obligation and b.key.kind == kind)
+    before = Environment(e0).initial()
+    good = Environment(e0).step(before, Action('Drain'), CorrectWindow(e0)).state
+    assert not bc.evaluate_condition_custody(e0.observation_contract,
+        good.evidence.observation_trace, good).violations
+    bad = Environment(e0).step(before, Action('Drain'), _r03_claim(e0, binding)).state
+    checked = bc.evaluate_condition_custody(e0.observation_contract, bad.evidence.observation_trace, bad)
+    assert {(v.row, v.target) for v in checked.violations
+            if v.message == 'condition claimed before independent occurrence'} == {
+        ('INV-2.a', binding.key), ('INV-2.c', binding.key)}
+
+
+@pytest.mark.parametrize('family', ('O-02', 'O-G'))
+def test_r03_birth_mark_alone_is_not_independent_birth_evidence(family):
+    bc = observation_check
+    e0 = _r03_e0()
+    binding = next(b for b in e0.observation_contract.completions
+                   if b.key.obligation == family and b.key.kind == ('issue' if family == 'O-G' else 'save'))
+    before = Environment(e0).initial()
+    assert not before.core.p.conditions and binding.key not in before.evidence.condition_births
+    # Explicit checker input, never fed back to the window: a historical claim
+    # remains auditable even if its current custody row was removed/cleared.
+    forged = replace(before, evidence=replace(before.evidence,
+                     condition_births=before.evidence.condition_births | {binding.key}))
+    good = bc.evaluate_condition_custody(e0.observation_contract, before.evidence.observation_trace, before)
+    assert not good.violations
+    checked = bc.evaluate_condition_custody(e0.observation_contract, forged.evidence.observation_trace, forged)
+    expected_rows = {'INV-2.a', 'INV-2.c', 'INV-2.g'} if family == 'O-G' else {'INV-2.a', 'INV-2.c'}
+    assert {v.row for v in checked.violations if v.target == binding.key
+            and v.message == 'condition claimed before independent occurrence'} == expected_rows
+
+
+def test_r03_unconnected_cg_occurrence_is_neither_excess_nor_achievement():
+    from fb_machine import declare_observation_e0
+    bc = observation_check
+    e0 = _r03_e0()
+    e0 = replace(e0, plans=tuple(replace(p, semantic_limits=('r03-undeclared-generation-use',))
+                                if p.unit == 'mg-cg' else p for p in e0.plans), observation_declarations=None)
+    e0 = replace(e0, observation_declarations=declare_observation_e0(e0))
+    _, states, _, _, _ = _mg02_generation_path(e0, 'end')
+    binding = next(b for b in e0.observation_contract.completions if b.key.obligation == 'O-G'
+                   and b.key.kind == 'issue' and b.key.target == bc.SlotKey('mg-cg', 'cg'))
+    after = Environment(e0).step(states[-1], Action('Drain'), _r03_claim(e0, binding)).state
+    checked = _mg02_result(e0, after)
+    entries = [j for j in checked.custody if j.target == binding.key]
+    assert entries and all(j.classification == '\u672a\u63a5\u7d9a' and j.direct is None for j in entries)
+    assert not any(v.target == binding.key for v in checked.violations)
+    assert any('excess occurrence adapter unconnected' in reason and repr(binding.key) in reason
+               for _, reason in checked.limitations)
+
+
+@pytest.mark.parametrize('published', (False, True))
+def test_r03_unconnected_initial_issue_keeps_its_claimed_completion_key(published):
+    import fb_scenes as scenes
+    bc = observation_check
+    e0, binding = _r03_extra_binding(_R03_EXTRA[0])
+    scene = replace(_c05_scene('SC-04-publish-initial'), e0=e0)
+    _, states, edges, _ = scenes.instantiate(scene)
+    edge = next(e for e in edges if e.action == Action('PublishUnit', ('initial',)))
+    before = states[edge.target if published else edge.source]  # full birth adapter is unconnected
+    after = Environment(e0).step(before, Action('Drain'), _r03_claim(e0, binding)).state
+    result = bc.evaluate_condition_custody(e0.observation_contract, after.evidence.observation_trace, after)
+    assert not any(v.target == binding.key for v in result.violations)
+    entries = [j for j in result.custody if j.target == binding.key]
+    assert entries and all(j.classification == '\u672a\u63a5\u7d9a' and j.direct is None for j in entries)
+    assert any('excess occurrence adapter unconnected' in reason and repr(binding.key) in reason
+               for _, reason in result.limitations)
+
+
+# Explicit unconnected denominator for the remaining 10 registered types.
+# Full ordinary and O-G tables: paper 1206-1243 and 1941-1947 (44 + 7).
+_R03_UNCONNECTED = (
+    ('C-O08.handle[\u53d6\u5f97\u610f\u56f3]', 1222, 'separate acceptance of the acquisition intent is not exposed by Acquire'),
+    ('C-O10.issue[artifact,PR]', 1230, 'full artifact/FProblem-or-NoDecision instance and use correspondence'),
+    ('C-O10.save[artifact,PR\u306e\u5404slot]', 1231, 'no connected artifact/PR plan and slot binding in the legal public prefix'),
+    ('C-O11.issue[DF/DU]', 1234, 'full PR/FProblem/Draw generation and use correspondence'),
+    ('C-O11.save[DF/DU/\u5225\u306e\u5fc5\u9808\u7d42\u308f\u308aslot]', 1235, 'no connected legal PR/Draw-to-DF/DU slot binding'),
+    ('C-O12.issue[artifact,EV]', 1238, 'full DF/Ee/artifact and use correspondence'),
+    ('C-O12.issue[S]', 1239, 'Saved EV/certified Selected/root/Draw/request correspondence'),
+    ('C-O12.save[artifact,EV,S\u306e\u5404slot]', 1240, 'no connected legal EV/S slot binding'),
+    ('C-O13.handle[\u5831\u544a/\u9375/\u6839]', 1241, 'independent Saved report-to-processing-need instance adapter'),
+    ('C-O13.save[\u51e6\u7406slot]', 1242, 'no independently mapped B/Xc/shortage processing slot'),
+)
+
+
+def test_r03_registration_population_is_explicit_including_unconnected():
+    bc = observation_check
+    tested = {row[0] for row in _R03_REGISTERED + _R03_EXTRA} | {
+        'C-O11.run[D]', 'C-O11.save[T]', 'C-O12.run[Ee]', 'C-O12.save[T]',
+        'C-O12.handle[\u8a55\u4fa1\u306e\u7d42\u308f\u308a]',
+        'C-OG.run[Wg]', 'C-OG.save[T]', 'C-OG.handle[Wg]', 'C-OG.issue[CG]',
+        'C-OG.save[CG]', 'C-OG.issue[EQ]', 'C-OG.save[EQ]',
+    }
+    gaps = {cid for cid, _, _ in _R03_UNCONNECTED}
+    assert len(tested) == 41 and len(gaps) == 10 and not tested & gaps
+    assert tested | gaps == {cid for cid, _, _ in bc.COMPLETION_PREDICATES}
+
+
+@pytest.mark.parametrize('cid,line,reason', _R03_UNCONNECTED)
+def test_r03_unconnected_contrast_stays_in_the_denominator(cid, line, reason):
+    pytest.skip(f'{cid} (paper {line}): {reason}; no verified excess-occurrence contrast')
+
+
+
+@pytest.mark.parametrize('family', ('O-13', 'O-G'))
+def test_r03_unmapped_actual_condition_is_reported_with_its_identity(family):
+    bc = observation_check
+    e0 = publication() if family == 'O-G' else _r03_e0()
+    target = bc.SlotKey('r03-unit', 'r03-target') if family == 'O-G' else bc.WorkKey('r03-target')
+    key = bc.CompletionKey(family, ('r03-unmapped-processing',), 'issue' if family == 'O-G' else 'handle', target)
+    binding = bc.CompletionBinding(key, 'EndKnown', bc.WorkKey('r03-target'), (), bc.Owner('P.units', 'r03-unit'))
+    assert key not in {b.key for b in e0.observation_contract.completions}
+    before = Environment(e0).initial()
+    after = Environment(e0).step(before, Action('Drain'), _r03_claim(e0, binding)).state
+    result = bc.evaluate_condition_custody(e0.observation_contract, after.evidence.observation_trace, after)
+    assert not any(v.target == key for v in result.violations)
+    entries = [j for j in result.custody if j.target == key]
+    assert entries and all(j.classification == '\u672a\u63a5\u7d9a' and j.direct is None for j in entries)
+    assert any('excess occurrence adapter unconnected' in reason and repr(key) in reason
+               for _, reason in result.limitations)
+# MG-02 follow-up 6 END
+
+
+# MG-02 follow-up 7 BEGIN: FBM3-R03-A preservation under unconnected birth.
+def _r03a_review_path(*, conclusion_connected=True):
+    """1199/1220/1311/1588: actual Wp custody, before any P or Cq Publish.
+
+    Only the observer's P/Cq slot correspondence is omitted in the unknown
+    conclusion control. The declared window plans and all public steps stay
+    the same. No State, ledger, trace or expected result is fabricated.
+    """
+    import fb_scenes as scenes
+    bc = observation_check
+    scene = _c05_scene('SC-05-structure-p-published')
+    contract = scene.e0.observation_contract
+    slots = tuple(bc.SlotKey(p.unit, r.slot) for p in contract.plans for r in p.records
+                  if r.contract.name in ('computation_proof', 'computation_completed'))
+    key = bc.CompletionKey('O-07', ('wp',), 'issue', bc.SlotKey('proof', 'p'))
+    binding = bc.CompletionBinding(key, 'EndKnown', bc.WorkKey('wp'),
+        slots if conclusion_connected else slots[:1], bc.Owner('P.work', 'wp'))
+    assert key not in {b.key for b in contract.completions}
+    contract = replace(contract, completions=contract.completions + (binding,))
+    e0 = replace(scene.e0, observation_declarations=contract)
+    scenario, states, edges, _ = scenes.instantiate_v2(replace(scene, e0=e0))
+    publish = next(e for e in edges if e.action == Action('PublishUnit', ('proof',)))
+    states, edges = list(states[:publish.source + 1]), list(edges[:publish.source])
+    before = states[-1]
+    assert len(states) == 72  # review witness; identity/content checks follow
+    held = next(c for c in before.core.p.conditions if c.key == key)
+    assert held.owner == binding.owner and key in held.unmet
+    assert bc.actual_owner_exists(before, held.owner)
+    assert not any(e.tag == 'Publish' and e.key in (bc.UnitKey('proof'), bc.UnitKey('completed'))
+                   for e in before.evidence.observation_trace.events)
+    facts = bc.CompletionFacts(contract, before.evidence.observation_trace, before)
+    assert bc.excess_occurrence(binding, facts, bc.issue_occurrences(facts)) is None
+    assert bc.condition_transfer(binding, facts) is False
+    assert bc.completion_conclusion(binding, contract, before.evidence.observation_trace, before) is (
+        False if conclusion_connected else None)
+    return scenario, states, edges, binding
+
+
+@pytest.fixture(scope='module')
+def r03a_review_path():
+    return _r03a_review_path()
+
+
+def _r03a_evaluate(e0, before, after):
+    return observation_check.evaluate_condition_custody(e0.observation_contract,
+        after.evidence.observation_trace, after, before_state=before)
+
+
+def _r03a_assert_unknown_birth(result, key):
+    # Birth uncertainty remains visible even when preservation is decidable.
+    assert any(j.target == key and j.classification == '\u672a\u63a5\u7d9a'
+               and 'occurrence adapter' in j.reasons for j in result.custody)
+    assert any('condition occurrence adapter: ' + repr(key) in reason
+               for _, reason in result.limitations)
+
+
+def test_r03a_unconnected_birth_does_not_hide_retained_unmet(r03a_review_path):
+    scenario, states, edges, binding = r03a_review_path
+    states, edges = list(states), list(edges)
+    before = states[-1]
+    after = _c05_take(scenario, states, edges, Action('Drain')).state
+    result = _r03a_evaluate(scenario.e0, before, after)
+    assert not result.boundary.violations and not result.violations
+    _r03a_assert_unknown_birth(result, binding.key)
+    assert any(j.target == binding.key and j.classification == '\u672a\u9054\u306e\u307e\u307e\u4fdd\u5168'
+               and j.direct is False and j.transfer is False for j in result.custody)
+    report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+    assert not report.contract_violations and not report.violations
+
+
+@pytest.mark.parametrize('change', ('delete', 'clear', 'owner'))
+def test_r03a_review_unmet_loss_is_reported_despite_unknown_birth(r03a_review_path, change):
+    bc = observation_check
+    scenario, states, edges, binding = r03a_review_path
+    states, edges = list(states), list(edges)
+    before = states[-1]
+    key = binding.key
+    def changed(custody):
+        if change == 'delete':
+            conditions = tuple(c for c in custody.conditions if c.key != key)
+        else:
+            conditions = tuple((replace(c, unmet=frozenset()) if change == 'clear' else
+                                replace(c, owner=bc.Owner('P.units', 'r03a-absent-owner')))
+                               if c.key == key else c for c in custody.conditions)
+        return replace(custody, conditions=conditions)
+    after = _c05_take(scenario, states, edges, Action('Drain'),
+        _mg02_change(scenario.e0, changed)).state
+    result = _r03a_evaluate(scenario.e0, before, after)
+    _r03a_assert_unknown_birth(result, key)
+    assert {(v.row, v.target) for v in result.violations} == {
+        ('INV-2.a', key), ('INV-2.c', key)}
+    assert any(j.target == key and j.classification == '\u524a\u9664\u30fb\u6d88\u53bb\u306e\u9055\u53cd'
+               and j.direct is False and j.transfer is False for j in result.custody)
+    assert not any(v.message == 'condition claimed before independent occurrence' for v in result.violations)
+    if change == 'delete':
+        report = check_exploration(scenario, _c05_graph(scenario, states, edges))
+        assert not report.contract_violations
+        assert {(v.condition_id, v.target) for v in report.violations} == {
+            ('INV-2.a', key), ('INV-2.c', key)}
+
+
+def test_r03a_unknown_conclusion_is_not_rounded_into_deletion_violation():
+    scenario, states, _, binding = _r03a_review_path(conclusion_connected=False)
+    before = states[-1]
+    after = Environment(scenario.e0).step(before, Action('Drain'), _mg02_change(scenario.e0,
+        lambda custody: replace(custody, conditions=tuple(c for c in custody.conditions
+                                                         if c.key != binding.key)))).state
+    result = _r03a_evaluate(scenario.e0, before, after)
+    assert not result.boundary.violations and not result.violations
+    _r03a_assert_unknown_birth(result, binding.key)
+    entries = [j for j in result.custody if j.target == binding.key]
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.classification == '\u672a\u63a5\u7d9a' and entry.direct is None and entry.transfer is False
+    assert 'issue record-family correspondence: ' + repr(binding.key) in entry.reasons
+    assert all(any(row == wanted and 'issue record-family correspondence: ' + repr(binding.key) in reason
+                   for row, reason in result.limitations) for wanted in ('INV-2.a', 'INV-2.c'))
+
+
+@pytest.mark.parametrize('delete', (False, True))
+def test_r03a_actual_promised_save_evaluates_conclusion_without_birth_adapter(delete):
+    """1200/1311/1588: EU promises count even without a previous-state input.
+
+    The observer lacks Wp's descriptor, so EndKnown and T's full conclusion
+    cannot be connected. Actual Publish still requires a target-specific
+    conclusion/transfer report; it must not disappear with the birth skip.
+    """
+    import fb_scenes as scenes
+    bc = observation_check
+    scene = _c05_scene('SC-05-structure-p-published')
+    contract = scene.e0.observation_contract
+    binding = next(b for b in contract.completions if b.key.obligation == 'O-07'
+                   and b.key.kind == 'save' and b.trigger == 'EndKnown')
+    contract = replace(contract, descriptors=tuple(d for d in contract.descriptors if d.work_id != 'wp'))
+    e0 = replace(scene.e0, observation_declarations=contract)
+    _, states, _, _ = scenes.instantiate_v2(replace(scene, e0=e0))
+    before = Environment(e0).step(states[-1], Action('RecognizeTerminal', ('wp',)), CorrectWindow(e0)).state
+    assert any(c.key == binding.key and binding.key in c.unmet for c in before.core.p.conditions)
+    assert any(e.tag == 'Publish' and e.key == bc.UnitKey(binding.slots[0].unit)
+               for e in before.evidence.observation_trace.events)
+    assert bc.completion_occurred(binding, contract, before.evidence.observation_trace) is None
+    window = (_mg02_change(e0, lambda custody: replace(custody,
+        conditions=tuple(c for c in custody.conditions if c.key != binding.key))) if delete else CorrectWindow(e0))
+    after = Environment(e0).step(before, Action('Drain'), window).state
+    # No before_state: only the actual published record puts this key in the loop.
+    result = bc.evaluate_condition_custody(contract, after.evidence.observation_trace, after)
+    assert not any(v.target == binding.key for v in result.violations)
+    _r03a_assert_unknown_birth(result, binding.key)
+    entries = [j for j in result.custody if j.target == binding.key]
+    assert len(entries) == 1 and entries[0].classification == '\u672a\u63a5\u7d9a'
+    assert entries[0].direct is None and entries[0].transfer is False
+    assert 'terminal save -> E0 work/stage: ' + repr(binding.key) in entries[0].reasons
+# MG-02 follow-up 7 END

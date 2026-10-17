@@ -542,12 +542,13 @@ import argparse
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_PATH = ROOT / 'tests/fb_mutants_results.json'
+# FBM3-R04: only git-tracked files decide whether the record is current. The
+# paper is not in git; --record-all keeps its digest as provenance only.
 SOURCE_PATHS = (
-    'specs/関所F_Fb_今の約束.md', 'tests/fb_check.py', 'tests/fb_machine.py',
+    'tests/fb_check.py', 'tests/fb_machine.py',
     'tests/fb_scenes.py', 'tests/fb_mutants.py', 'tests/test_fb_mutants.py',
 )
-REPORT_ROOT = Path('C:/Users/you11/AppData/Local/Temp/claude/C--Users-you11-Desktop-iku/'
-                   '20f79958-a16a-4877-afea-6a0e83bffc56/scratchpad')
+PAPER_PATH = 'specs/関所F_Fb_今の約束.md'
 OUT_OF_SCOPE = {
     'INV-7.b': 'v0.15 (12):1887, (11):1876 (old :1509): SC-18全16枝は実装の段へ。合法IC/IG/IAとUseDeps対応をF-a実物へ接続する。',
     'INV-9.b': '866/1793/1876: SC-07a/bの合法採用・認証・現在系列をF-a実物へ接続する。',
@@ -589,34 +590,18 @@ def report_data(value):
 
 
 def read_evidence(previous):
-    """Read supplied reports and ONLY the scene results JSON's observation record.
+    """Reuse the retained report rows and read ONLY the scene results JSON's observation record.
 
-    Never import/execute test_fb_scenes or inspect its test bodies. If temporary
-    reports expire, preserve their verbatim rows/hashes as a historical snapshot.
+    Never import/execute test_fb_scenes or inspect its test bodies. The check2
+    reports were session-temporary files (FBM3-R04): their verbatim rows/hashes
+    are retained in the record and are never re-read from a fixed temp path.
     """
     evidence = {'check2_rows': [], 'issue_rows': [], 'scenes': [], 'sources': []}
-    for turn, destination in ((2, 'check2_rows'), (3, 'issue_rows')):
-        path = REPORT_ROOT / f'fb_model_check2_turn{turn}_report.md'
-        if not path.exists():
-            assert previous.get(destination), f'missing public evidence: {path}'
-            evidence[destination] = deepcopy(previous[destination])
-            evidence['sources'].extend(dict(s, reread=False) for s in previous['sources']
-                                       if s['kind'] == destination)
-            continue
-        raw = path.read_bytes()
-        lines = raw.decode('utf-8-sig').splitlines()
-        for number, line in enumerate(lines, 1):
-            if not line.startswith('| '):
-                continue
-            columns = [part.strip() for part in line.strip('|').split('|')]
-            if turn == 2 and columns[0] in ROW_ORDER:
-                evidence[destination].append(dict(target=columns[0], kind=columns[1],
-                    detail=columns[2], paper=columns[3], source=f'{path.as_posix()}:{number}'))
-            if turn == 3 and columns[0].startswith('C-O'):
-                evidence[destination].append(dict(condition=columns[0], detail=columns[1],
-                    reference=columns[2], source=f'{path.as_posix()}:{number}'))
-        evidence['sources'].append(dict(kind=destination, path=path.as_posix(),
-            sha256=sha256(raw).hexdigest(), read_range=f'全文 1-{len(lines)}; tables retained', reread=True))
+    for destination in ('check2_rows', 'issue_rows'):
+        assert previous.get(destination), f'missing retained evidence: {destination}'
+        evidence[destination] = deepcopy(previous[destination])
+        evidence['sources'].extend(dict(s, reread=False) for s in previous['sources']
+                                   if s['kind'] == destination)
     path = ROOT / 'tests/fb_scenes_results.json'
     observed = json.loads(path.read_text(encoding='utf-8'))['records']['RECORDED_OBSERVATION_EVIDENCE']
     manifest = {s['id']: s for s in observed['manifest']}
@@ -1340,7 +1325,9 @@ def record_all():
     assert before == source_hashes(), 'target version changed during measurement; old record retained'
     rows = row_table(results, evidence)
     validate_rows(rows, results, evidence)
+    paper = ROOT / PAPER_PATH
     record = dict(schema_version=3, state='complete_full_measurement', source_sha256=before,
+        paper=dict(path=PAPER_PATH, sha256=sha256(paper.read_bytes()).hexdigest() if paper.exists() else None),
         command='.venv/Scripts/python.exe -B tests/test_fb_mutants.py --record-all',
         measurement=dict(started_at=started, finished_at=now(), seconds=round(perf_counter()-start, 3),
             cases=len(results), classes=len({c.window for c in CASES}),

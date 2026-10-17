@@ -635,8 +635,11 @@ PUBLIC_MODEL_CONTRACTS = (
      "numerical_view.context.model=<Point|PlanRef of the model input>, numerical_view.context.generation_basis=<tuple of Point|PlanRef within the fixed input read>."),
     ("generation E0 plans", "initial O-02 plan + CG plan + EQ plan (all declared before execution)",
      "M3 / A-GENERATION-WIRE (name-only): (1) the initial O-02 plan publishes the Qgen record and the Wg Descriptor in the same unit. "
-     "(2) exactly one CG plan: obligation_id='O-G', guards include Guard('generation', Wg.work_id), no works, one record "
+     "(2) exactly one CG plan: obligation_id='O-G', guards include Guard('generation', Wg.work_id) and optionally "
+     "Guard('generation_context', Ref) per CG-use input, no works, one record "
      "RecordPlan(slot, Contract('candidate_declaration','1'), category, content=Source('candidate_declaration', Wg.work_id)). "
+     "issue[CG] is born at the first drain where the whole reply corresponds and every CG generation_context target is Saved; "
+     "before that handle stays with Wg (a target seen unresolved after EndKnown also keeps a pG). EQ-side guards never delay issue[CG]. "
      "(3) exactly one EQ plan: obligation_id='O-G', guards include Guard('evaluation', Wg.work_id, PlanRef(CG unit, CG slot)) and optionally "
      "Guard('generation_context', Ref) per evaluation-use input; one record Contract('sui.fb.evaluation_request','1') whose content names "
      "candidates/reader/model/preferences/context/o/j; exactly one Ep Descriptor with request=PlanRef(EQ unit, EQ slot). "
@@ -3134,6 +3137,11 @@ class Environment:
                 _first_end(View(core, state.controls, state.evidence), source.work)
                 if binding.key.obligation == "O-G" and binding.key.kind == "issue":
                     _generation_candidate(View(core, state.controls, state.evidence), source.work)
+                    # 1327/1956: a concrete CG use shortage withholds the birth;
+                    # handle keeps custody until the context is Saved.
+                    for guard in _generation_route(self.e0, source.work)[0].guards:
+                        if guard.kind == "generation_context":
+                            _resolve(core, guard.key)
             except Disabled:
                 return None
             return Owner("P.work", source.work)
