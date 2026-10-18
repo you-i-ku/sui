@@ -539,6 +539,7 @@ from collections import Counter
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 import argparse
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS_PATH = ROOT / 'tests/fb_mutants_results.json'
@@ -1211,6 +1212,46 @@ def test_record_is_current(recorded):
     assert len(recorded['cases'])==len(CASES)
     assert len(recorded['rows'])==47
 
+def test_history_keeps_pointers_not_copies(recorded):
+    # R04-H01: the file must not grow by a whole record on every --record-all.
+    assert 'historical_snapshots' not in recorded
+    assert recorded['history'], 'earlier records must stay reachable'
+    for entry in recorded['history']:
+        assert entry.keys() <= HISTORY_KEYS, entry.keys()
+        assert ('file_sha256_lf' in entry) != ('within' in entry)
+        assert len(json.dumps(entry)) < 2_000, 'a pointer, not a copied record'
+
+
+def test_history_of_migrates_copies_and_chains():
+    snap = lambda t: dict(schema_version=3, state='complete_full_measurement', source_sha256={'a': t},
+                          measurement=dict(finished_at=t), cases=[1] * 50, rows=[2] * 50)
+    v3 = dict(snap('t3'), historical_snapshots=[snap('t1'), snap('t2')])
+    v3_bytes = json.dumps(v3, indent=2).encode()
+    assert b'\n' in v3_bytes
+    digest3 = sha256(v3_bytes).hexdigest()
+    h = history_of(v3, v3_bytes.replace(b'\n', b'\r\n'))
+    assert [e['finished_at'] for e in h] == ['t1', 't2', 't3']
+    assert h[0]['within'] == dict(file_sha256_lf=digest3, pointer='/historical_snapshots/0')
+    assert h[1]['within']['pointer'] == '/historical_snapshots/1'
+    assert h[2]['file_sha256_lf'] == digest3 and 'within' not in h[2]
+    assert all(e.keys() <= HISTORY_KEYS for e in h)
+    v4 = dict(snap('t4'), schema_version=4, history=h)
+    v4_bytes = json.dumps(v4).encode()
+    h4 = history_of(v4, v4_bytes)
+    assert h4[:3] == h and h4[3]['finished_at'] == 't4'
+    assert h4[3]['file_sha256_lf'] == sha256(v4_bytes).hexdigest()
+    assert history_of({}, b'') == []
+
+
+def test_record_all_refuses_to_drop_an_uncommitted_record():
+    lf = b'{\n  "a": 1\n}\n'
+    assert_old_record_in_git(b'', None)
+    assert_old_record_in_git(lf.replace(b'\n', b'\r\n'), lf)
+    for committed in (None, b'{\n  "a": 2\n}\n'):
+        with pytest.raises(AssertionError, match='commit the current record'):
+            assert_old_record_in_git(lf, committed)
+
+
 @pytest.fixture(scope='module')
 def recorded():
     record = load_record()
@@ -1315,10 +1356,51 @@ def cli_parser():
     return parser
 
 
+HISTORY_KEYS = frozenset({'schema_version', 'state', 'finished_at', 'source_sha256', 'file_sha256_lf', 'within'})
+
+
+def history_of(old, old_bytes):
+    """R04-H01: earlier records live in git; keep pointers, never copies.
+
+    file_sha256_lf identifies the stored file (LF, as git keeps it). Schema <=3
+    embedded full copies in historical_snapshots; each becomes a pointer into
+    the file that held it (`within`), so no measurement is lost.
+    """
+    if not old:
+        return []
+    digest = sha256(old_bytes.replace(b'\r\n', b'\n')).hexdigest()
+    def summary(r):
+        return dict(schema_version=r.get('schema_version'), state=r.get('state'),
+                    finished_at=(r.get('measurement') or {}).get('finished_at'),
+                    source_sha256=r.get('source_sha256'))
+    prior = old.get('history')
+    if prior is None:
+        prior = [dict(summary(s), within=dict(file_sha256_lf=digest, pointer=f'/historical_snapshots/{i}'))
+                 for i, s in enumerate(old.get('historical_snapshots', []))]
+    return prior + [dict(summary(old), file_sha256_lf=digest)]
+
+
+def committed_bytes():
+    """The results file as HEAD stores it, or None if HEAD has none."""
+    done = subprocess.run(['git', 'show', 'HEAD:tests/fb_mutants_results.json'], cwd=ROOT, capture_output=True)
+    return done.stdout if done.returncode == 0 else None
+
+
+def assert_old_record_in_git(old_bytes, committed):
+    # R04-H01-R1: history keeps only a pointer, so the record being replaced
+    # must already be in git; otherwise its measurements would be lost.
+    if not old_bytes:
+        return
+    assert committed is not None and committed.replace(b'\r\n', b'\n') == old_bytes.replace(b'\r\n', b'\n'), \
+        'results JSON differs from HEAD: commit the current record before --record-all'
+
+
 def record_all():
     """Only this explicit command writes; no checkpoint or partial merge."""
     before = source_hashes()
-    old = load_record() if RESULTS_PATH.exists() else {}
+    old_bytes = RESULTS_PATH.read_bytes() if RESULTS_PATH.exists() else b''
+    assert_old_record_in_git(old_bytes, committed_bytes())
+    old = load_record() if old_bytes else {}
     evidence = read_evidence(old.get('evidence', {}))
     started = now()
     start = perf_counter()
@@ -1329,7 +1411,7 @@ def record_all():
     rows = row_table(results, evidence)
     validate_rows(rows, results, evidence)
     paper = ROOT / PAPER_PATH
-    record = dict(schema_version=3, state='complete_full_measurement', source_sha256=before,
+    record = dict(schema_version=4, state='complete_full_measurement', source_sha256=before,
         paper=dict(path=PAPER_PATH, sha256=sha256(paper.read_bytes()).hexdigest() if paper.exists() else None),
         command='.venv/Scripts/python.exe -B tests/test_fb_mutants.py --record-all',
         measurement=dict(started_at=started, finished_at=now(), seconds=round(perf_counter()-start, 3),
@@ -1343,7 +1425,7 @@ def record_all():
         evidence=evidence, cases=results, rows=rows, conditions=condition_table(results),
         row_totals={label: sum(r['status'] == key for r in rows) for key, label in STATUS_LABELS.items()},
         confirmation_totals={label: sum(r['confirmation_status'] == label for r in rows) for label in CONFIRMATION_LABELS},
-        historical_snapshots=old.get('historical_snapshots', []) + ([{k:v for k,v in old.items() if k!='historical_snapshots'}] if old else []), audit=MG06_AUDIT+'\n'+MG06_TURN2_AUDIT,
+        history=history_of(old, old_bytes), audit=MG06_AUDIT+'\n'+MG06_TURN2_AUDIT,
         source_disagreements=[])
     record['report_markdown'] = measured_report(record)
     encoded = json.dumps(record, ensure_ascii=False, indent=2) + '\n'
