@@ -143,6 +143,16 @@ class Entry:
         return self.category in (_Category.FACT, _Category.INTENTION, _Category.PREFERENCE)
 
 
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class PreparedEntry:
+    """F-b の保存の準備 (紙 F-b §2-4-7)。保存のやり直しは同じ準備を使い、salt を採り直さない。"""
+    record: _Record
+    parents: frozenset[str]
+    salt: bytes
+    header: bytes
+    cid: str
+
+
 def _encode(value):
     if isinstance(value, _Ref):
         return str(value)
@@ -324,6 +334,28 @@ class Ledger:
         self._entries[entry.cid] = entry
         self._records[entry.cid] = entry, record
         return entry
+
+    def prepare(self, record: _Record, parents: _Iterable[str]) -> "PreparedEntry":
+        """F-b の保存の準備 (紙 F-b §2-4-7・PrepareOne)。C/E へ書かない。名前・親・salt・
+        seal・header・CID を固定して返す。旧 append の道は変えない。
+
+        例外: record が Record でない → TypeError / 親の CID の形が誤り → ValueError・TypeError
+        (_check_cid と同じ) / header を UTF-8 にできない → ValueError / 親が置き場に無い →
+        MissingParent / 親が出来事でない → DerivedParent / 同じ run で親が先行しない → ClockError。
+        どの例外でも salt を採らず、何も書かない。"""
+        raise NotImplementedError("F-b 段 1")
+
+    def write(self, prepared: "PreparedEntry") -> Entry:
+        """固定した準備を 本文 → 点 の順で書く (PutBody・AddEntry・ConfirmWrite)。書く前と
+        既に点がある時に seal・header・hash の 3 つの結びつきを確かめる。応答を失った後の
+        やり直しは同じ準備で呼び、同じ内容なら同じ Entry を返す。
+
+        例外: prepared が PreparedEntry でない → TypeError / 準備の中の record・parents・salt・
+        header・cid が互いに一致しない (改変) → CorruptEntry / 同じ CID の点か同じ名前の記録が
+        既にあり内容が違う → CorruptEntry / 置き場が読み取り専用 → ReadOnlyStore / 置き場の I/O の
+        障害 (StorageFull など) → 元の例外のまま (本文だけ・点だけが残りうる。やり直しは同じ準備で)。
+        旧 append の「同じ名前の点があれば親を照合せず返す」枝は使わない。"""
+        raise NotImplementedError("F-b 段 1")
 
     def accept(self, record: _Record) -> Entry:
         if not isinstance(record, _Record):
