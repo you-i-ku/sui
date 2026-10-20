@@ -1,7 +1,8 @@
-"""関所 F の F-b: 縦の 1 本の公開の入口 (紙 `specs/関所F_Fb_今の約束.md` v0.24)。
+"""関所 F の F-b: 縦の 1 本の公開の入口 (紙 `specs/関所F_Fb_今の約束.md` v0.25)。
 
 段 0 の骨組み (§5-2): 公開の形だけを固定し、本体は段 1〜3 で書く。形の正本は紙の
-§2-4-7 (入口の外形)・§2-4-11 (M1〜M4)・§2-5 (保存の形)。旧 `runtime.Window`・
+§2-4-7 (入口の外形)・§2-4-11 (M1〜M4)・§2-5 (保存の形)・§6 (v0.25 で置き換えた所、§6-6 が
+段 0 の形の直し。ゆうの決定 D8「意味を守る。形は根拠をつけて変えてよい」)。旧 `runtime.Window`・
 `Drive`・`Think`・`Act` は変えない。F-a の値の型 (区間・測定 ID・時計の読み・Gap など)
 は意味を変えずに使い回す。
 """
@@ -16,16 +17,16 @@ from .contracts import ContractRef
 from .f import (
     ClockReading, ContractValue, CoverageClaim, CoverageUnproved, DrawRequest,
     FFactsRequest, FMathArtifact, FRegistry, Gap, ImmutableJSON, MeasurementFrame,
-    MeasurementInterval, MeasurementUnavailable, Point, ProofRef, RouteConfig,
+    MeasurementInterval, MeasurementUnavailable, Point, RouteConfig,
     Unavailable,
 )
-from .f_update2 import LaunchResult, TargetEvidence, VerifiedFiniteUpdate
+from .f_update2 import IssuedUpdate, LaunchResult, TargetEvidence
 from .ids import Ref
 from .ledger import Ledger as _Ledger
 from .runtime import Envelope
 
 __all__ = [
-    "FbInputError", "MethodCall", "QuantityValue", "SlotValue", "SlottedMethod",
+    "FbInputError", "FbHostFault", "MethodCall", "QuantityValue", "SlotValue", "SlottedMethod",
     "BootSlot", "FixedView", "ResourceScope", "Allocation", "BootstrapRoute",
     "InitialProcess", "Environment", "BootDeclaration", "ReadingClock",
     "ReadingEvidence", "GenerationPair", "FailureInfo", "UnknownInfo",
@@ -33,8 +34,7 @@ __all__ = [
     "DrawFailure", "DrawUnknown", "DrawOutcome", "SegmentBoundary", "RouteAppliedItem",
     "SegmentItem", "Boot", "ClockDeclared", "Received", "SegmentReport",
     "WorkFinished", "DrawReturned", "FEvent", "Stage", "Trigger", "SegmentArgs",
-    "CandidateArgs", "ResultArgs", "ProofArgs", "UpdateTargetRef",
-    "VerificationArgs", "EvaluationPrepareArgs", "DrawArgs", "EvaluationArgs",
+    "Ongoing", "CandidateArgs", "UpdateArgs", "EvaluationPrepareArgs", "DrawArgs", "EvaluationArgs",
     "WorkArgs", "Desc", "MeasureSegment", "Compute", "Draw", "FWork",
     "Unsaved", "Held", "StatusBasis", "SlotStatus", "ReceiptStatus", "WorkStatus",
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
@@ -54,6 +54,12 @@ class FbInputError(ValueError):
         super().__init__(f"{reason}: {field}")
         self.reason = reason
         self.field = field
+
+
+class FbHostFault(RuntimeError):
+    """ホストの故障 (§2-4-7): 同じ番号の封筒の中身や r の食い違い、ホストの時計の逆転 (r > s)、
+    別の run の時計。入力の外側の誤り (FbInputError) とも、失効した窓口 (RuntimeError) とも分ける。
+    記録も預かりも作らない。"""
 
 
 # --- 共通値と Boot の入れ子 (§2-5-3) ---
@@ -121,16 +127,21 @@ class Allocation:
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class BootstrapRoute:
-    """`sui.fb.bootstrap_route/1`: 設定全文・測る過程・初期割当。initial=None でも残る (Q2)。"""
+    """`sui.fb.bootstrap_route/1`: 設定全文・測る過程・初期割当。initial=None でも残る (Q2)。
+    reading_contract は区間の報告の結びつき B が写す読み方の契約 (§6-8 B1)。None は読み方を
+    宣言しない口で、測定と原報告は続くが B は作らない。"""
     config: RouteConfig
     process_slot: str
     allocation: SlotValue
+    reading_contract: ContractRef | None
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class InitialProcess:
     """`sui.fb.initial_process/1`: 最初の過程・読み手・モデル・生成方法・評価方法・割当・
-    更新の導出方法 (δ、§2-5-4 の `sui.fb.received_update/1`)。"""
+    更新の導出方法 (δ)。δ は保存済みの事実 (受信・区間の報告・Claim など) をきっかけに更新要求 Q* を
+    導く差し替えられる方法 (紙 §6-4、TRACE-02)。契約の名前と入力の形は段 3 で決める (§2-5-4 の
+    `sui.fb.received_update/1` は受信だけを火種にしていた)。"""
     process_slot: str
     reader_slot: str
     model: Point
@@ -316,9 +327,10 @@ FEvent: _TypeAlias = Boot | ClockDeclared | Received | SegmentReport | WorkFinis
 # --- 仕事の要求と Desc (§2-5-5) ---
 
 Stage: _TypeAlias = _Literal[
-    "measure_segment", "candidate_generation", "belief_result", "belief_proof",
-    "verification", "evaluation_prepare", "selection_draw", "evaluation",
+    "measure_segment", "candidate_generation", "belief_update",
+    "evaluation_prepare", "selection_draw", "evaluation",
 ]
+"""仕事の用途。v0.25 で belief_result・belief_proof・verification を belief_update 1 つに (§6-2・§6-6)。"""
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -329,9 +341,20 @@ class Trigger:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
+class Ongoing:
+    """続けて測る要求 (紙 §6-5 G1)。clock は宣言した時計 M の RUN Ref。始まりはこの仕事の Started の
+    実際の読みから解決し、終わりを先に数にしない (停止・設定の変更などの実際の境目で分かる)。
+    報告は 1 つずつ有限の MeasurementInterval で出し、報告ごとに Ended を出さない。
+    この要求そのものを「無限の区間を測った」証拠にしない。"""
+    clock: Ref
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
 class SegmentArgs:
+    """requested は有限の区間か、続けて測る要求 (v0.25 §6-5: 前の requested_interval は両端の
+    整数を要し、測り始める前に終わりを決めさせていた)。"""
     route: Point
-    requested_interval: MeasurementInterval
+    requested: MeasurementInterval | Ongoing
     start_reason: str
 
 
@@ -344,34 +367,14 @@ class CandidateArgs:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
-class ResultArgs:
-    """旧 Q を指す。数値引数・origin・入力・出力契約は Q が正本。"""
-    request: Point
-
-
-@_dataclass(frozen=True, slots=True, kw_only=True)
-class ProofArgs:
-    """Q/R を未認証の証明対象として指す。R の取得や未来の Cq/V を前提にしない。"""
-    request: Point
-    result: Point
-    checker: ProofRef
-
-
-@_dataclass(frozen=True, slots=True, kw_only=True)
-class UpdateTargetRef:
-    request: Point
-    result: Point
-    proofs: frozenset[Point]
-    completion: Point
-
-
-@_dataclass(frozen=True, slots=True, kw_only=True)
-class VerificationArgs:
-    """origin は Desc.reader、Xnum は Desc.numerical_view。対象 bytes・閉包は独立に求める。"""
-    target: UpdateTargetRef
-    check_view: FixedView
-    checker: ProofRef
-    acquisitions: frozenset[Point]
+class UpdateArgs:
+    """信念の更新 Q* の引数 (紙 §6-2)。Q* は仕事の要求そのもので、別の Q を二重に持たない。
+    読み手は Desc.reader、固定根 Xnum は Desc.numerical_view、計算して発行する入口 U とその版は
+    Desc.method、要る来歴は Desc.input_points。prior は前の採用 A* (None は採用がまだ無い =
+    model.initial)。observations は適用する観測の並び。仕事が自分で作った joint は受けない (§6-3)。"""
+    model: Point
+    prior: Point | None
+    observations: tuple[Point, ...]
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -396,8 +399,7 @@ class EvaluationArgs:
 
 
 WorkArgs: _TypeAlias = (
-    SegmentArgs | CandidateArgs | ResultArgs | ProofArgs | VerificationArgs
-    | EvaluationPrepareArgs | DrawArgs | EvaluationArgs
+    SegmentArgs | CandidateArgs | UpdateArgs | EvaluationPrepareArgs | DrawArgs | EvaluationArgs
 )
 
 
@@ -430,7 +432,7 @@ class MeasureSegment:
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class Compute:
-    """計算の仕事 (候補の生成 Wg・結果 Wr・証明 Wp・認証 Wv・評価の準備 Ep・評価 Ee)。
+    """計算の仕事 (候補の生成 Wg・信念の更新 Wu・評価の準備 Ep・評価 Ee)。
     Wg は 4 つ目の FWork ではなく Compute の用途。終わりは WorkFinished。"""
     request: Point
     desc: Desc
@@ -582,12 +584,15 @@ class FStatus:
 class FWorkContext(_Protocol):
     """仕事の係に渡す口。enter() は同じ WorkId の開始の札を仕事表で 1 回だけ使い、
     True の時だけ係は本体に入る (EnterWorker)。起動の包みが 2 つできても本体には 2 回入らない。
+    札を取れるのは今の占有を確保した起動の口だけ (not_started で開始待ちに戻った起動は取れない)。
+    札を取っていない口の post は原報告として保存されるだけで仕事に結ばれない (B6)。
     post() は報告の出来事をホストへ渡す (受信の r はホストが押す)。issued はその仕事が得た
     生きた発行物で、その報告の封筒と同じプロセスの中で P.work に結んで持つ (保存しない、
-    §2-5-2・§2-5-16): 評価の準備 Ep と評価 Ee は F-a の `FMathArtifact`、認証 Wv は verified の時の
-    `VerifiedFiniteUpdate`。ほかの用途・発行物の無い返答では None。発行物の中身と報告の全内容は
-    窓口が照合する (発行物があることだけで成功にしない)。evidence() は認証に渡す
-    EW・EH・EI・EA の独立の観測 (窓口の印や台帳の自己申告から作らない)。
+    §2-5-2・§2-5-16): 評価の準備 Ep と評価 Ee は F-a の `FMathArtifact`、信念の更新 Wu は入口 U が
+    発行した `IssuedUpdate` (§6-2)。ほかの用途・発行物の無い返答では None。発行物の中身と報告の全内容は
+    窓口が照合する (発行物があることだけで成功にしない)。evidence() は入口 U に渡す
+    EW・EH・EI・EA の独立の観測 (ホストが自分で行った操作の時の読み。窓口の印や台帳の自己申告から
+    作らない、§6-3)。
     read(point) は保存済みの記録の本文を読む唯一の口で、ホストがその実使用 (UseObservation) を
     M の読みとともに記録する。monitored(interval) は測る仕事が実際に見張った区間を報告と別の
     道でホストに残す (IntervalObservation)。どちらも窓口の状態を変えず、記録を保存しない。"""
@@ -598,7 +603,7 @@ class FWorkContext(_Protocol):
 
     def monitored(self, interval: MeasurementInterval) -> None: ...
 
-    def post(self, event: FEvent, issued: FMathArtifact | VerifiedFiniteUpdate | None = None) -> None: ...
+    def post(self, event: FEvent, issued: FMathArtifact | IssuedUpdate | None = None) -> None: ...
 
     def evidence(self) -> TargetEvidence: ...
 
@@ -622,31 +627,44 @@ class FLauncher(_Protocol):
 
 class FWindow:
     """窓口 (§2-4-7)。正本の可変状態を持たない (H・P・C・E はホストが持つ)。
-    作り直された後の旧窓口への操作は失効を示す RuntimeError (M2)。"""
+    作り直された後の旧窓口への操作は失効を示す RuntimeError (M2)。窓口はホストからだけ作る。"""
+
+    def __init__(self, host: "FThreadHost") -> None:
+        self._host = host
+
+    def _state(self):
+        host = self._host
+        if host._window is not self:
+            raise RuntimeError("stale FWindow: the host rebuilt its window")
+        return host._state
 
     def accept(self, envelope: Envelope) -> None:
         """1 封筒 → 1 受信の記録を作り、預かる。成功で言えるのはそこまで (保存成功・完了・採用は言わない)。
         外側の形の誤りは FbInputError。r=envelope.received_ns、r ≤ s が破れたら時計の故障の例外。"""
-        raise NotImplementedError("段 1")
+        from . import _fb_core
+        _fb_core.accept(self._state(), envelope)
 
     def settle(self) -> None:
         """預かった遷移の単位を進め、記録を 1 点ずつ保存・照合し、仕事の義務を置く。"""
-        raise NotImplementedError("段 1")
+        from . import _fb_core
+        _fb_core.settle(self._state())
 
     def status(self) -> FStatus:
         """読み取り専用の像。受付・保存・開始・取得・採用・くじの消費をしない。"""
-        raise NotImplementedError("段 1")
+        from . import _fb_core
+        return _fb_core.status(self._state())
 
     def drain(self) -> tuple[FWork, ...]:
         """開始できる仕事の列挙 (取り除かない)。未開始は仕事表の見え方 (§2-4-1)。"""
-        raise NotImplementedError("段 1")
+        from . import _fb_core
+        return _fb_core.drain(self._state())
 
 
 class FThreadHost:
     """F の道のホスト (旧 `ThreadHost` は変えない)。registry は Boot と要求が名指す方法を
     解決する F-a の不変の registry (`make_f_registry`、段 3 からは `fb_registry_v1()` が旧の
     宣言を含めて組む、§2-4-8)。MethodCall の contract は registry の CapabilityDeclaration の
-    ref で解決する: Need・δ (received_update/1 の各 MethodCall) = kind "method"、測る契約 =
+    ref で解決する: Need・δ (各 MethodCall) = kind "method"、測る契約 =
     "measurement"、生成器 = "generator"。Need の能力は CapabilityDeclaration(kind="method",
     input_contract=fb_contracts.NEED_INPUT, output_contract=fb_contracts.QUANTITY_VALUE) で、F-a の能力の
     呼出しの規約 (args/input/output の構造検査) を通して呼ぶ (実装を直接呼ばない)。input は
@@ -659,24 +677,31 @@ class FThreadHost:
                  registry: FRegistry, launcher: FLauncher | None = None) -> None:
         """launcher=None は OS のスレッドで起動する本番の起動係 (threading.Thread.start の成否で
         launched / not_started、start が戻らず分からない時は unknown)。"""
-        raise NotImplementedError("段 1")
+        from . import _fb_core
+        self._state = _fb_core.State(ledger=ledger, clock=clock, workers=workers, registry=registry,
+                                     launcher=launcher if launcher is not None else _fb_core.ThreadLauncher())
+        self._window = FWindow(self)
 
     @property
     def window(self) -> FWindow:
         """今有効な窓口。"""
-        raise NotImplementedError("段 1")
+        return self._window
 
     def post(self, event: FEvent) -> None:
         """ホストのロックの下で番号と r (ホストの run の M) を押し、封筒を受信の列へ (Post)。"""
-        raise NotImplementedError("段 1")
+        from . import _fb_core
+        _fb_core.post(self._state, event)
 
     def run_until(self, done: _Callable[[FStatus], bool], *, timeout: float) -> bool:
         """受付・settle・仕事の開始・停止の観測を回し、done(status) が真になれば True、
         timeout を過ぎれば False。timeout の秒数は合否の物差しにしない (F8)。"""
-        raise NotImplementedError("段 1")
+        from . import _fb_core
+        return _fb_core.run_until(self, done, timeout)
 
     def rebuild_window(self) -> FWindow:
         """同じプロセスの中で窓口を作り直して返す (M2)。H・P・C・E と動いている係はそのまま。
         Boot・Post・くじの消費・再入場・占有の解放をしない。新旧 2 つを同時に有効にしない。"""
-        raise NotImplementedError("段 1")
+        with self._state.lock:
+            self._window = FWindow(self)
+            return self._window
 

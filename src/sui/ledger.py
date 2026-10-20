@@ -343,7 +343,20 @@ class Ledger:
         (_check_cid と同じ) / header を UTF-8 にできない → ValueError / 親が置き場に無い →
         MissingParent / 親が出来事でない → DerivedParent / 同じ run で親が先行しない → ClockError。
         どの例外でも salt を採らず、何も書かない。"""
-        raise NotImplementedError("F-b 段 1")
+        if not isinstance(record, _Record):
+            raise TypeError("record: expected Record")
+        parents = frozenset(parents)
+        for parent in parents:
+            _check_cid(parent)
+        try:
+            encode_header(record, "sha256:" + "0" * 64, parents)
+        except UnicodeEncodeError as exc:
+            raise ValueError("record: header cannot be encoded as UTF-8") from exc
+        self._check_parents(record, parents)
+        salt = self._salts.new()
+        sealed = seal(record.body.content, salt)
+        header = encode_header(record, sealed, parents)
+        return PreparedEntry(record=record, parents=parents, salt=salt, header=header, cid=_digest(header))
 
     def write(self, prepared: "PreparedEntry") -> Entry:
         """固定した準備を 本文 → 点 の順で書く (PutBody・AddEntry・ConfirmWrite)。書く前と
@@ -355,7 +368,47 @@ class Ledger:
         既にあり内容が違う → CorruptEntry / 置き場が読み取り専用 → ReadOnlyStore / 置き場の I/O の
         障害 (StorageFull など) → 元の例外のまま (本文だけ・点だけが残りうる。やり直しは同じ準備で)。
         旧 append の「同じ名前の点があれば親を照合せず返す」枝は使わない。"""
-        raise NotImplementedError("F-b 段 1")
+        if not isinstance(prepared, PreparedEntry):
+            raise TypeError("prepared: expected PreparedEntry")
+        record, parents, salt = prepared.record, prepared.parents, prepared.salt
+        try:
+            sealed = seal(record.body.content, salt)
+            header = encode_header(record, sealed, parents)
+        except (TypeError, ValueError) as exc:
+            raise CorruptEntry(f"{prepared.cid}: prepared entry cannot be re-encoded") from exc
+        if header != prepared.header or _digest(header) != prepared.cid:
+            raise CorruptEntry(f"{prepared.cid}: prepared record, parents, salt, header and cid differ")
+        entry = Entry(cid=prepared.cid, header=header, id=record.id, body_type=type(record.body),
+                      at=record.at, writer=record.writer, parents=parents, seal=sealed)
+        if any(other.cid != entry.cid for other in self.entries_of(record.id)):
+            raise CorruptEntry(f"{record.id}: a different entry with the same name exists")
+        known = self._entries.get(entry.cid)
+        if known is None:
+            self._check_parents(record, parents)
+        if not self._entry_store.writable or not self.contents.writable:
+            raise ReadOnlyStore("ledger stores are read-only")
+        try:
+            self.contents.put(sealed, salt, record.body.content)
+            self._entry_store.add(entry.cid, header)
+        except ValueError as exc:
+            raise CorruptEntry(f"{entry.cid}: a different body or header is already stored") from exc
+        if known is not None and known != entry:
+            raise CorruptEntry(f"{entry.cid}: indexed entry differs")
+        self._entries[entry.cid] = entry
+        self._records[entry.cid] = entry, record
+        return entry
+
+    def _check_parents(self, record: _Record, parents: frozenset[str]) -> None:
+        for parent in sorted(parents):
+            if parent not in self._entries:
+                raise MissingParent(parent)
+        for parent in sorted(parents):
+            if not self.entry(parent).is_event:
+                raise DerivedParent(parent)
+        for parent in sorted(parents):
+            at = self.entry(parent).at
+            if at.run == record.at.run and not _precedes(at, record.at):
+                raise _ClockError(f"{parent}: parent must precede {record.id} in the same run")
 
     def accept(self, record: _Record) -> Entry:
         if not isinstance(record, _Record):

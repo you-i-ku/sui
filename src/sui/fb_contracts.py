@@ -1,4 +1,4 @@
-"""関所 F の F-b の新しい契約の名札 (紙 F-b v0.24 §2-5-3・§2-5-9・§2-5-19)。
+"""関所 F の F-b の新しい契約の名札 (紙 F-b v0.25 §2-5-3・§2-5-9・§2-5-19・§6)。
 
 段 0 は名前と版だけ。V-08 と同じ全欄 (meaning・unit・state_owner・persistence・failure・
 cancel・redelivery) と Body/Role/Category の宣言は、その契約を使う段で足す。既存の契約の
@@ -14,6 +14,7 @@ ALLOCATION = _ContractRef("sui.fb.allocation", "1")
 BOOTSTRAP_ROUTE = _ContractRef("sui.fb.bootstrap_route", "1")
 INITIAL_PROCESS = _ContractRef("sui.fb.initial_process", "1")
 ENVIRONMENT = _ContractRef("sui.fb.environment", "1")
+# δ の契約 (§2-5-4)。v0.25 §6-4 で火種を受信だけから保存済みの事実へ広げた。名前と入力の形は段 3 で決める
 RECEIVED_UPDATE = _ContractRef("sui.fb.received_update", "1")
 # Need の呼出しの構造契約 (FBS0-R02)。入力 NEED_INPUT = {"work": Desc の正準 JSON, "scope": ResourceScope の
 # 正準 JSON}。出力 QUANTITY_VALUE = QuantityValue の正準 JSON {"contract": 量の契約, "value": その契約の値}
@@ -43,7 +44,6 @@ ADOPTION_REQUESTED = _ContractRef("sui.fb.adoption_requested", "1")
 WORK_TERMINAL = _ContractRef("sui.fb.work_terminal", "1")
 DRAW_UNKNOWN = _ContractRef("sui.fb.draw_unknown", "1")
 SEGMENT_BINDING = _ContractRef("sui.fb.segment_binding", "1")
-VERIFICATION = _ContractRef("sui.fb.verification", "1")
 PREPARED = _ContractRef("sui.fb.prepared", "1")
 EVALUATED = _ContractRef("sui.fb.evaluated", "1")
 STALE = _ContractRef("sui.fb.stale", "1")
@@ -52,8 +52,6 @@ WAITING = _ContractRef("sui.fb.waiting", "1")
 
 # 内側の値契約 (独立 Body なし)
 CANDIDATE_GENERATION = _ContractRef("sui.fb.candidate_generation", "1")
-PROOF_OUTPUT = _ContractRef("sui.fb.proof_output", "1")
-VERIFICATION_RESPONSE = _ContractRef("sui.fb.verification_response", "1")
 
 # finite_update/2 とその周り (§2-5-19、段 3 で新しい registry へ)
 FINITE_UPDATE_2 = _ContractRef("sui.f.finite_update", "2")
@@ -64,7 +62,8 @@ NO_ARRIVAL = _ContractRef("sui.fb.no_arrival", "1")
 COUNT_EXACTLY_ONE = _ContractRef("sui.fb.count_exactly_one", "1")
 BOOTSTRAP_GENERATION = _ContractRef("sui.fb.bootstrap_generation", "1")
 SEGMENT_VALUE_ONLY = _ContractRef("sui.fb.segment_value_only", "1")
-FINITE_UPDATE_STATEMENT_2 = _ContractRef("sui.f.finite_update_statement", "2")
-FINITE_UPDATE_REPLAY_2 = _ContractRef("sui.f.finite_update_replay", "2")
-FINITE_UPDATE_TARGET_CHECK = _ContractRef("sui.f.finite_update_target_check", "1")
-TARGET_UPDATE_CERTIFICATE = _ContractRef("sui.f.target_update_certificate", "1")
+# 入口 U (§6-3): 一次事実から計算して IssuedUpdate を発行する。結果 R* は既存の
+# `sui.f.finite_update_result/1` の値で保存する (§2-5-19-8)。v0.25 で証明・認証の名札
+# (finite_update_statement/2・finite_update_replay/2・finite_update_target_check/1・
+# target_update_certificate/1・sui.fb.verification・proof_output・verification_response) を外した
+FINITE_UPDATE_COMPUTE = _ContractRef("sui.f.finite_update_compute", "1")

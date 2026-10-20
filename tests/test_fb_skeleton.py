@@ -155,7 +155,8 @@ def test_registry():
         ("test.loss", "measurement", DeclaredWorkerMethod(), contract("test.fixed_input"), c.SEGMENT_REPORT),
     ):
         declaration = f.CapabilityDeclaration(kind=kind, ref=contract(name),
-            args_contract=contract("test.empty_args"), input_contract=input_contract,
+            # F-a V-11: 引数契約は A(n)=sui.f.args.<n>/1 (test.empty_args は構造検査で missing_contract)
+            args_contract=ContractRef(name="sui.f.args.empty", version="1"), input_contract=input_contract,
             output_contract=output, dependencies=(), conditions=())
         declarations.append(declaration)
         implementations.append(f.CapabilityImplementation(kind=kind, ref=declaration.ref,
@@ -234,7 +235,7 @@ def boot(initial=False):
     if initial:
         delta_args = {
             "process_slot": "thinking", "reader_slot": "reader",
-            "purpose": "belief_result",
+            "purpose": "belief_update",
             **{name: {"contract": {"name": "test." + name, "version": "1"}, "args": {}}
                for name in ("condition", "trigger_slots", "inputs", "stage_slots", "grouping", "request")},
         }
@@ -249,7 +250,8 @@ def boot(initial=False):
         scope=slot("scope", c.RESOURCE_SCOPE, fb.ResourceScope(
             quantity_contract=c.SEATS, need=method("test.need"))),
         routes=(slot("route", c.BOOTSTRAP_ROUTE, fb.BootstrapRoute(
-            config=route(), process_slot="sensing", allocation=allocation("sensing-allocation"))),),
+            config=route(), process_slot="sensing", allocation=allocation("sensing-allocation"),
+            reading_contract=c.FINITE_SEGMENT_PROJECTION)),),
         initial=initial_value,
         environment=slot("environment", c.ENVIRONMENT,
                          fb.Environment(data={"fixture": "shape-only"}))))
@@ -305,15 +307,11 @@ def view():
 
 
 def args_by_stage():
-    check = f.ProofRef(name="sui.f.finite_update_replay", version="2", args={})
     return {
-        "measure_segment": fb.SegmentArgs(route=point("route"), requested_interval=interval(), start_reason="bootstrap"),
+        "measure_segment": fb.SegmentArgs(route=point("route"), requested=interval(), start_reason="bootstrap"),
         "candidate_generation": fb.CandidateArgs(model=point("model"), generator_args={}, basis=()),
-        "belief_result": fb.ResultArgs(request=point("Q")),
-        "belief_proof": fb.ProofArgs(request=point("Q"), result=point("R"), checker=check),
-        "verification": fb.VerificationArgs(target=fb.UpdateTargetRef(request=point("Q"),
-            result=point("R"), proofs=frozenset({point("P")}), completion=point("Cq")),
-            check_view=view(), checker=check, acquisitions=frozenset({point("G")})),
+        "belief_update": fb.UpdateArgs(model=point("model"), prior=None,
+            observations=(point("segment-report"),)),
         "evaluation_prepare": fb.EvaluationPrepareArgs(input=f.FFactsRequest(
             fixed_parents=(point("boundary"),), model=point("model"), candidates=point("CG"),
             preferences=(), scope=f.EvaluationScope(name="one_step", version="1", H_ns=None, source=None),
@@ -398,7 +396,7 @@ def test_six_events_and_envelope(event):
 
 
 @pytest.mark.parametrize("stage", tuple(args_by_stage()))
-def test_eight_work_uses(stage):
+def test_six_work_uses(stage):  # v0.25 §6-6: belief_update 1 つ (前は 8 用途)
     assert set(get_args(fb.Stage)) == set(args_by_stage())
     assert set(get_args(fb.FWork)) == {fb.MeasureSegment, fb.Compute, fb.Draw}
     d = desc(stage)
@@ -452,19 +450,15 @@ def test_public_entry_signatures():
     assert tuple(x.name for x in fields(PreparedEntry)) == ("record", "parents", "salt", "header", "cid")
 
 
-def certificate_example():
-    budget = RateBudget(tolerance=Fraction(1, 100), max_cells=10, max_terms=10, max_refinements=10)
-    call = u2.CallBinding(work_request=point("Wv"), budget=budget, call_digest=point("call"))
-    target = u2.Target(request=point("Q"), result=point("R"), proofs=frozenset({point("P")}), completion=point("Cq"))
+def issued_kwargs():
+    """IssuedUpdate の全欄 (v0.25 §6-3)。説明値から発行物を作れないことの確かめにだけ使う。"""
     fixed = u2.FixedViewValue(boundary=frozenset({point("boundary")}), reader_view_key="view", registry_key="registry")
-    checker = f.ProofRef(name="sui.f.finite_update_replay", version="2", args={})
-    return u2.UpdateCertificateDescription(call=call, target=target, model=point("model"), origin=point("origin"),
-        numerical_view=fixed, check_view=fixed, registry_key="registry", verifier=checker,
-        checked_proofs=(u2.CheckedProof(proof=point("P"), checker=checker),),
-        target_digest=point("target"), request_input_digest=point("input"),
-        closure_digest=point("closure"), result_digest=point("result"),
-        application_digest=point("application"), acquisition_digest=point("acquisition"),
-        replay_mode="positive_dependencies")
+    return dict(request=point("Q"), result={"joint": ["8/9", "1/9"], "evidence_mass": "9/128"},
+                application_digest=point("application"), numerical_view=fixed, registry_key="registry")
+
+
+def fixture_budget():
+    return RateBudget(tolerance=Fraction(1, 100), max_cells=10, max_terms=10, max_refinements=10)
 
 
 @pytest.mark.parametrize("name", ORIGINAL_GAP_IDS)
@@ -487,17 +481,16 @@ def test_contract_gap_replacement(name):
         assert not signature(u2.fb_registry_v1).parameters
     elif name == "CG-LIVE-OUTPUT":
         hints = get_type_hints(fb.FWorkContext.post)
-        assert u2.VerifiedFiniteUpdate in get_args(hints["issued"])
+        assert u2.IssuedUpdate in get_args(hints["issued"])
         assert get_type_hints(fb.FWorkContext.evidence)["return"] is u2.TargetEvidence
-        assert set(get_args(hints["issued"])) == {f.FMathArtifact, u2.VerifiedFiniteUpdate, type(None)}
+        assert set(get_args(hints["issued"])) == {f.FMathArtifact, u2.IssuedUpdate, type(None)}
         assert signature(fb.FWorkContext.post).parameters["issued"].default is None
     elif name == "CG-VERIFY-ENTRY":
-        cert = certificate_example()
-        issue = u2.RejectedIssue(code="shape", fields=("/target",), evidence=frozenset(), message="bad shape")
-        response = u2.Rejected(call=cert.call, issues=(issue,))
-        result = u2.TargetVerificationReturn(response=response, issued=None)
-        assert result.response.call == cert.call
-        assert set(signature(u2.finite_update_target_check).parameters) == {"work_request", "reader", "registry", "evidence", "budget"}
+        # v0.25 §6-3: 対象指定認証をやめ、入口 U が一次事実から計算して発行する。joint を受ける引数は無い
+        issue = u2.RejectedIssue(code="shape", fields=("/request",), evidence=frozenset(), message="bad shape")
+        response = u2.Rejected(request=point("Q"), issues=(issue,))
+        assert response.request == point("Q") and isinstance(response, get_args(u2.UpdateReturn))
+        assert set(signature(u2.compute_finite_update).parameters) == {"request", "reader", "registry", "evidence", "budget"}
     elif name == "CG-STATUS-VIEW":
         status = fb.FStatus(**status_examples())
         for item in (status.receipts[0].slots[0], status.works[0], status.readings[0], status.pending[0],
@@ -517,27 +510,23 @@ def test_contract_gap_replacement(name):
         assert "frame" in segment_items()  # paper:3247 explicitly excludes Run
 
 
-@pytest.mark.parametrize("kind", ("verified", "rejected", "insufficient"))
-def test_verification_response_shapes(kind):
-    cert = certificate_example()
-    if kind == "verified":
-        response = u2.Verified(value=cert)  # description only, NOT a live issued success
-        assert response.value.target == cert.target
-    elif kind == "rejected":
-        response = u2.Rejected(call=cert.call, issues=(u2.RejectedIssue(
-            code="shape", fields=("/target",), evidence=frozenset(), message="shape"),))
-        assert u2.TargetVerificationReturn(response=response, issued=None).issued is None
+@pytest.mark.parametrize("kind", ("rejected", "insufficient"))
+def test_update_return_shapes(kind):
+    """U の確定の返答 (v0.25 §6-2)。成功の枝は発行物だけで、手で作れない (下の試験)。"""
+    if kind == "rejected":
+        response = u2.Rejected(request=point("Q"), issues=(u2.RejectedIssue(
+            code="shape", fields=("/request",), evidence=frozenset(), message="shape"),))
     else:
-        need = u2.VerificationNeed(kind="budget", value={"phase": "proof"})
-        response = u2.Insufficient(call=cert.call, issues=(u2.InsufficientIssue(
-            code="budget_exhausted", fields=("/budget",), missing=(need,), evidence=frozenset(), message="proof budget"),))
-        assert u2.TargetVerificationReturn(response=response, issued=None).issued is None
+        need = u2.VerificationNeed(kind="budget", value={"phase": "computation"})
+        response = u2.Insufficient(request=point("Q"), issues=(u2.InsufficientIssue(
+            code="budget_exhausted", fields=("/budget",), missing=(need,), evidence=frozenset(), message="budget"),))
+    assert isinstance(response, get_args(u2.UpdateReturn)) and not isinstance(response, u2.IssuedUpdate)
 
 
-@pytest.mark.parametrize("kwargs", ({}, {"description": certificate_example()}), ids=("empty", "description"))
-def test_verified_finite_update_cannot_be_hand_constructed(kwargs):
+@pytest.mark.parametrize("kwargs", ({}, issued_kwargs()), ids=("empty", "all_fields"))
+def test_issued_update_cannot_be_hand_constructed(kwargs):
     with pytest.raises(TypeError):
-        u2.VerifiedFiniteUpdate(**kwargs)
+        u2.IssuedUpdate(**kwargs)
 
 
 @pytest.mark.parametrize("outcome", ("not_started", "unknown", "raises", "launched"))
@@ -578,7 +567,7 @@ FB_FIELD_SPEC = {
     "FixedView": "boundary:frozenset[Point];reader_view_key:str;registry_key:str|None",
     "ResourceScope": "quantity_contract:ContractRef;need:MethodCall",
     "Allocation": "scope_slot:str;amount:QuantityValue",
-    "BootstrapRoute": "config:RouteConfig;process_slot:str;allocation:SlotValue",
+    "BootstrapRoute": "config:RouteConfig;process_slot:str;allocation:SlotValue;reading_contract:ContractRef|None",
     "InitialProcess": "process_slot:str;reader_slot:str;model:Point;generator:MethodCall;method:MethodCall;allocation:SlotValue;derivation:SlottedMethod",
     "Environment": "data:ImmutableJSON",
     "BootDeclaration": "capacity:QuantityValue;scope:SlotValue;routes:tuple[SlotValue,...];initial:SlotValue|None;environment:SlotValue",
@@ -601,12 +590,10 @@ FB_FIELD_SPEC = {
     "WorkFinished": "work:str;started:ReadingEvidence;finished:ReadingEvidence;outcome:WorkOutcome",
     "DrawReturned": "work:str;outcome:DrawOutcome",
     "Trigger": "point:Point;slot:str",
-    "SegmentArgs": "route:Point;requested_interval:MeasurementInterval;start_reason:str",
+    "Ongoing": "clock:Ref",
+    "SegmentArgs": "route:Point;requested:MeasurementInterval|Ongoing;start_reason:str",
     "CandidateArgs": "model:Point;generator_args:ImmutableJSON;basis:tuple[Point,...]",
-    "ResultArgs": "request:Point",
-    "ProofArgs": "request:Point;result:Point;checker:ProofRef",
-    "UpdateTargetRef": "request:Point;result:Point;proofs:frozenset[Point];completion:Point",
-    "VerificationArgs": "target:UpdateTargetRef;check_view:FixedView;checker:ProofRef;acquisitions:frozenset[Point]",
+    "UpdateArgs": "model:Point;prior:Point|None;observations:tuple[Point,...]",
     "EvaluationPrepareArgs": "input:FFactsRequest;compiler:ContractRef",
     "DrawArgs": "prepared:Point;stream_id:str;request:DrawRequest",
     "EvaluationArgs": "evaluation_request:Point;prepared:Point;draw:Point",
@@ -647,18 +634,12 @@ FA_FIELD_SPEC = {
 
 UPDATE_FIELD_SPEC = {
     "FixedViewValue": "boundary:frozenset[Point];reader_view_key:str;registry_key:str|None",
-    "Target": "request:Point;result:Point;proofs:frozenset[Point];completion:Point",
-    "CallBinding": "work_request:Point;budget:RateBudget;call_digest:str",
-    "CheckedProof": "proof:Point;checker:ProofRef",
-    "UpdateCertificateDescription": "call:CallBinding;target:Target;model:Point;origin:Point;numerical_view:FixedViewValue;check_view:FixedViewValue;registry_key:str;verifier:ProofRef;checked_proofs:tuple[CheckedProof,...];target_digest:str;request_input_digest:str;closure_digest:str;result_digest:str;application_digest:str;acquisition_digest:str;replay_mode:Literal['positive_dependencies','exact_environment']",
     "VerificationNeed": "kind:Literal['capability','evidence','budget'];value:ImmutableJSON",
-    "RejectedIssue": "code:Literal['schema','shape','noncanonical','rational','unit','unknown_version','normalization','unresolved_reference','reference_kind','proof_mismatch','observation_binding_mismatch','measurement_conflict','clock_unaligned','missing_contract','model_falsified','outside_evaluation_type','result_mismatch'];fields:tuple[str,...];evidence:frozenset[Point];message:str",
-    "InsufficientIssue": "code:Literal['algorithm_unavailable','certificate_incomplete','budget_exhausted','prerequisite_unavailable','clock_unaligned'];fields:tuple[str,...];missing:tuple[VerificationNeed,...];evidence:frozenset[Point];message:str",
-    "Verified": "value:UpdateCertificateDescription",
-    "Rejected": "call:CallBinding;issues:tuple[RejectedIssue,...]",
-    "Insufficient": "call:CallBinding;issues:tuple[InsufficientIssue,...]",
-    "VerifiedFiniteUpdate": "description:UpdateCertificateDescription",
-    "TargetVerificationReturn": "response:VerificationResponse;issued:VerifiedFiniteUpdate|None",
+    "RejectedIssue": "code:Literal['schema','shape','noncanonical','rational','unit','unknown_version','normalization','unresolved_reference','reference_kind','observation_binding_mismatch','measurement_conflict','clock_unaligned','missing_contract','model_falsified','outside_evaluation_type','result_mismatch'];fields:tuple[str,...];evidence:frozenset[Point];message:str",
+    "InsufficientIssue": "code:Literal['algorithm_unavailable','budget_exhausted','prerequisite_unavailable','clock_unaligned'];fields:tuple[str,...];missing:tuple[VerificationNeed,...];evidence:frozenset[Point];message:str",
+    "IssuedUpdate": "request:Point;result:ImmutableJSON;application_digest:str;numerical_view:FixedViewValue;registry_key:str",
+    "Rejected": "request:Point;issues:tuple[RejectedIssue,...]",
+    "Insufficient": "request:Point;issues:tuple[InsufficientIssue,...]",
     "ReportObservation": "envelope:int;received_ns:int;point:Point|None",
     "ExecutionObservation": "work_id:str;launches:tuple[LaunchResult,...];entered:int;stopped:bool;reports:tuple[ReportObservation,...]",
     "UseObservation": "work_id:str;point:Point;used_ns:int",
@@ -674,15 +655,15 @@ FB_ALIAS_SPEC = {
     # Two literal boundary kinds plus these six types give eight wire branches.
     "SegmentItem": "SegmentBoundary|RouteAppliedItem|MeasurementFrame|Gap|MeasurementUnavailable|CoverageClaim|CoverageUnproved",
     "FEvent": "Boot|ClockDeclared|Received|SegmentReport|WorkFinished|DrawReturned",
-    "Stage": "Literal['measure_segment','candidate_generation','belief_result','belief_proof','verification','evaluation_prepare','selection_draw','evaluation']",
-    "WorkArgs": "SegmentArgs|CandidateArgs|ResultArgs|ProofArgs|VerificationArgs|EvaluationPrepareArgs|DrawArgs|EvaluationArgs",
+    "Stage": "Literal['measure_segment','candidate_generation','belief_update','evaluation_prepare','selection_draw','evaluation']",
+    "WorkArgs": "SegmentArgs|CandidateArgs|UpdateArgs|EvaluationPrepareArgs|DrawArgs|EvaluationArgs",
     "FWork": "MeasureSegment|Compute|Draw",
     "Held": "Point|Unsaved",
     "LaunchResult": "Literal['launched','not_started','unknown']",
 }
 UPDATE_ALIAS_SPEC = {
     "LaunchResult": "Literal['launched','not_started','unknown']",
-    "VerificationResponse": "Verified|Rejected|Insufficient",
+    "UpdateReturn": "IssuedUpdate|Rejected|Insufficient",
 }
 FA_ALIAS_SPEC = {
     # Public recursive JSON definition (F-a V-01, public declarations L46).
@@ -694,9 +675,9 @@ FA_ALIAS_SPEC = {
 
 def test_public_export_names_are_exact():
     assert set(fb.__all__) == set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
-        "FbInputError", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost"}
+        "FbInputError", "FbHostFault", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost"}
     assert set(u2.__all__) == set(UPDATE_FIELD_SPEC) | set(UPDATE_ALIAS_SPEC) | {
-        "fb_registry_v1", "finite_update_target_check"}
+        "fb_registry_v1", "compute_finite_update"}
 
 
 def declaration_names(surface=fb):
@@ -822,11 +803,11 @@ def test_stage3_independent_evidence_contrasts_are_constructible(contrast):
     reader = SimpleNamespace(entry=ledger.entry, entries=ledger.entries, record=ledger.record,
         ancestors=ledger.ancestors, sealed_content=lambda cid: (
             components.contents.get(ledger.entry(cid).seal)[0], ledger.record(cid).body.content))
-    call = dict(work_request=point("Wv"), reader=reader, registry=test_registry(), budget=certificate_example().call.budget)
+    call = dict(request=point("Q"), reader=reader, registry=test_registry(), budget=fixture_budget())
     good_call, bad_call = dict(call, evidence=legal), dict(call, evidence=illegal)
-    signature(u2.finite_update_target_check).bind(**good_call)
-    signature(u2.finite_update_target_check).bind(**bad_call)
+    signature(u2.compute_finite_update).bind(**good_call)
+    signature(u2.compute_finite_update).bind(**bad_call)
     good_input, bad_input = (raw, good_call), (raw, bad_call)
     assert good_input[0] is bad_input[0] and legal != illegal
-    for key in ("work_request", "reader", "registry", "budget"):
+    for key in ("request", "reader", "registry", "budget"):
         assert good_call[key] is bad_call[key]

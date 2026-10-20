@@ -3005,6 +3005,11 @@ def _schema_check(ref, raw):
         else:
             raise FSpecificationMissing("missing_contract", "unknown args schema")
         return
+    if ref.name.startswith("sui.fb."):
+        # F-b の構造契約 (Need の入出力、F-b 紙 §2-5-3・§6-5 G5)。旧の宣言は sui.fb. を使わない
+        from ._fb_shape import check_contract_value
+        check_contract_value(ref, raw)
+        return
     raise FSpecificationMissing("missing_contract", "wire schema not declared")
 
 
