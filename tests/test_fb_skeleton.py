@@ -225,6 +225,12 @@ def slot(name, kind, value):
     return fb.SlotValue(slot=name, contract=kind, value=value)
 
 
+def budget():
+    from fractions import Fraction
+    from sui.rate import RateBudget
+    return RateBudget(Fraction(1, 1000), 1000, 1000, 10)
+
+
 def boot(initial=False):
     """Structure example, with explicitly unresolved test methods (CG-METHOD)."""
     def allocation(name):
@@ -242,6 +248,7 @@ def boot(initial=False):
         initial_value = slot("initial", c.INITIAL_PROCESS, fb.InitialProcess(
             process_slot="thinking", reader_slot="reader", model=point("model"),
             generator=method("test.generator"), method=method("test.evaluation"),
+            draw=method("test.draw"), prepare_budget=budget(), evaluate_budget=budget(),
             allocation=allocation("thinking-allocation"),
             derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
                 contract=c.RECEIVED_UPDATE, args=delta_args))))
@@ -315,11 +322,13 @@ def args_by_stage():
         "evaluation_prepare": fb.EvaluationPrepareArgs(input=f.FFactsRequest(
             fixed_parents=(point("boundary"),), model=point("model"), candidates=point("CG"),
             preferences=(), scope=f.EvaluationScope(name="one_step", version="1", H_ns=None, source=None),
-            context=point("context"), method=contract("test.evaluation")), compiler=contract("test.compiler")),
+            context=point("context"), method=contract("test.evaluation")), compiler=contract("test.compiler"),
+            budget=budget()),
         "selection_draw": fb.DrawArgs(prepared=point("PR"), stream_id="stream-A", request=f.DrawRequest(
             purpose="selection", context_key="problem-A", ordinal=0,
             law=contract("sui.f.uniform_unit"), args={})),
-        "evaluation": fb.EvaluationArgs(evaluation_request=point("EQ"), prepared=point("PR"), draw=point("DF")),
+        "evaluation": fb.EvaluationArgs(evaluation_request=point("EQ"), prepared=point("PR"), draw=point("DF"),
+                                        budget=budget()),
     }
 
 
@@ -440,6 +449,11 @@ def test_public_entry_signatures():
     assert get_type_hints(fb.FWorkContext.read) == {"point": str, "return": bytes}
     assert set(signature(fb.FWorkContext.monitored).parameters) == {"self", "interval"}
     assert get_type_hints(fb.FWorkContext.monitored) == {"interval": f.MeasurementInterval, "return": type(None)}
+    # v0.26 §6-9 H5: 対象を限った読み取り
+    assert set(signature(fb.FWorkContext.reader).parameters) == {"self"}
+    assert get_type_hints(fb.FWorkContext.reader) == {"return": f.FReader | None}
+    assert set(signature(fb.FWorkContext.prepared).parameters) == {"self"}
+    assert get_type_hints(fb.FWorkContext.prepared) == {"return": f.FMathArtifact | None}
     assert fb.LaunchResult == u2.LaunchResult
     assert signature(fb.FThreadHost).parameters["registry"].default is signature(fb.FThreadHost).empty
     assert set(signature(fb.FWindow.accept).parameters) == {"self", "envelope"}
@@ -568,7 +582,7 @@ FB_FIELD_SPEC = {
     "ResourceScope": "quantity_contract:ContractRef;need:MethodCall",
     "Allocation": "scope_slot:str;amount:QuantityValue",
     "BootstrapRoute": "config:RouteConfig;process_slot:str;allocation:SlotValue;reading_contract:ContractRef|None",
-    "InitialProcess": "process_slot:str;reader_slot:str;model:Point;generator:MethodCall;method:MethodCall;allocation:SlotValue;derivation:SlottedMethod",
+    "InitialProcess": "process_slot:str;reader_slot:str;model:Point;generator:MethodCall;method:MethodCall;draw:MethodCall;prepare_budget:RateBudget;evaluate_budget:RateBudget;allocation:SlotValue;derivation:SlottedMethod",  # v0.26 §6-9 H3・H4
     "Environment": "data:ImmutableJSON",
     "BootDeclaration": "capacity:QuantityValue;scope:SlotValue;routes:tuple[SlotValue,...];initial:SlotValue|None;environment:SlotValue",
     "ReadingClock": "source:Point;reading:ClockReading",
@@ -594,9 +608,9 @@ FB_FIELD_SPEC = {
     "SegmentArgs": "route:Point;requested:MeasurementInterval|Ongoing;start_reason:str",
     "CandidateArgs": "model:Point;generator_args:ImmutableJSON;basis:tuple[Point,...]",
     "UpdateArgs": "model:Point;prior:Point|None;observations:tuple[Point,...]",
-    "EvaluationPrepareArgs": "input:FFactsRequest;compiler:ContractRef",
+    "EvaluationPrepareArgs": "input:FFactsRequest;compiler:ContractRef;budget:RateBudget",  # v0.26 §6-9 H3
     "DrawArgs": "prepared:Point;stream_id:str;request:DrawRequest",
-    "EvaluationArgs": "evaluation_request:Point;prepared:Point;draw:Point",
+    "EvaluationArgs": "evaluation_request:Point;prepared:Point;draw:Point;budget:RateBudget",  # v0.26 §6-9 H3
     "Desc": "work_id:str;process:BootSlot;trigger:frozenset[Trigger];purpose:Stage;stage_slot:str;reader:Point|None;method:ContractRef;output_contract:ContractRef;args:WorkArgs;input_points:frozenset[Point];numerical_view:FixedView|None;allocation:BootSlot;permissions:frozenset[BootSlot]",
     "MeasureSegment": "request:Point;desc:Desc",
     "Compute": "request:Point;desc:Desc",
@@ -606,7 +620,7 @@ FB_FIELD_SPEC = {
     "SlotStatus": "contract:ContractRef;state:Literal['accepted','awaiting_confirmation','saved','unconfirmed'];target:Held;evidence:StatusBasis",
     "ReceiptStatus": "envelope:int;received_ns:int;state:Literal['received','accepted'];slots:tuple[SlotStatus,...]",
     "WorkStatus": "work_id:str;request:Held;purpose:Stage;phase:Literal['pending','starting','running','stopped'];startable:bool;blocked_by:tuple[Held,...];knowledge:Literal['none','success','failure','unknown'];stop_confirmed:bool;held:QuantityValue|None;evidence:StatusBasis",
-    "ReadingStatus": "target:Held;reader:Point|None;reached:Literal['none','generated','acquired','verified','adopted'];response:Literal['none','rejected','insufficient','no_decision','failure','unknown'];adopted:Point|None;stale:Point|None;selected:Point|None;evidence:StatusBasis",
+    "ReadingStatus": "target:Held;reader:Point|None;reached:Literal['none','generated','acquired','verified','adopted'];response:Literal['none','rejected','insufficient','no_decision','no_candidates','failure','unknown'];adopted:Point|None;stale:Point|None;selected:Point|None;evidence:StatusBasis",
     "PendingStatus": "kind:Literal['unchecked','awaiting_evidence','missing_contract','conflict'];target:Held|None;contract:ContractRef|None;reason:str;evidence:StatusBasis",
     "CellStatus": "interval:MeasurementInterval;reports:tuple[Literal['frame','gap','measurement_unavailable','claim','coverage_unproved'],...];certified:bool;evidence:StatusBasis",
     "SegmentStatus": "segment:Held;cells:tuple[CellStatus,...];ended:bool;evidence:StatusBasis",

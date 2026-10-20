@@ -34,7 +34,7 @@ def install(rig, reading=c.FINITE_SEGMENT_PROJECTION):
         replace(route, value=replace(route.value, reading_contract=reading)),)))
     rig.boot_input = event
     clock_event = fb.ClockDeclared(declaration=replace(source(), run=rig.clock.run))
-    accept_and_save(rig, rig.envelope(100, clock_event, 10), contract("sui.clock.source"), 1)
+    accept_and_save(rig, rig.envelope(100, clock_event, 10), c.CLOCK_NOTICE, 1)  # §6-9 K1
     rig.host.window.accept(rig.envelope(101, event, 11))
     pump_window(rig, lambda: len(rig.facts(c.SEGMENT_REQUESTED)) == 1)
     rig.source = rig.facts(contract("sui.clock.source"))[0].cid

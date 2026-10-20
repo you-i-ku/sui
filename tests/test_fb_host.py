@@ -16,7 +16,7 @@ from test_fb_stage1 import RealRig, accept_and_save, make_rig, pump_window
 
 def declare_clock(rig):
     clock_event = fb.ClockDeclared(declaration=replace(source(), run=rig.clock.run))
-    accept_and_save(rig, rig.envelope(100, clock_event, 10), contract("sui.clock.source"), 1)
+    accept_and_save(rig, rig.envelope(100, clock_event, 10), c.CLOCK_NOTICE, 1)  # §6-9 K1
 
 
 def with_model(rig, event):
@@ -78,7 +78,8 @@ def test_route_config_is_applied_to_the_host_routes(rig):
     config = event.declaration.routes[0].value.config
     (saved,) = rig.facts(contract("sui.f.route_config"))
     assert rig.host._state.routes[config.route_epoch] == (config, 150)
-    assert saved.value["effective_from"]["time_ns"] == 150
+    # 和型の包み {kind, value} (F-a A:29、段 2 で F-a が読めない形だったと分かった)
+    assert saved.value["effective_from"] == {"kind": "clock", "value": {"run": str(rig.clock.run), "time_ns": 150}}
 
 
 @pytest.mark.parametrize("same,ok", ((True, True), (False, False)))

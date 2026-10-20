@@ -132,7 +132,7 @@ def scene_rig(case):
     try:
         clock_event = fb.ClockDeclared(declaration=replace(source(), run=rig.clock.run))
         accept_and_save(rig, rig.envelope(100, clock_event, 10),
-                        contract("sui.clock.source"), 1)
+                        c.CLOCK_NOTICE, 1)  # §6-9 K1
         event = boot(False)
         first = event.declaration.routes[0]
         routes = [first]

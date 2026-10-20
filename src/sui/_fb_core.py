@@ -15,7 +15,6 @@ from . import fb as _fb
 from . import fb_contracts as _c
 from ._fb_shape import check_event as _check_event
 from ._fb_wire import dumps as _dumps, encode as _encode
-from .clock_contracts import SOURCE as _CLOCK_SOURCE
 from .contracts import ContractRef as _ContractRef
 from .ids import RandomIds as _RandomIds, RefKind as _RefKind
 from .ledger import Entry as _Entry, PreparedEntry as _PreparedEntry
@@ -68,6 +67,8 @@ class State:
         self.binding_missing: dict = {}  # 原報告の Point → 今の判断の不足 (PendingStatus の材料)
         self.work_conflicts: list = []   # 同じ WorkId を名乗った違う仕事 (上書きしない、R08)
         self.routes: dict = {}         # 実適用した受け口: route_epoch → (RouteConfig, M の読み) (G2・R01)
+        self.thinking: dict = {}       # P.units: Qgen の WorkId → 考える過程の計画 (_fb_think.ThinkPlan)
+        self.clock_sources: dict = {}  # P.units: 時計の知らせの Point → 発行する sui.clock.source/1 の Slot (K1)
 
 
 def mono_ns(clock) -> int:
@@ -75,8 +76,13 @@ def mono_ns(clock) -> int:
     return reader() if reader is not None else clock.now().mono_ns
 
 
+# 既存の契約の原報告は既存の外側の route を保つ (§2-5-1「既存契約の route を新しい共通値に一括変更しない」)。
+# F-a の起動の不変は route='membrane' を要る (_f_invariants の 'BOOT' の literals)
+_EXISTING_ROUTE = {_S4_BOOT: "membrane"}
+
+
 def _observed(state, contract, content, received_ns, at):
-    body = _Observed(route="fb", content=_Payload.json(content), contract=contract,
+    body = _Observed(route=_EXISTING_ROUTE.get(contract, "fb"), content=_Payload.json(content), contract=contract,
                      caused_by=None, source_id=None, source_time_ns=None, received_ns=received_ns)
     return _Record(id=state.ids.new(_RefKind.OBSERVATION), at=at, writer=_Role.MEMBRANE,
                    producer=PRODUCER, body=body, schema=3)
@@ -87,7 +93,7 @@ def _raw_slots(state, event, r, at) -> list:
     if isinstance(event, _fb.Boot):
         pairs = ((_S4_BOOT, {}), (_c.BOOT_DECLARATION, _encode(event.declaration)))
     elif isinstance(event, _fb.ClockDeclared):
-        pairs = ((_CLOCK_SOURCE, event.declaration.as_json()),)
+        pairs = ((_c.CLOCK_NOTICE, event.declaration.as_json()),)   # §6-9 K1
     elif isinstance(event, _fb.Received):
         pairs = ((_c.RECEIVED, _encode(event)),)
     elif isinstance(event, _fb.SegmentReport):
@@ -169,42 +175,76 @@ def save(state, slot) -> None:
 
 
 def settle(state) -> None:
-    """原報告を 1 点ずつ保存し、保存した Boot から起動の計画を置いて進める。"""
-    from . import _fb_bind, _fb_boot
-    with state.lock:
-        for number in list(state.order):
-            receipt = state.receipts[number]
-            for slot in receipt.slots:
-                save(state, slot)
-            if isinstance(receipt.envelope.event, _fb.Boot) and number not in state.plans:
-                declaration = next(s for s in receipt.slots if s.contract == _c.BOOT_DECLARATION)
-                state.plans[number] = _fb_boot.plan_boot(state, receipt.envelope.event.declaration,
-                                                         declaration.entry.cid)
-        for row in state.works.values():
-            if row.retry:
-                resolve_need(state, row)
-        for plan in state.plans.values():
-            _fb_boot.advance(state, plan)
-        _fb_bind.bind(state)
+    """原報告を 1 点ずつ保存し、保存した Boot から起動の計画を置いて進め、考える過程を進める。
+    Need はロックの外で固定した入力で呼ぶ (§6-9 H10: 差し替えられる方法が戻らない時に Post を止めない)。"""
+    from . import _fb_bind, _fb_boot, _fb_think
+    try:
+        with state.lock:
+            for number in list(state.order):
+                receipt = state.receipts[number]
+                for slot in receipt.slots:
+                    save(state, slot)
+                if isinstance(receipt.envelope.event, _fb.Boot) and number not in state.plans:
+                    declaration = next(s for s in receipt.slots if s.contract == _c.BOOT_DECLARATION)
+                    state.plans[number] = _fb_boot.plan_boot(state, receipt.envelope.event.declaration,
+                                                             declaration.entry.cid)
+            _fb_boot.clock_sources(state)
+            for plan in state.plans.values():
+                _fb_boot.advance(state, plan)
+            _fb_think.advance(state)
+            _fb_bind.bind(state)
+    finally:
+        # 保存の故障で途中から例外を上げる時も、置いた行の Need は求めておく (行と義務は残る)
+        with state.lock:
+            pending = [row for row in state.works.values() if row.retry]
+        for row in pending:
+            resolve_need(state, row)
+
+
+@_dataclass(frozen=True)
+class PlannedDesc:
+    work_id: str
+    purpose: str
+
+
+@_dataclass(frozen=True)
+class PlannedWork:
+    """要求がまだ未解決の仕事の行 (紙 INV-5「Publish の時は全後続の仕事の行を同時に置き、行の計画の中には
+    未解決の PlanRef を許すが実在の Point として使わない」)。request は預かりの識別 Unsaved で、開始できない。
+    要求を準備した時に add_work が同じ行を本物の仕事に解決する (review FB2-R04)。"""
+    desc: PlannedDesc
+    request: object   # fb.Unsaved
+
+
+def plan_work(state, work_id, purpose, scope) -> None:
+    """Publish と同じ歩で、要求が未解決の後続の仕事の行を置く (PR → D、DF → Ee)。"""
+    if work_id not in state.works:
+        state.works[work_id] = WorkRow(work=PlannedWork(desc=PlannedDesc(work_id=work_id, purpose=purpose),
+                                                        request=_fb.Unsaved(plan=work_id)), need=None, scope=scope)
 
 
 def add_work(state, work, scope) -> None:
     """Publish と同じ歩で仕事の行を置き、Need を解決する (G5)。同じ WorkId に違う仕事が
-    来たら上書きせず食い違いとして持つ (R08)。"""
+    来たら上書きせず食い違いとして持つ (R08)。要求が未解決の行 (PlannedWork) は同じ行のまま解決する。"""
     known = state.works.get(work.desc.work_id)
+    if known is not None and isinstance(known.work, PlannedWork) \
+            and known.work.desc.purpose == work.desc.purpose:
+        known.work, known.scope, known.retry = work, scope, True
+        return
     if known is not None:
         if wire(known.work) != wire(work):
             state.work_conflicts.append(work)
         return
-    row = WorkRow(work=work, need=None, scope=scope)
+    # Need は settle の最後にロックの外で求める (§6-9 H10)。それまでは開始できない
+    row = WorkRow(work=work, need=None, scope=scope, retry=True)
     state.works[work.desc.work_id] = row
-    resolve_need(state, row)
 
 
 def resolve_need(state, row) -> None:
     """Need は固定した Desc と資源範囲で、F-a の能力の呼出しの規約 (args/input/output の構造検査)
     を通して呼び、返値を行に持つ。解決できなければ need=None (開始できない・対象つきの missing)。
-    既定値で埋めない。実装の一時の例外は行を消さずに持ち、次の settle で試し直す (R07)。"""
+    既定値で埋めない。実装の一時の例外は行を消さずに持ち、次の settle で試し直す (R07)。
+    ロックの外で呼ぶ (入力の Desc と資源範囲は不変)。結果の書き込みだけロックの下で。"""
     from . import f as _f
     work, scope = row.work, row.scope
     need, missing = None, None
@@ -222,10 +262,11 @@ def resolve_need(state, row) -> None:
     except (_f.FSpecificationMissing, _f.FIncomplete, _f.FInputError) as exc:
         missing = f"need:{exc.reason}"
     except Exception as exc:   # 実装の一時の失敗。行と義務は残し、settle で試し直す
-        missing, row.retry = f"need:error:{type(exc).__name__}", True
-    else:
-        row.retry = False
-    row.need, row.missing = need, missing
+        with state.lock:
+            row.need, row.missing, row.retry = None, f"need:error:{type(exc).__name__}", True
+        return
+    with state.lock:
+        row.need, row.missing, row.retry = need, missing, False
 
 
 def _slot_status(slot):
@@ -249,8 +290,10 @@ def status(state):
             receipts.append(_fb.ReceiptStatus(
                 envelope=number, received_ns=receipt.envelope.received_ns, state="accepted",
                 slots=tuple(_slot_status(slot) for slot in receipt.slots)))
-        return _fb.FStatus(receipts=tuple(receipts), works=work_statuses(state), readings=(),
-                           pending=pending_statuses(state), segments=segment_statuses(state), purposes=())
+        from . import _fb_think
+        return _fb.FStatus(receipts=tuple(receipts), works=work_statuses(state),
+                           readings=_fb_think.reading_statuses(state), pending=pending_statuses(state),
+                           segments=segment_statuses(state), purposes=_fb_think.purpose_statuses(state))
 
 
 def pending_statuses(state) -> tuple:
@@ -271,6 +314,22 @@ def pending_statuses(state) -> tuple:
         out.append(item(hold.kind, report, _c.SEGMENT_BINDING, hold.reason))
     for work in state.work_conflicts:
         out.append(item("conflict", work.request, None, f"work_id:{work.desc.work_id}"))
+    from ._fb_think import conflicts
+    for plan in state.thinking.values():
+        # 食い違いは印でなく、その都度、保存済みの報告から導く (FB2-R01-R2)。保存の確認待ちを含む食い違いは
+        # 未確認 (M1: 確認できない時は保存していないとも成功したとも言わない、FB2-R01-R3)
+        confirmed = conflicts(state, plan)
+        for purpose in confirmed:
+            out.append(item("conflict", plan.qgen, None, "conflict:" + purpose))
+        for purpose in conflicts(state, plan, unconfirmed=True):
+            if purpose not in confirmed:
+                out.append(item("unchecked", plan.qgen, None, "conflict:unconfirmed:" + purpose))
+        for reason in plan.missing:
+            if reason in ("eq:method", "eq:preferences", "cg:method_semantics", "context:clock_contract"):
+                kind = "missing_contract"
+            else:
+                kind = "awaiting_evidence"
+            out.append(item(kind, plan.qgen, None, reason))
     return tuple(out)
 
 
@@ -356,8 +415,13 @@ def _saved(state, cid) -> bool:
 
 
 def startable(state, row) -> bool:
-    """開始は要求の保存の後 (FB5-01)。占有と容量が合う時だけ。"""
-    return row.phase == "pending" and _saved(state, row.work.request) and _fits(state, row)
+    """開始は要求の保存の後 (FB5-01)。占有と容量が合う時だけ。上の段の食い違いが見えている考える過程の
+    仕事は開始しない (紙 :864)。"""
+    from ._fb_think import blocked
+    if isinstance(row.work, PlannedWork):
+        return False   # 要求が未解決の行は開始できない
+    return row.phase == "pending" and _saved(state, row.work.request) and _fits(state, row) \
+        and not blocked(state, row)
 
 
 def drain(state) -> tuple:
@@ -489,8 +553,10 @@ class WorkContext:
     def enter(self) -> bool:
         with self._state.lock:
             row = self._row
-            # 開始の札を取れるのは、今の占有を確保した起動の口だけ (R20)
-            if row.ticket_used or row.claim is not self:
+            # 開始の札を取れるのは、今の占有を確保した起動の口だけ (R20)。起動の後・入場の前に上の段の
+            # 食い違いが見えたら入場させない (紙 :864、review FB2-R01)。入場していないので開始待ちに戻る
+            from ._fb_think import blocked
+            if row.ticket_used or row.claim is not self or blocked(self._state, row):
                 return False
             row.ticket_used = self.entered = True
             row.entered += 1
@@ -522,6 +588,21 @@ class WorkContext:
 
     def evidence(self):
         return evidence(self._state)
+
+    def reader(self):
+        """その仕事の Desc の numerical_view の境界と input_points の閉包だけの読み手 (§6-9 H5)。"""
+        from ._fb_boot import _Closure
+        desc = self._row.work.desc
+        boundary = set(desc.input_points)
+        if desc.numerical_view is not None:
+            boundary |= desc.numerical_view.boundary
+        return _Closure(self._state.ledger, frozenset(boundary)) if boundary else None
+
+    def prepared(self):
+        """Ee の args.prepared と照合した Ep の生きた発行物。ほかの仕事は None (§6-9 H5)。"""
+        from . import _fb_think
+        with self._state.lock:
+            return _fb_think.prepared_for(self._state, self._row)
 
 
 def evidence(state):

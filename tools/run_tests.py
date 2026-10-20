@@ -18,6 +18,10 @@ SUI = Path(__file__).resolve().parents[1]
 PY = SUI / ".venv" / "Scripts" / "python.exe"
 # 負荷で揺れる既存の試験 (HANDOFF §F)。並列の部から外して 1 本ずつ回す
 SERIAL = ["tests/test_runtime.py", "tests/test_store.py", "tests/test_s4b_action_integration.py"]
+# 関所 F の F-b の模型 (参考として凍結、D11)。sui を import しないので実装の検品に効かず、並列で 65 分を超えて
+# 時間切れになる (HANDOFF の ★、2026-10-20)。回すなら場所を渡して 1 本ずつ
+MODEL = ["tests/test_fb_machine.py", "tests/test_fb_scenes.py", "tests/test_fb_mutants.py",
+         "tests/test_fb_mutants_claude.py"]
 ENV = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"}
 
 
@@ -59,7 +63,7 @@ def main():
     log_dir = Path(a.log) if a.log else Path(tempfile.mkdtemp(prefix="sui_tests_"))
     log_dir.mkdir(parents=True, exist_ok=True)
     if a.where == ["all"]:
-        ignore = [f"--ignore={p}" for p in SERIAL]
+        ignore = [f"--ignore={p}" for p in SERIAL + MODEL]
         ok = part("1_parallel", ["-n", a.n, "tests", *ignore], log_dir, a.timeout, a.show)
         ok = part("2_serial", SERIAL, log_dir, a.timeout, a.show) and ok
         ok = part("3_backup", ["backup"], log_dir, a.timeout, a.show) and ok

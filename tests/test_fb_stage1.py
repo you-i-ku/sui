@@ -373,7 +373,7 @@ class RealRig:
                 value=replace(event.declaration.initial.value, model=self.model_point))))
         self.boot_input = event
         clock_event = fb.ClockDeclared(declaration=replace(source(), run=self.clock.run))
-        accept_and_save(self, self.envelope(100, clock_event, 10), contract("sui.clock.source"), 1)
+        accept_and_save(self, self.envelope(100, clock_event, 10), c.CLOCK_NOTICE, 1)  # §6-9 K1
         self.host.window.accept(self.envelope(101, event, 11))
         wanted = c.CANDIDATE_REQUEST if initial else c.SEGMENT_REQUESTED
         pump_window(self, lambda: len(self.facts(wanted)) == 1)
@@ -764,7 +764,7 @@ def test_real_store_observer_roundtrip_without_host():
 def test_raw_event_entire_payload_and_storage_envelope(rig, event_kind):
     """B:2063-2080,2317-2320: entire source value, not status-derived expected data."""
     event = received() if event_kind == "received" else fb.ClockDeclared(declaration=source()) if event_kind == "clock" else boot()
-    target = c.RECEIVED if event_kind == "received" else contract("sui.clock.source") if event_kind == "clock" else c.BOOT_DECLARATION
+    target = c.RECEIVED if event_kind == "received" else c.CLOCK_NOTICE if event_kind == "clock" else c.BOOT_DECLARATION
     original = wire(event if event_kind == "received" else event.declaration)
     first = accept_and_save(rig, rig.envelope(1, event, 30), target, 1)[0]
     assert first.value == original and first.parents == frozenset()
@@ -1310,7 +1310,7 @@ def test_stage1_raw_field(rid, rig):
     event = RAW_EXAMPLES[probe["example"]]
     # object() is outside every declared outer type, including free JSON and nullable DTOs.
     bad = malformed_raw_example(probe)
-    target = c.BOOT_DECLARATION if isinstance(event, fb.Boot) else contract("sui.clock.source") if isinstance(
+    target = c.BOOT_DECLARATION if isinstance(event, fb.Boot) else c.CLOCK_NOTICE if isinstance(
         event, fb.ClockDeclared) else c.RECEIVED if isinstance(event, fb.Received) else c.SEGMENT_REPORT if isinstance(
         event, fb.SegmentReport) else c.WORK_REPORT
     before = rig.storage_snapshot()

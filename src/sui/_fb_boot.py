@@ -134,16 +134,51 @@ def plan_boot(state, declaration, d) -> BootPlan:
     return plan
 
 
-def _clock_source(state):
-    """ホストの run を宣言した保存済みの sui.clock.source の Point。まだ無ければ None。"""
+def _run_boot(state):
+    """この run の原点の起動 (`sui.s4.boot/1`) の保存済みの Point。最初に受け付けたもの (既存の原点の規則)。"""
+    from .s4_contracts import BOOT
+    for number in state.order:
+        receipt = state.receipts[number]
+        if isinstance(receipt.envelope.event, _fb.Boot):
+            slot = next(s for s in receipt.slots if s.contract == BOOT)
+            if slot.entry is not None and slot.record.at.run == state.clock.run:
+                return slot.entry.cid
+    return None
+
+
+def clock_sources(state) -> None:
+    """時計の知らせ R と同じ run の起動 B の両方が保存されたら、既存 `sui.clock.source/1` S を発行する
+    (§6-9 K1)。親 Front({B, R})、本文は照合した原宣言、r は成立を確かめた時の M (U2)。届く順はどちらでもよい。
+    別の run の宣言は発行しない。各知らせに 1 つ (宣言の食い違いを最初の 1 件で隠さない)。"""
+    from ._fb_core import Slot, mono_ns, save
+    boot = _run_boot(state)
+    if boot is None:
+        return
     for number in state.order:
         receipt = state.receipts[number]
         event = receipt.envelope.event
-        if isinstance(event, _fb.ClockDeclared) and event.declaration.run == state.clock.run:
-            entry = receipt.slots[0].entry
-            if entry is not None:
-                return entry.cid
-    return None
+        if not isinstance(event, _fb.ClockDeclared) or receipt.slots[0].entry is None:
+            continue
+        notice = receipt.slots[0].entry.cid
+        if notice in state.clock_sources or event.declaration.run != state.clock.run:
+            continue
+        body = _Observed(route="membrane", content=_Payload.json(event.declaration.as_json()), contract=_CLOCK_SOURCE,
+                         received_ns=mono_ns(state.clock))
+        slot = Slot(contract=_CLOCK_SOURCE, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
+                    parents=_front(state.ledger, {boot, notice}))
+        slot.prepared = state.ledger.prepare(slot.record, slot.parents)
+        state.clock_sources[notice] = slot
+    for slot in state.clock_sources.values():
+        save(state, slot)
+
+
+def _clock_source(state):
+    """時計を使う所 (route の実効・結びつき・o/j) が指す、発行した sui.clock.source/1 の Point (K1)。
+    まだ無い、または発行した宣言どうしが食い違う時は None (最初の 1 件で選ばない)。"""
+    saved = [slot for slot in state.clock_sources.values() if slot.entry is not None]
+    if not saved or len({slot.record.body.content.data for slot in saved}) != 1:
+        return None
+    return saved[0].entry.cid
 
 
 def _events(ledger, points) -> frozenset:
@@ -193,9 +228,10 @@ def _route_steps(route_slot):
         plan.applied[name] = applied_ns
         reading = _f.ClockReading(run=state.clock.run, time_ns=applied_ns)
         ledger = state.ledger
-        content = {"config": _f._encode(route.config), "effective_from": _f._encode(reading),
-                   "execution": None,
-                   "evidence": [str(ledger.record(plan.d).id), str(ledger.record(source).id)]}
+        # 既存の契約の DTO で符号化する (effective_from は ClockReading | Unavailable の和型、F-a A:29)
+        from .f_entry import RouteApplied
+        content = _f._encode(RouteApplied(config=route.config, effective_from=reading, execution=None,
+                                          evidence=(ledger.record(plan.d).id, ledger.record(source).id)))
         body = _Observed(route="fb", content=_Payload.json(content), contract=_ROUTE_CONFIG,
                          received_ns=applied_ns)
         return Slot(contract=_ROUTE_CONFIG, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
@@ -238,9 +274,11 @@ def _initial_steps(state, initial_slot):
     name = initial_slot.slot
 
     def build_origin(state, plan):
-        from ._fb_core import Slot
+        from ._fb_core import Slot, mono_ns
+        # r は窓口がこの記録の成立を確かめた時の M の読み (§2-5-1 U2)。時刻なしだと F-a が文脈の
+        # 境界と比べられない (chronology の unknown time)
         body = _Observed(route="fb", content=_Payload.json({"model": initial.model}),
-                         contract=_KNOWLEDGE_ORIGIN, received_ns=None)
+                         contract=_KNOWLEDGE_ORIGIN, received_ns=mono_ns(state.clock))
         return Slot(contract=_KNOWLEDGE_ORIGIN, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
                     parents=_front(state.ledger, {plan.d, initial.model}))
 
@@ -269,7 +307,8 @@ def _initial_steps(state, initial_slot):
             method=initial.generator.contract, output_contract=_c.CANDIDATE_GENERATION,
             args=_fb.CandidateArgs(model=initial.model, generator_args=initial.generator.args, basis=()),
             input_points=frozenset({d, origin, initial.model}),
-            numerical_view=fixed_view(state, frozenset({origin})),
+            # Prediction のモデルは出来事の祖先に入らないので境界に直接含める (§6-9 H5)
+            numerical_view=fixed_view(state, frozenset({origin, initial.model})),
             allocation=_fb.BootSlot(declaration=d, slot=initial.allocation.slot),
             permissions=frozenset({_fb.BootSlot(declaration=d, slot=name),
                                    _fb.BootSlot(declaration=d, slot=initial.allocation.slot)}))
@@ -282,7 +321,9 @@ def _initial_steps(state, initial_slot):
 
     def qgen_prepared(state, plan, cid):
         from ._fb_core import add_work
+        from ._fb_think import open_plan
         add_work(state, _fb.Compute(request=cid, desc=plan.points["desc:qgen"]), plan.declaration.scope.value)
+        open_plan(state, plan, initial_slot, cid)
 
     return [Step(name="origin", build=build_origin),
             Step(name="qgen", build=build_qgen, on_prepared=qgen_prepared)]
@@ -323,11 +364,14 @@ def fixed_view(state, boundary) -> _fb.FixedView:
                          registry_key=registry_view_key(state.registry))
 
 
-def advance(state, plan) -> None:
-    """保存の義務を順に進める。前提がまだ無い所で止まる。I/O の失敗は準備を残して上げる。"""
+def advance(state, plan, *, build=lambda step: True) -> None:
+    """保存の義務を順に進める。前提がまだ無い所で止まる。I/O の失敗は準備を残して上げる。
+    build(step) が偽のまだ作っていない記録の所で止まる (作った記録の保存は続ける)。"""
     from ._fb_core import save
     for step in plan.steps:
         if step.slot is None:
+            if not build(step):
+                return
             slot = step.build(state, plan)
             if slot is None:
                 return

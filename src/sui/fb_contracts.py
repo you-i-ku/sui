@@ -25,6 +25,8 @@ QUANTITY_VALUE = _ContractRef("sui.fb.quantity_value", "1")
 
 # 原報告 (Observed / MEMBRANE / FACT、§2-5-9)
 RECEIVED = _ContractRef("sui.fb.received", "1")
+# I-7 の時計の知らせ (§6-9 K1)。窓口が同じ run の起動との対応を確かめて既存 sui.clock.source/1 を発行する
+CLOCK_NOTICE = _ContractRef("sui.fb.clock_notice", "1")
 BOOT_DECLARATION = _ContractRef("sui.fb.boot_declaration", "1")
 SEGMENT_REPORT = _ContractRef("sui.fb.segment_report", "1")
 WORK_REPORT = _ContractRef("sui.fb.work_report", "1")
@@ -52,6 +54,11 @@ WAITING = _ContractRef("sui.fb.waiting", "1")
 
 # 内側の値契約 (独立 Body なし)
 CANDIDATE_GENERATION = _ContractRef("sui.fb.candidate_generation", "1")
+
+# 段 2 (§6-9): 最初の候補の生成方法 (H9)、評価の準備と、くじからの評価の実行の操作 (H8、名前だけの仮定)
+MODEL_OPERATIONS = _ContractRef("sui.fb.model_operations", "1")
+EVALUATION_PREPARE = _ContractRef("sui.fb.evaluation_prepare", "1")
+EVALUATE_FROM_DRAW = _ContractRef("sui.fb.evaluate_from_draw", "1")
 
 # finite_update/2 とその周り (§2-5-19、段 3 で新しい registry へ)
 FINITE_UPDATE_2 = _ContractRef("sui.f.finite_update", "2")
