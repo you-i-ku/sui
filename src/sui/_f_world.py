@@ -371,6 +371,10 @@ def _check_contract_version(record, field):
                  fc.MEASUREMENT_JOB, fc.OBSERVATION_PLAN, fc.OBSERVATION_BINDING, fc.MEASUREMENT,
                  fc.MEASUREMENT_RUN, fc.COVERAGE, fc.ROUTE_CONFIG, fc.QUANTITY_DECLARATION,
                  fc.PREDICATE, fc.LIMIT_DECLARATION, fc.MATH_ARTIFACT, fc.MATH_ARTIFACT_V2}
+        # F-b の段 3 が宣言した同じ名前の新しい版 (紙 F-b §2-5-19-1 の observation_plan/2)。読みは F-b の入口 U と
+        # A* の読み (f_update2) だけが行い、F-a の観測の読み方 (/1) には混ぜない
+        from .fb_contracts import OBSERVATION_PLAN_2
+        known.add(OBSERVATION_PLAN_2)
         _KNOWN_RECORD_CONTRACTS = frozenset(known), frozenset(c.name for c in known)
     contract = getattr(record.body, 'contract', None)
     versions, names = _KNOWN_RECORD_CONTRACTS
@@ -2152,6 +2156,14 @@ class FactsCompiler(_WorldCompiler):
             self.knowledge_joint=belief.joint
             incorporated=tuple(dict.fromkeys(m for a in belief.applied for m in a.measurements))
             if not set(incorporated)<=set(available): raise core.FInputError('proof_mismatch',field='/adoption/measurements')
+        from .f_update2 import adopted_belief
+        fb_belief=adopted_belief(self)   # F-b の採用 A* (紙 F-b §6-10 J7・K12)。無ければ旧の道のまま
+        if fb_belief is not None:
+            # F-b の Claim は A* を通してだけ効くので、評価の出発点 (initial_joint) も A* の joint。F-a の観測 (Frame)
+            # と F-b の採用を混ぜる読み方はこの版に無い (K12)
+            if leaves or observations: raise core.FInputError('shape','F-a adoptions or frames mixed with F-b adoptions','/adoption')
+            belief_ref,self.knowledge_joint=fb_belief
+            self.fb_joint=self.knowledge_joint
         adopted_requests={self.content(a.completion,fc.COMPUTATION_COMPLETED).request for a in adoptions.values()}
         for point,request in requests.items():
             if point in adopted_requests: continue
@@ -2179,8 +2191,10 @@ class _Compiler(FactsCompiler):
     _problem_contract=fc.PROBLEM_FACTS
     _problem_domain='sui.f.problem/3'
 
-    def __init__(self, request, *, reader, registry, budget):
+    def __init__(self, request, *, reader, registry, budget, fb_evidence=None, fb_replay_budget=None):
         self.facts_request=core._decode(core._encode(request),core.FFactsRequest)
+        self.fb_evidence=fb_evidence   # F-b の A* を読む時の独立の観測 (f_update2.adopted_belief)。保存しない
+        self.fb_replay_budget=fb_replay_budget   # F-b の入口が実際に渡した系列の作り直しの UpdateBudget (Z34 (a) 案 B)
         super().__init__(reader,fixed_parents=request.fixed_parents,model_ref=request.model,
             context_ref=request.context,registry=registry,budget=budget,
             extra_points=(request.candidates,*request.preferences))
@@ -2257,6 +2271,10 @@ class _Compiler(FactsCompiler):
 
     def _prior_joint(self,data):
         return self.knowledge_joint
+
+    def _initial_joint(self,belief):
+        fb_joint=getattr(self,'fb_joint',None)   # F-b の採用 A* の joint (K12)。無ければ旧の道のまま
+        return belief.joint if fb_joint is None else fb_joint
 
 
 class BridgeCompiler(_WorldCompiler):

@@ -14,8 +14,11 @@ ALLOCATION = _ContractRef("sui.fb.allocation", "1")
 BOOTSTRAP_ROUTE = _ContractRef("sui.fb.bootstrap_route", "1")
 INITIAL_PROCESS = _ContractRef("sui.fb.initial_process", "1")
 ENVIRONMENT = _ContractRef("sui.fb.environment", "1")
-# δ の契約 (§2-5-4)。v0.25 §6-4 で火種を受信だけから保存済みの事実へ広げた。名前と入力の形は段 3 で決める
-RECEIVED_UPDATE = _ContractRef("sui.fb.received_update", "1")
+# δ の契約 (§2-5-4)。v0.25 §6-4 で火種を受信だけから保存済みの事実へ広げ、段 3 で `received_update/1` から
+# 置き換えた (§6-10 J1・K2: 火種は保存した原報告、結びつき B は要求を作る前提)
+SAVED_SEGMENT_UPDATE = _ContractRef("sui.fb.saved_segment_update", "1")
+# 採用の後に考え直す最初の方法 (§6-10 J6・K1・K10)
+REUSE_CANDIDATES = _ContractRef("sui.fb.reuse_candidates", "1")
 # Need の呼出しの構造契約 (FBS0-R02)。入力 NEED_INPUT = {"work": Desc の正準 JSON, "scope": ResourceScope の
 # 正準 JSON}。出力 QUANTITY_VALUE = QuantityValue の正準 JSON {"contract": 量の契約, "value": その契約の値}
 # (この版の量の契約は SEATS = 非負整数一つで、SEATS 自身の意味は変えない)。F-a の能力の呼出しの構造検査が
@@ -74,3 +77,10 @@ SEGMENT_VALUE_ONLY = _ContractRef("sui.fb.segment_value_only", "1")
 # (finite_update_statement/2・finite_update_replay/2・finite_update_target_check/1・
 # target_update_certificate/1・sui.fb.verification・proof_output・verification_response) を外した
 FINITE_UPDATE_COMPUTE = _ContractRef("sui.f.finite_update_compute", "1")
+
+# 段 3 の記録と値の契約 (§6-10 K4・K7・K8・K9、名前だけの仮定)
+MONITOR_SPAN = _ContractRef("sui.fb.monitor_span", "1")        # ホストが自分で観測した監視の区間 (J9-a)
+UPDATE_RESPONSE = _ContractRef("sui.fb.update_response", "1")  # Wu の返答の三枝 (J4)
+UPDATE_BUDGET = _ContractRef("sui.fb.update_budget", "1")      # 信念の更新の予算 (論理の上限 + 数値計算、Z34 (a))
+UPDATE_RESULT = _ContractRef("sui.fb.update_result", "1")      # R* (J5)
+BELIEF_ADOPTED = _ContractRef("sui.fb.belief_adopted", "1")    # A* (J5)

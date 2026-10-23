@@ -71,6 +71,11 @@ def encode(value) -> object:
                 "outcome": encode(value.outcome)}
     if isinstance(value, _fb.DrawReturned):
         return {"work": value.work, "outcome": encode(value.outcome)}
+    if isinstance(value, _fb.SegmentArgs):
+        # requested は新しい和型 = kind/value (紙 F-b :2214、正本 v1.3.5 SEGMENT-INTERVAL、Z34 (c))
+        kind = "ongoing" if isinstance(value.requested, _fb.Ongoing) else "finite"
+        return {"route": value.route, "requested": {"kind": kind, "value": encode(value.requested)},
+                "start_reason": value.start_reason}
     tag = _OUTCOME_TAGS.get(type(value))
     if tag is not None:
         return {"kind": tag[0], "value": encode(getattr(value, tag[1]))}

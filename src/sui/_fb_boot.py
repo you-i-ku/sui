@@ -32,6 +32,7 @@ class Step:
     build: object                # (state, plan) -> Slot | None (None は前提がまだ保存されていない)
     on_prepared: object = None   # (state, plan, cid) -> None: Publish と同じ歩で仕事の行を置く
     slot: object = None
+    uses: object = None          # (state, plan) -> 使用の出発点の列 | None: 新しい使用の門 (段 3、§6-10 G6)
 
 
 @_dataclass
@@ -182,14 +183,22 @@ def _clock_source(state):
 
 
 def _events(ledger, points) -> frozenset:
-    """Ev: 派生物 (Prediction など) を直接の出来事の親にせず、その出来事の来歴へ展開する (§2-5-1・G4)。"""
-    out, pending = set(), list(points)
+    """Ev: 派生物 (Prediction など) を直接の出来事の親にせず、その出来事の来歴へ展開する (§2-5-1・G4)。
+    派生物は実の親と宣言した basis の両方から出来事を得る (紙 :2059「A-03 に従い、その用途で必要な basis と
+    実親から得る出来事」。段 3 の R* の basis の T で、実の親だけの展開が欠けていたと分かった)。"""
+    out, pending, seen = set(), list(points), set()
     while pending:
-        entry = ledger.entry(pending.pop())
+        cid = pending.pop()
+        if cid in seen:
+            continue
+        seen.add(cid)
+        entry = ledger.entry(cid)
         if entry.is_event:
             out.add(entry.cid)
         else:
             pending.extend(entry.parents)
+            for ref in getattr(ledger.record(cid).body, "basis", ()):
+                pending.extend(e.cid for e in ledger.entries_of(ref))
     return frozenset(out)
 
 
@@ -222,12 +231,17 @@ def _route_steps(route_slot):
                 plan.missing.append(f"route:{name}:epoch_conflict")
             return None
         # 実適用: ホストの受け口の表に設定を入れる。以後この route_epoch の報告はこの設定で
-        # 照合される (結びつきの route の照合、R01・R03)。その境目で M を読む
+        # 照合される (結びつきの route の照合、R01・R03)。その境目で M を読み、工場がその操作を捕捉する
+        # (RouteApplicationObservation の元。保存した route_config の復号から作らない、正本 v1.3.7)
         applied_ns = mono_ns(state.clock)
         state.routes[epoch] = (route.config, applied_ns)
         plan.applied[name] = applied_ns
         reading = _f.ClockReading(run=state.clock.run, time_ns=applied_ns)
         ledger = state.ledger
+        from .f_update2 import RouteCapture
+        state.route_applications[plan.d, name] = RouteCapture(
+            boot=plan.d, route_slot=name, applied_config=route.config, reading=reading, clock_source=source,
+            evidence_inputs=((plan.d, ledger.record(plan.d).id), (source, ledger.record(source).id)), execution=None)
         # 既存の契約の DTO で符号化する (effective_from は ClockReading | Unavailable の和型、F-a A:29)
         from .f_entry import RouteApplied
         content = _f._encode(RouteApplied(config=route.config, effective_from=reading, execution=None,
@@ -236,6 +250,10 @@ def _route_steps(route_slot):
                          received_ns=applied_ns)
         return Slot(contract=_ROUTE_CONFIG, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
                     parents=frozenset({plan.d, source}))
+
+    def route_prepared(state, plan, cid):
+        # 同じ操作から作った route_config の Point を控えに結ぶ (publication)
+        state.route_applications[plan.d, name].publication = cid
 
     def build_k(state, plan):
         from ._fb_core import Slot
@@ -262,10 +280,12 @@ def _route_steps(route_slot):
 
     def k_prepared(state, plan, cid):
         from ._fb_core import add_work
-        add_work(state, _fb.MeasureSegment(request=cid, desc=plan.points["desc:" + name]),
-                 plan.declaration.scope.value)
+        desc = plan.points["desc:" + name]
+        add_work(state, _fb.MeasureSegment(request=cid, desc=desc), plan.declaration.scope.value)
+        # この測る実行が使う route の実適用の操作 (EW.route_operation。K.args.route や B.route から推測しない)
+        state.works[desc.work_id].route_operation = state.route_applications[plan.d, name].operation
 
-    return [Step(name="route_config:" + name, build=build_route_config),
+    return [Step(name="route_config:" + name, build=build_route_config, on_prepared=route_prepared),
             Step(name="k:" + name, build=build_k, on_prepared=k_prepared)]
 
 

@@ -60,6 +60,9 @@ class State:
         self.order: list = []          # 受付の順
         self.works: dict = {}          # P.work: WorkId → WorkRow (挿入の順を保つ)
         self.acquisitions: list = []   # EA: 実取得の観測 (段 3)
+        # 工場の捕捉 (正本 v1.3.7 transport_types): (Boot の Point, route の slot) → route の実適用の控え、監視の控えの列
+        self.route_applications: dict = {}
+        self.host_monitors: list = []
         self.capacity: dict = {}       # Boot の宣言の Point → 容量 (QuantityValue)
         self.allocations: dict = {}    # BootSlot (宣言の Point と割当の slot) → QuantityValue (R15)
         self.plans: dict = {}          # P.units: Boot の封筒の番号 → 起動の計画 (_fb_boot.BootPlan)
@@ -69,6 +72,14 @@ class State:
         self.routes: dict = {}         # 実適用した受け口: route_epoch → (RouteConfig, M の読み) (G2・R01)
         self.thinking: dict = {}       # P.units: Qgen の WorkId → 考える過程の計画 (_fb_think.ThinkPlan)
         self.clock_sources: dict = {}  # P.units: 時計の知らせの Point → 発行する sui.clock.source/1 の Slot (K1)
+        self.updates: dict = {}        # P.units: Boot の封筒の番号 → 信念の更新の計画 (_fb_update.UpdatePlan、§6-10)
+        # 門の重い計算 (閉包・索引・配送の比較) をロックの外で行うための版 (紙 G6 の最後の行、LOCK-R5):
+        # delivery_version は Post・Accept・口の報告の追加で、ledger_version は台帳への保存で進む。gate_cache は
+        # settle の前にロックの外で計算した結果で、版が合う時だけ使う (条件が変われば古い許可を使わず計算し直す)
+        self.delivery_version = 0
+        self.ledger_version = 0
+        self.gate_cache = None
+        self.gate_stale = False   # ロックの中の門が版の不一致で使用を保留した (settle が外で計算し直してもう一度通す)
 
 
 def mono_ns(clock) -> int:
@@ -162,6 +173,7 @@ def accept(state, envelope) -> None:
         state.receipts[envelope.number] = receipt
         state.order.append(envelope.number)
         state.queue = [queued for queued in state.queue if queued.number != envelope.number]
+        state.delivery_version += 1
 
 
 def save(state, slot) -> None:
@@ -171,29 +183,48 @@ def save(state, slot) -> None:
     if slot.prepared is None:
         slot.prepared = state.ledger.prepare(slot.record, slot.parents)
     slot.attempted = True
+    # 書き込みを試みたら台帳の版を進める (失敗しても進める: 確認が失われた書き込みは台帳に入っていることがあり、
+    # 前の版で作った閉包や Ref の索引を使い続けると、入ったはずの記録が「無い」ことになる)
+    state.ledger_version += 1
     slot.entry = state.ledger.write(slot.prepared)
 
 
 def settle(state) -> None:
     """原報告を 1 点ずつ保存し、保存した Boot から起動の計画を置いて進め、考える過程を進める。
     Need はロックの外で固定した入力で呼ぶ (§6-9 H10: 差し替えられる方法が戻らない時に Post を止めない)。"""
-    from . import _fb_bind, _fb_boot, _fb_think
+    from . import _fb_bind, _fb_boot, _fb_think, _fb_update
+    # 門の重い計算 (閉包・索引・配送の比較) はロックの外で固定した入力から (G6 の最後の行、LOCK-R5・R6)。
+    # ロックの中の門は版が合う時だけ結果を使い、版が違えば (途中で書き込みか配送が進んだ) その使用を保留して
+    # stale を立てる。保留があれば、ロックの外で計算し直してから同じ settle でもう一度通す (古い許可は使わない)
     try:
-        with state.lock:
-            for number in list(state.order):
-                receipt = state.receipts[number]
-                for slot in receipt.slots:
-                    save(state, slot)
-                if isinstance(receipt.envelope.event, _fb.Boot) and number not in state.plans:
-                    declaration = next(s for s in receipt.slots if s.contract == _c.BOOT_DECLARATION)
-                    state.plans[number] = _fb_boot.plan_boot(state, receipt.envelope.event.declaration,
-                                                             declaration.entry.cid)
-            _fb_boot.clock_sources(state)
-            for plan in state.plans.values():
-                _fb_boot.advance(state, plan)
-            _fb_think.advance(state)
-            _fb_bind.bind(state)
+        for _attempt in range(4):
+            _fb_update.precompute(state)
+            with state.lock:
+                state.gate_stale = False
+                for number in list(state.order):
+                    receipt = state.receipts[number]
+                    for slot in receipt.slots:
+                        save(state, slot)
+                    if isinstance(receipt.envelope.event, _fb.Boot) and number not in state.plans:
+                        declaration = next(s for s in receipt.slots if s.contract == _c.BOOT_DECLARATION)
+                        state.plans[number] = _fb_boot.plan_boot(state, receipt.envelope.event.declaration,
+                                                                 declaration.entry.cid)
+                _fb_boot.clock_sources(state)
+                for plan in state.plans.values():
+                    _fb_boot.advance(state, plan)
+                _fb_think.advance(state)
+                _fb_bind.bind(state)
+                _fb_update.advance(state)
+                stale = state.gate_stale
+            if not stale:
+                break
     finally:
+        # この settle で置いた行・計画の門の材料を外で先に計算しておく (次の settle の前の drain・開始・入場が、
+        # ロックの中で閉包を計算せずに済むように)。保存の故障で途中から抜けた時も同じ (読むだけ)
+        try:
+            _fb_update.precompute(state)
+        except Exception:   # noqa: BLE001 — 門の材料の先読みの失敗は、その歩の門が wait/stale で受ける
+            pass
         # 保存の故障で途中から例外を上げる時も、置いた行の Need は求めておく (行と義務は残る)
         with state.lock:
             pending = [row for row in state.works.values() if row.retry]
@@ -290,10 +321,12 @@ def status(state):
             receipts.append(_fb.ReceiptStatus(
                 envelope=number, received_ns=receipt.envelope.received_ns, state="accepted",
                 slots=tuple(_slot_status(slot) for slot in receipt.slots)))
-        from . import _fb_think
+        from . import _fb_think, _fb_update
         return _fb.FStatus(receipts=tuple(receipts), works=work_statuses(state),
-                           readings=_fb_think.reading_statuses(state), pending=pending_statuses(state),
-                           segments=segment_statuses(state), purposes=_fb_think.purpose_statuses(state))
+                           readings=_fb_think.reading_statuses(state) + _fb_update.reading_statuses(state),
+                           pending=pending_statuses(state) + _fb_update.pending_statuses(state),
+                           segments=segment_statuses(state),
+                           purposes=_fb_think.purpose_statuses(state) + _fb_update.purpose_statuses(state))
 
 
 def pending_statuses(state) -> tuple:
@@ -389,6 +422,7 @@ def post(state, event) -> None:
         state.number = used + 1
         # Post の時点で凍らせる: Accept の前に呼出し元が中身を変えても、受信の r と中身が対応する (R13)
         state.queue.append(_fb.Envelope(number=state.number, event=freeze(event), received_ns=mono_ns(state.clock)))
+        state.delivery_version += 1
 
 
 def _fits(state, row) -> bool:
@@ -421,7 +455,7 @@ def startable(state, row) -> bool:
     if isinstance(row.work, PlannedWork):
         return False   # 要求が未解決の行は開始できない
     return row.phase == "pending" and _saved(state, row.work.request) and _fits(state, row) \
-        and not blocked(state, row)
+        and not blocked(state, row, "開始")
 
 
 def drain(state) -> tuple:
@@ -534,6 +568,9 @@ class WorkRow:
     launches: list = _field(default_factory=list)
     entered: int = 0
     entered_ns: int | None = None  # 最初の入場の M の読み (ホストの実際の観測、§6-8 B6)
+    entries: list = _field(default_factory=list)   # 全部の入場の M の読み (EW.entered_ns、重複の入場も落とさない)
+    execution: object = _field(default_factory=lambda: _mint_execution())   # 実行の識別 (工場が行ごとに発行)
+    route_operation: object = None  # 測る実行が使った route の実適用の操作 (測らない仕事は None)
     stopped: bool = False
     held: object = None
     reports: list = _field(default_factory=list)   # (封筒の番号, r)
@@ -551,18 +588,35 @@ class WorkContext:
         self.invoked = False   # この口の本体が呼ばれたか
 
     def enter(self) -> bool:
-        with self._state.lock:
-            row = self._row
-            # 開始の札を取れるのは、今の占有を確保した起動の口だけ (R20)。起動の後・入場の前に上の段の
-            # 食い違いが見えたら入場させない (紙 :864、review FB2-R01)。入場していないので開始待ちに戻る
-            from ._fb_think import blocked
-            if row.ticket_used or row.claim is not self or blocked(self._state, row):
+        """開始の札を取れるのは、今の占有を確保した起動の口だけ (R20)。起動の後・入場の前に上の段の食い違いが
+        見えたら入場させない (紙 :864、review FB2-R01)。入場の門 (G6-*-ENTER) の閉包と比較はロックの外で計算し、
+        版が同じ時だけ同じ歩で入場する (FB3-LOCK-R6)。入場していないので開始待ちに戻る。"""
+        from ._fb_think import entrance
+        from ._fb_update import gate_fresh
+        state, row = self._state, self._row
+        with state.lock:
+            if row.ticket_used or row.claim is not self:
+                return False
+            try:
+                found = entrance(state, row)
+            except Exception:   # 要求がまだ読めない: 入場しない (開始待ちに戻る)
+                return False
+        starts, cheap = found if found is not None else (None, lambda: False)
+
+        def decide(verdict):
+            if row.ticket_used or row.claim is not self or cheap() or verdict != "open":
                 return False
             row.ticket_used = self.entered = True
             row.entered += 1
-            row.entered_ns = mono_ns(self._state.clock)
+            row.entered_ns = mono_ns(state.clock)
+            row.entries.append(row.entered_ns)
             row.phase = "running"
             return True
+
+        if not starts:
+            with state.lock:
+                return decide("open")
+        return gate_fresh(state, starts, decide) is True
 
     def post(self, event, issued=None) -> None:
         state = self._state
@@ -572,18 +626,24 @@ class WorkContext:
                 return   # 開始の札を取っていない口の報告は原報告として残るだけで、仕事に結ばない (B6)
             envelope = state.queue[-1]
             self._row.reports.append((envelope.number, envelope.received_ns))
+            state.delivery_version += 1   # この口の配送が増えた (窓口の配送集合の入力)
             if issued is not None:
                 self._row.issued.append((envelope.number, issued))
 
     def read(self, point) -> bytes:
+        """札を取った口だけが読める (§6-10 J8・K11)。取っていない口の読みは使用の観測にしない。"""
         state = self._state
-        record = state.ledger.record(point)
-        with state.lock:
+        with state.lock:   # 占有の確認・本文の読み・使用の記録を 1 つの歩に (間に停止が入らない、R10-R2)
+            if not self.entered or self._row.claim is not self:   # 停止した口も拒む (review FB3-R10)
+                raise RuntimeError("read outside the entered work")
+            record = state.ledger.record(point)
             self._row.uses.append((point, mono_ns(state.clock)))
         return record.body.content.data
 
     def monitored(self, interval) -> None:
         with self._state.lock:
+            if not self.entered or self._row.claim is not self:
+                raise RuntimeError("monitored outside the entered work")
             self._row.intervals.append(interval)
 
     def evidence(self):
@@ -596,6 +656,8 @@ class WorkContext:
         boundary = set(desc.input_points)
         if desc.numerical_view is not None:
             boundary |= desc.numerical_view.boundary
+        if desc.purpose == "belief_update":
+            boundary.add(self._row.work.request)   # Wu は Q* 自身も読む (Q* を Xnum に入れない、§6-10 J2)
         return _Closure(self._state.ledger, frozenset(boundary)) if boundary else None
 
     def prepared(self):
@@ -605,20 +667,33 @@ class WorkContext:
             return _fb_think.prepared_for(self._state, self._row)
 
 
+def _mint_execution():
+    from .f_update2 import _mint
+    return _mint("execution")
+
+
 def evidence(state):
     from . import f_update2 as _u
+    from ._fb_boot import _clock_source
     with state.lock:
         executions, uses, intervals = [], [], []
         for row in state.works.values():
             wid = row.work.desc.work_id
             reports = []
+            run = getattr(state.clock, "run", None)
             for number, r in row.reports:
                 receipt = state.receipts.get(number)
                 point = receipt.slots[0].entry.cid if receipt and receipt.slots and receipt.slots[0].entry else None
-                reports.append(_u.ReportObservation(envelope=number, received_ns=r, point=point))
+                reports.append(_u.ReportObservation(envelope=number, received_ns=r, point=point, run=run))
+            request = row.work.request if isinstance(row.work.request, str) else None   # 未保存の要求は None
             executions.append(_u.ExecutionObservation(work_id=wid, launches=tuple(row.launches),
-                entered=row.entered, stopped=row.stopped, reports=tuple(reports)))
-            uses += [_u.UseObservation(work_id=wid, point=p, used_ns=ns) for p, ns in row.uses]
+                entered=row.entered, stopped=row.stopped, reports=tuple(reports),
+                entered_ns=tuple(row.entries), run=run, execution_occurrence=row.execution, request=request,
+                route_operation=row.route_operation, clock_source=_clock_source(state)))
+            uses += [_u.UseObservation(work_id=wid, point=p, used_ns=ns, run=run) for p, ns in row.uses]
             intervals += [_u.IntervalObservation(work_id=wid, interval=i) for i in row.intervals]
         return _u.TargetEvidence(executions=tuple(executions), uses=tuple(uses),
-                                 intervals=tuple(intervals), acquisitions=tuple(state.acquisitions))
+                                 intervals=tuple(intervals), acquisitions=tuple(state.acquisitions),
+                                 route_applications=tuple(capture.observation() for capture
+                                                          in state.route_applications.values()),
+                                 host_monitors=tuple(capture.observation() for capture in state.host_monitors))

@@ -225,10 +225,20 @@ def slot(name, kind, value):
     return fb.SlotValue(slot=name, contract=kind, value=value)
 
 
-def budget():
+def rate_budget():
     from fractions import Fraction
     from sui.rate import RateBudget
     return RateBudget(Fraction(1, 1000), 1000, 1000, 10)
+
+
+def budget():
+    """評価の準備・評価には RateBudget、信念の更新には UpdateBudget (紙 F-b Z34 (a))。"""
+    return rate_budget()
+
+
+def update_budget():
+    from sui import fb_contracts as fbc
+    return u2.UpdateBudget(contract=fbc.UPDATE_BUDGET, logical_limit=1000, numerical=rate_budget())
 
 
 def boot(initial=False):
@@ -248,10 +258,11 @@ def boot(initial=False):
         initial_value = slot("initial", c.INITIAL_PROCESS, fb.InitialProcess(
             process_slot="thinking", reader_slot="reader", model=point("model"),
             generator=method("test.generator"), method=method("test.evaluation"),
-            draw=method("test.draw"), prepare_budget=budget(), evaluate_budget=budget(),
-            allocation=allocation("thinking-allocation"),
+            draw=method("test.draw"), prepare_budget=budget(), prepare_replay_logical_limit=1000,
+            evaluate_budget=budget(),
+            update_budget=update_budget(), allocation=allocation("thinking-allocation"),
             derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
-                contract=c.RECEIVED_UPDATE, args=delta_args))))
+                contract=c.SAVED_SEGMENT_UPDATE, args=delta_args)), continuation=None))
     return fb.Boot(declaration=fb.BootDeclaration(
         capacity=fb.QuantityValue(contract=c.SEATS, value=2),
         scope=slot("scope", c.RESOURCE_SCOPE, fb.ResourceScope(
@@ -318,12 +329,13 @@ def args_by_stage():
         "measure_segment": fb.SegmentArgs(route=point("route"), requested=interval(), start_reason="bootstrap"),
         "candidate_generation": fb.CandidateArgs(model=point("model"), generator_args={}, basis=()),
         "belief_update": fb.UpdateArgs(model=point("model"), prior=None,
-            observations=(point("segment-report"),)),
+            observations=(fb.ObservationUse(binding=point("segment-binding"), reading=point("reading")),),
+            budget=update_budget()),
         "evaluation_prepare": fb.EvaluationPrepareArgs(input=f.FFactsRequest(
             fixed_parents=(point("boundary"),), model=point("model"), candidates=point("CG"),
             preferences=(), scope=f.EvaluationScope(name="one_step", version="1", H_ns=None, source=None),
             context=point("context"), method=contract("test.evaluation")), compiler=contract("test.compiler"),
-            budget=budget()),
+            budget=budget(), replay_logical_limit=1000),
         "selection_draw": fb.DrawArgs(prepared=point("PR"), stream_id="stream-A", request=f.DrawRequest(
             purpose="selection", context_key="problem-A", ordinal=0,
             law=contract("sui.f.uniform_unit"), args={})),
@@ -582,7 +594,7 @@ FB_FIELD_SPEC = {
     "ResourceScope": "quantity_contract:ContractRef;need:MethodCall",
     "Allocation": "scope_slot:str;amount:QuantityValue",
     "BootstrapRoute": "config:RouteConfig;process_slot:str;allocation:SlotValue;reading_contract:ContractRef|None",
-    "InitialProcess": "process_slot:str;reader_slot:str;model:Point;generator:MethodCall;method:MethodCall;draw:MethodCall;prepare_budget:RateBudget;evaluate_budget:RateBudget;allocation:SlotValue;derivation:SlottedMethod",  # v0.26 §6-9 H3・H4
+    "InitialProcess": "process_slot:str;reader_slot:str;model:Point;generator:MethodCall;method:MethodCall;draw:MethodCall;prepare_budget:RateBudget;prepare_replay_logical_limit:int;evaluate_budget:RateBudget;update_budget:UpdateBudget;allocation:SlotValue;derivation:SlottedMethod;continuation:MethodCall|None",  # v0.26 §6-9 H3・H4、v0.27 §6-10 K1、v0.43 Z34 (a) 予算 C・案 B
     "Environment": "data:ImmutableJSON",
     "BootDeclaration": "capacity:QuantityValue;scope:SlotValue;routes:tuple[SlotValue,...];initial:SlotValue|None;environment:SlotValue",
     "ReadingClock": "source:Point;reading:ClockReading",
@@ -607,8 +619,9 @@ FB_FIELD_SPEC = {
     "Ongoing": "clock:Ref",
     "SegmentArgs": "route:Point;requested:MeasurementInterval|Ongoing;start_reason:str",
     "CandidateArgs": "model:Point;generator_args:ImmutableJSON;basis:tuple[Point,...]",
-    "UpdateArgs": "model:Point;prior:Point|None;observations:tuple[Point,...]",
-    "EvaluationPrepareArgs": "input:FFactsRequest;compiler:ContractRef;budget:RateBudget",  # v0.26 §6-9 H3
+    "ObservationUse": "binding:Point;reading:Point",  # v0.27 §6-10 J2
+    "UpdateArgs": "model:Point;prior:Point|None;observations:tuple[ObservationUse,...];budget:UpdateBudget",  # v0.27 §6-10 J2・K6、v0.43 Z34 (a)
+    "EvaluationPrepareArgs": "input:FFactsRequest;compiler:ContractRef;budget:RateBudget;replay_logical_limit:int",  # v0.26 §6-9 H3、v0.43 Z34 (a) 案 B
     "DrawArgs": "prepared:Point;stream_id:str;request:DrawRequest",
     "EvaluationArgs": "evaluation_request:Point;prepared:Point;draw:Point;budget:RateBudget",  # v0.26 §6-9 H3
     "Desc": "work_id:str;process:BootSlot;trigger:frozenset[Trigger];purpose:Stage;stage_slot:str;reader:Point|None;method:ContractRef;output_contract:ContractRef;args:WorkArgs;input_points:frozenset[Point];numerical_view:FixedView|None;allocation:BootSlot;permissions:frozenset[BootSlot]",
@@ -649,17 +662,20 @@ FA_FIELD_SPEC = {
 UPDATE_FIELD_SPEC = {
     "FixedViewValue": "boundary:frozenset[Point];reader_view_key:str;registry_key:str|None",
     "VerificationNeed": "kind:Literal['capability','evidence','budget'];value:ImmutableJSON",
-    "RejectedIssue": "code:Literal['schema','shape','noncanonical','rational','unit','unknown_version','normalization','unresolved_reference','reference_kind','observation_binding_mismatch','measurement_conflict','clock_unaligned','missing_contract','model_falsified','outside_evaluation_type','result_mismatch'];fields:tuple[str,...];evidence:frozenset[Point];message:str",
+    "RejectedIssue": "code:Literal['schema','shape','noncanonical','rational','unit','unknown_version','normalization','unresolved_reference','reference_kind','observation_binding_mismatch','measurement_conflict','clock_unaligned','missing_contract','model_falsified','outside_evaluation_type','result_mismatch','proof_mismatch'];fields:tuple[str,...];evidence:frozenset[Point];message:str",  # v0.27 §6-10 J9-c
     "InsufficientIssue": "code:Literal['algorithm_unavailable','budget_exhausted','prerequisite_unavailable','clock_unaligned'];fields:tuple[str,...];missing:tuple[VerificationNeed,...];evidence:frozenset[Point];message:str",
     "IssuedUpdate": "request:Point;result:ImmutableJSON;application_digest:str;numerical_view:FixedViewValue;registry_key:str",
     "Rejected": "request:Point;issues:tuple[RejectedIssue,...]",
     "Insufficient": "request:Point;issues:tuple[InsufficientIssue,...]",
-    "ReportObservation": "envelope:int;received_ns:int;point:Point|None",
-    "ExecutionObservation": "work_id:str;launches:tuple[LaunchResult,...];entered:int;stopped:bool;reports:tuple[ReportObservation,...]",
-    "UseObservation": "work_id:str;point:Point;used_ns:int",
+    "ReportObservation": "envelope:int;received_ns:int;point:Point|None;run:str|None",
+    "ExecutionObservation": "work_id:str;launches:tuple[LaunchResult,...];entered:int;stopped:bool;reports:tuple[ReportObservation,...];entered_ns:tuple[int,...];run:str|None;execution_occurrence:ExecutionHandle;request:Point|None;route_operation:OperationHandle|None;clock_source:Point|None",  # v1.3.7 execution_observation_extension
+    "UseObservation": "work_id:str;point:Point;used_ns:int;run:str|None",
     "IntervalObservation": "work_id:str;interval:MeasurementInterval",
-    "AcquisitionObservation": "origin:Point;contents:frozenset[Point];acquired_ns:int",
-    "TargetEvidence": "executions:tuple[ExecutionObservation,...];uses:tuple[UseObservation,...];intervals:tuple[IntervalObservation,...];acquisitions:tuple[AcquisitionObservation,...]",
+    "AcquisitionObservation": "origin:Point;contents:frozenset[Point];acquired_ns:int;run:str|None",
+    "TargetEvidence": "executions:tuple[ExecutionObservation,...];uses:tuple[UseObservation,...];intervals:tuple[IntervalObservation,...];acquisitions:tuple[AcquisitionObservation,...];route_applications:tuple[RouteApplicationObservation,...];host_monitors:tuple[HostMonitorObservation,...]",  # v1.3.7 target_evidence_extension
+    "RouteApplicationObservation": "operation:OperationHandle;boot:Point;route_slot:str;applied_config:object;reading:object;clock_source:Point|None;evidence_inputs:tuple;execution:object;publication:Point|None;seal:object",  # v1.3.7 transport_types v2
+    "HostMonitorObservation": "operation:OperationHandle;execution_occurrence:ExecutionHandle;entry_index:int;segment:Point;work:str;route_operation:OperationHandle;route:Point;clock_source:Point;observed_reading:object;observed_state:Literal['entered_not_stopped'];publication:Point|None;seal:object",  # v1.3.7 transport_types v2
+    "UpdateBudget": "contract:ContractRef;logical_limit:int;numerical:RateBudget",  # v0.43 Z34 (a) 予算 C (正本 v1.3.5 sui.fb.update_budget/1)
 }
 
 FB_ALIAS_SPEC = {
@@ -691,12 +707,14 @@ def test_public_export_names_are_exact():
     assert set(fb.__all__) == set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
         "FbInputError", "FbHostFault", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost"}
     assert set(u2.__all__) == set(UPDATE_FIELD_SPEC) | set(UPDATE_ALIAS_SPEC) | {
-        "fb_registry_v1", "compute_finite_update"}
+        "fb_registry_v1", "compute_finite_update", "update_response",  # v0.27 §6-10 K7
+        "prepare_fb_from_facts",  # v0.29 §6-10 Z8 (F-a の入口の形を変えずに観測を運ぶ F-b の入口)
+        "OperationHandle", "ExecutionHandle"}  # v1.3.7 工場が発行する不透明な識別 (dataclass ではない)
 
 
 def declaration_names(surface=fb):
     """Resolve public type identities only; expectations remain the tables above."""
-    names = dict(Point=str, Ref=Ref, ContractRef=ContractRef, ImmutableJSON=f.ImmutableJSON,
+    names = dict(Point=str, Ref=Ref, object=object, OperationHandle=u2.OperationHandle, ExecutionHandle=u2.ExecutionHandle, ContractRef=ContractRef, ImmutableJSON=f.ImmutableJSON,
                  ProofRef=f.ProofRef, FFactsRequest=f.FFactsRequest, DrawRequest=f.DrawRequest,
                  RateBudget=RateBudget, ClockSource=ClockSource, Literal=Literal,
                  CapabilityCallable=f.CapabilityCallable, Mapping=Mapping)
@@ -774,15 +792,18 @@ def test_stage3_independent_evidence_contrasts_are_constructible(contrast):
     raw_points = tuple(point("saved-raw-" + tag) for tag in ("started", "ended", "claim"))
     reports = tuple(u2.ReportObservation(envelope=101 + index, received_ns=21 + index, point=saved)
                     for index, saved in enumerate(raw_points))
+    # 実行の識別は工場が発行する (正本 v1.3.7 execution_observation_extension)。この骨組みの試験は型の形だけを見る
     execution = u2.ExecutionObservation(work_id=wid, launches=("launched",), entered=1,
-                                         stopped=True, reports=reports)
+                                         stopped=True, reports=reports, execution_occurrence=u2._mint("execution"),
+                                         request=None, route_operation=None, clock_source=None)
     reader_work = "belief-result-A"
     legal = u2.TargetEvidence(executions=(execution, u2.ExecutionObservation(
-        work_id=reader_work, launches=("launched",), entered=1, stopped=True, reports=())),
+        work_id=reader_work, launches=("launched",), entered=1, stopped=True, reports=(),
+        execution_occurrence=u2._mint("execution"), request=None, route_operation=None, clock_source=None)),
         uses=(u2.UseObservation(work_id=reader_work, point=input_point, used_ns=30),),
         intervals=(u2.IntervalObservation(work_id=wid, interval=interval()),),
         acquisitions=(u2.AcquisitionObservation(origin=point("origin"),
-            contents=frozenset({input_point}), acquired_ns=25),))
+            contents=frozenset({input_point}), acquired_ns=25),), route_applications=(), host_monitors=())
     if contrast == "monitoring":
         illegal = replace(legal, intervals=(
             u2.IntervalObservation(work_id=wid, interval=replace(interval(), end_ns=14)),

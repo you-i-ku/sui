@@ -135,6 +135,11 @@ def wire(value):
                 "readings": [reading_wire(r) for r in value.readings], "basis": wire(value.basis)}
     if isinstance(value, fb.SegmentReport):
         return {"segment": value.segment, "item_slot": value.item_slot, "item": segment_wire(value.item)}
+    if isinstance(value, fb.SegmentArgs):
+        # 紙 F-b :2214「新しい和型は kind/value」、Z34 (c) SEGMENT-INTERVAL: 有限 finite / 継続 ongoing
+        branch = "ongoing" if isinstance(value.requested, fb.Ongoing) else "finite"
+        return {"route": value.route, "requested": {"kind": branch, "value": wire(value.requested)},
+                "start_reason": value.start_reason}
     if isinstance(value, f.MeasurementFrame):
         return {"route_epoch": value.route_epoch, "sample_seq": value.sample_seq,
             "measurement_id": wire(value.measurement_id), "measurement_interval": wire(value.measurement_interval),

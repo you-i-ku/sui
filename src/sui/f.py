@@ -2572,9 +2572,13 @@ import json as _json
 import math as _math
 import types as _types
 import typing as _typing
+from functools import lru_cache as _lru_cache
 from dataclasses import fields as _fields, is_dataclass as _is_dataclass, replace as _replace
 from types import MappingProxyType as _MappingProxyType
 from .ids import RefKind as _RefKind
+
+# 型の注釈は実行中に変わらないので型ごとに 1 度だけ求める (符号化の度に求め直すと U 1 回の時間の 2 割を占めた)。返値は読むだけ
+_type_hints = _lru_cache(maxsize=None)(_typing.get_type_hints)
 
 _ISSUER = object()
 
@@ -2695,7 +2699,7 @@ def _encode(value):
         result = {f.name: _encode(getattr(value, f.name)) for f in _fields(value)}
         if isinstance(value, Record):
             result["body"] = {"type": type(value.body).__name__, "value": _encode(value.body)}
-        hints = _typing.get_type_hints(type(value))
+        hints = _type_hints(type(value))
         for field in _fields(value):
             item, hint = getattr(value, field.name), hints[field.name]
             if _typing.get_origin(hint) in (dict, _Mapping) and not isinstance(item, _Mapping):
@@ -2793,7 +2797,7 @@ def _decode(value, typ, field=""):
             raise FInputError("shape", "unknown union tag", field)
         for t in args:
             if _is_dataclass(t) and isinstance(value, _Mapping):
-                literal = _typing.get_type_hints(t).get("kind")
+                literal = _type_hints(t).get("kind")
                 if _typing.get_origin(literal) is _Literal and value.get("kind") in _typing.get_args(literal):
                     return _decode(value, t, field)
         for t in args:
@@ -2864,7 +2868,7 @@ def _decode(value, typ, field=""):
         if op not in names:
             raise FInputError("shape", field=field)
         _keys(value, ("op",) + names[op], field)
-        hints = _typing.get_type_hints(ExactReal)
+        hints = _type_hints(ExactReal)
         out = ExactReal(op=op, **{k: _decode(value[k], _typing.get_args(hints[k])[0], field + "/" + k) for k in names[op]})
         if op in ("add", "mul") and not out.args:
             raise FInputError("shape", "nonempty expression", field)
@@ -2875,7 +2879,7 @@ def _decode(value, typ, field=""):
         return out
     if _is_dataclass(typ):
         _keys(value, (f.name for f in _fields(typ)), field)
-        hints = _typing.get_type_hints(typ)
+        hints = _type_hints(typ)
         values = {}
         for fld in _fields(typ):
             raw = value[fld.name]

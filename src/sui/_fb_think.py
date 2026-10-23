@@ -48,6 +48,21 @@ class ThinkPlan:
     descs: dict = _field(default_factory=dict)      # 後続の仕事の Desc (Publish で行を置く)
     prepared: object = None      # Ep の生きた発行物 (保存しない、§2-5-2)
     problem: object = None       # その FProblem
+    round: str = ""              # 採用の後の継続の識別 (§6-10 K10)。最初の過程は ""
+
+
+def open_continuation(state, boot, adopted) -> bool:
+    """採用 A* を受けた継続 (§6-10 J6・K10、`reuse_candidates/1`): 最初の過程の CG を使い回して、A* をきっかけに
+    o・j・文脈・EQ から同じ流れを作る。CG がまだ無ければ False (後で試す)。"""
+    first = next((p for p in state.thinking.values() if p.boot is boot and not p.round), None)
+    if first is None or "cg" not in first.points:
+        return False
+    plan = ThinkPlan(boot=boot, initial=first.initial, slot=first.slot, qgen=first.qgen, wg=first.wg,
+                     round=":after:" + adopted, done={first.wg},
+                     points={"cg": first.points["cg"], "cause": adopted})
+    plan.steps = _context_steps(state, plan)
+    state.thinking[first.wg + plan.round] = plan
+    return True
 
 
 def open_plan(state, boot, initial_slot, qgen) -> None:
@@ -166,9 +181,9 @@ def _desc(plan, purpose, stage_slot, trigger, reader, method, output, args, inpu
     d = plan.boot.d
     initial = plan.initial
     return _fb.Desc(
-        work_id=_work_id(d, plan.slot, purpose, stage_slot),
+        work_id=_work_id(d, plan.slot, purpose, stage_slot + plan.round),
         process=_fb.BootSlot(declaration=d, slot=initial.process_slot),
-        trigger=frozenset({trigger}), purpose=purpose, stage_slot=stage_slot, reader=reader,
+        trigger=frozenset({trigger}), purpose=purpose, stage_slot=stage_slot + plan.round, reader=reader,
         method=method, output_contract=output, args=args, input_points=frozenset(inputs),
         numerical_view=view, allocation=_fb.BootSlot(declaration=d, slot=initial.allocation.slot),
         permissions=frozenset({_fb.BootSlot(declaration=d, slot=plan.slot),
@@ -180,7 +195,7 @@ def _promise(purpose, prefix):
     review FB2-R04)。要求を準備した時に同じ行が本物の仕事に解決される。"""
     def on_prepared(state, plan, cid):
         from ._fb_core import plan_work
-        plan_work(state, _work_id(plan.boot.d, plan.slot, purpose, prefix + plan.slot), purpose,
+        plan_work(state, _work_id(plan.boot.d, plan.slot, purpose, prefix + plan.slot + plan.round), purpose,
                   plan.boot.declaration.scope.value)
     return on_prepared
 
@@ -205,8 +220,23 @@ def _uses(desc) -> set:
     return out
 
 
+_CREATE = {"EQ": "評価要求を作る", "D": "抽選要求を作る", "Ee": "くじ後の評価要求を作る"}
+_ENTER = {"evaluation_prepare": "評価の準備へ入る", "selection_draw": "抽選の仕事へ入る", "evaluation": "くじ後の評価へ入る"}
+_REQUEST_CONTRACT = {"evaluation_prepare": _c.EVALUATION_REQUESTED, "selection_draw": _c.DRAW_REQUESTED,
+                     "evaluation": _c.WORK_REQUESTED}
+
+
 def _request_step(name, contract, kind, desc_of, parents_of):
-    """要求の記録 (Decided / MODEL) と、Publish と同じ歩で置く仕事の行 (INV-2)。"""
+    """要求の記録 (Decided / MODEL) と、Publish と同じ歩で置く仕事の行 (INV-2)。作成の門 (G6) は保存予定の
+    Desc を持つ候補から。"""
+
+    def uses(state, plan):
+        from ._fb_uses import Candidate, contract_name, starts_of
+        desc = desc_of(state, plan)
+        if desc is None:
+            return None
+        candidate = Candidate(contract=contract, content={"desc": _encode(desc)}, use="")
+        return starts_of(_CREATE[name], {contract_name(contract): candidate})
 
     def build(state, plan):
         from ._fb_core import Slot
@@ -224,7 +254,7 @@ def _request_step(name, contract, kind, desc_of, parents_of):
         from ._fb_core import add_work
         add_work(state, kind(request=cid, desc=plan.descs[name]), plan.boot.declaration.scope.value)
 
-    return _Step(name=name, build=build, on_prepared=prepared)
+    return _Step(name=name, build=build, on_prepared=prepared, uses=uses)
 
 
 # --- Wg の返答 → CG (H6・H9) ---
@@ -316,7 +346,7 @@ def _context_steps(state, plan):
             body = _Observed(route="fb", content=_Payload.json(_f._encode(value)), contract=_fc.CLOCK_READING,
                              received_ns=ns)
             # 親 (§6-9 H1): o = 時計の宣言と、読むきっかけの CG の来歴 / j = 時計の宣言と o (j は o の後に読んだ)
-            cause = plan.points["cg"] if name == "o" else plan.points["o"]
+            cause = plan.points.get("cause", plan.points["cg"]) if name == "o" else plan.points["o"]
             return Slot(contract=_fc.CLOCK_READING, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
                         parents=_front(state.ledger, {source, cause}))
         return _Step(name=name, build=build)
@@ -349,12 +379,16 @@ def _context_steps(state, plan):
                                    scope=_BLANK_SCOPE, context=context, method=initial.method.contract)
         # Xnum の像の境界には型つき参照で読む Prediction (モデル・CG) を直接足す。台帳の heads と出来事の
         # 祖先は Prediction を含まない (§6-9 H5「実祖先 + 宣言した追加の閉包」)
-        view = _fixed_view(state, frozenset(fixed) | {initial.model, cg})
+        # 固定根の祖先の記録が型つきで指す Prediction (段 3 の law・reading・R* など) も直接足す (§6-10 K12)
+        from ._fb_update import referenced_predictions
+        view = _fixed_view(state, frozenset(fixed) | {initial.model, cg} | referenced_predictions(state, fixed))
         plan.points["Xnum"] = view
-        return _desc(plan, "evaluation_prepare", "prepare:" + plan.slot, _fb.Trigger(point=cg, slot="candidates"),
+        trigger = _fb.Trigger(point=plan.points["cause"], slot="adopted") if plan.round             else _fb.Trigger(point=cg, slot="candidates")
+        return _desc(plan, "evaluation_prepare", "prepare:" + plan.slot, trigger,
                      origin, _c.EVALUATION_PREPARE, _fc.MATH_ARTIFACT_V2,
                      _fb.EvaluationPrepareArgs(input=request, compiler=_fc.PREPARE_FACTS,
-                                               budget=initial.prepare_budget),
+                                               budget=initial.prepare_budget,
+                                               replay_logical_limit=initial.prepare_replay_logical_limit),
                      {context, initial.model, cg, origin}, view)
 
     def eq_parents(plan, desc):
@@ -464,7 +498,16 @@ def _product_steps(row, first, raw, value, name, contract):
         return Slot(contract=contract, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
                     parents=_front(state.ledger, {request, first, artifact}))
 
-    return [_Step(name="artifact:" + name, build=build_artifact), _Step(name=name, build=build_logical)]
+    def uses_logical(state, plan):
+        """PR / EV の作成の門 (G6-PR-CREATE・G6-EV-CREATE): request・report・artifact を使う候補から。"""
+        from ._fb_uses import Candidate, contract_name, starts_of
+        artifact = plan.points.get("artifact:" + name)
+        if artifact is None:
+            return None
+        candidate = Candidate(contract=contract, content={"request": request, "report": first, "artifact": artifact}, use="")
+        return starts_of("準備の結果を作る" if name == "PR" else "評価の結果を作る", {contract_name(contract): candidate})
+
+    return [_Step(name="artifact:" + name, build=build_artifact), _Step(name=name, build=build_logical, uses=uses_logical)]
 
 
 # --- くじ (H4・M4) ---
@@ -478,7 +521,10 @@ def _stream_id(plan) -> str:
 def _draw_steps(state, plan):
     def d_desc(state, plan):
         pr = plan.points["PR"]
-        request = _f.DrawRequest(purpose="selection", context_key=plan.problem.problem_key, ordinal=0,
+        # 同じ問題への別の発火 (採用の後の継続) は新しい ordinal (§6-10 J6)。保存の再試行では作り直さない
+        ordinal = sum(1 for other in state.thinking.values() if other is not plan and other.problem is not None
+                      and other.problem.problem_key == plan.problem.problem_key and "D" in other.descs)
+        request = _f.DrawRequest(purpose="selection", context_key=plan.problem.problem_key, ordinal=ordinal,
                                  law=_UNIFORM_UNIT, args={})
         return _desc(plan, "selection_draw", "draw:" + plan.slot, _fb.Trigger(point=pr, slot="prepared"),
                      plan.boot.points["origin"], plan.initial.draw.contract, _c.DRAW_REPORT,
@@ -501,16 +547,24 @@ def _draw_value(outcome):
 
 
 def _df_step(row, first, value):
+    args = row.work.desc.args
+    fact = _f.FDrawFact(generator=row.work.desc.method, stream_id=args.stream_id, request=args.request, value=value)
+
     def build(state, plan):
         from ._fb_core import Slot, mono_ns
-        args = row.work.desc.args
-        fact = _f.FDrawFact(generator=row.work.desc.method, stream_id=args.stream_id, request=args.request,
-                            value=value)
         body = _Observed(route="fb", content=_Payload.json(_f._encode(fact)), contract=_fc.DRAW_FACT,
                          received_ns=mono_ns(state.clock))
         return Slot(contract=_fc.DRAW_FACT, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
                     parents=frozenset({row.work.request, first}))
-    return _Step(name="DF", build=build)
+
+    def uses(state, plan):
+        """DF の作成の門 (G6-DF-CREATE)。DF の D への論理辺は実親 (D の要求・最初の受け取り) から (REF-DF-LOGICAL-LINK・
+        REF-DF-PREPARED-LINK・REF-DF-FIRST-RECEIPT、紙 v0.34 Z26)。候補は保存予定の実親を持って門を通る。"""
+        from ._fb_uses import Candidate, starts_of
+        return starts_of("くじの事実を作る", {"sui.f.draw_fact/1": Candidate(
+            contract=_fc.DRAW_FACT, content=_f._encode(fact), use="", parents=(row.work.request, first))})
+
+    return _Step(name="DF", build=build, uses=uses)
 
 
 def _du_step(row, first, unknown):
@@ -550,7 +604,16 @@ def _selection_step():
         body = _Decided(inputs=inputs, content=_Payload.json({"evaluated": ev}), contract=_c.SELECTION)
         return Slot(contract=_c.SELECTION, record=_record(state, body, _RefKind.DECISION, _Role.MODEL),
                     parents=frozenset({ev}))
-    return _Step(name="S", build=build)
+
+    def uses(state, plan):
+        """選択の記録の作成の門 (G6-SELECTION-CREATE)。"""
+        from ._fb_uses import Candidate, starts_of
+        if "EV" not in plan.points:
+            return None
+        candidate = Candidate(contract=_c.SELECTION, content={"evaluated": plan.points["EV"]}, use="")
+        return starts_of("選択の記録を作る", {"sui.fb.selection/1": candidate})
+
+    return _Step(name="S", build=build, uses=uses)
 
 
 # --- 進め方 ---
@@ -642,7 +705,8 @@ def _finish(state, plan, row):
 
 def advance(state) -> None:
     """各考える過程の仕事の終わりを処理し、計画した記録を 1 点ずつ保存する。後から食い違いが見えたら、
-    作った記録は消さず、まだ作っていない後続を作らない (§2-4-3「後着で食い違ったら…新しい使用では使えない」)。"""
+    作った記録は消さず、まだ作っていない後続を作らない (§2-4-3「後着で食い違ったら…新しい使用では使えない」)。
+    各歩の新しい使用は、その歩が使う記録を起点に同じ門を通る (G6、T-G6 の行。FB3-R01-R5)。"""
     from ._fb_boot import advance as _advance
     for plan in state.thinking.values():
         for name in ("wg", "EQ", "D", "Ee"):
@@ -651,21 +715,93 @@ def advance(state) -> None:
             if row is None or not isinstance(row.work, (_fb.Compute, _fb.Draw)) or not _saved_request(state, row):
                 continue
             _finish(state, plan, row)
-        blocked = bool(conflicts(state, plan, unconfirmed=True))
-        _advance(state, plan, build=lambda step: not blocked or step.name.startswith("T:"))
+        blocked = bool(conflicts(state, plan, unconfirmed=True)) or _root_blocked(state, plan)
+        _advance(state, plan, build=lambda step, plan=plan, blocked=blocked: _allowed(state, plan, step, blocked))
 
 
-def blocked(state, row) -> bool:
+def _allowed(state, plan, step, blocked) -> bool:
+    """歩の新しい使用の門: T は診断の保存 (いつも)。過程の行の終わりの食い違いか継続のきっかけの食い違いが
+    見えていれば作らない。歩が使う記録の出発点 (step.uses、T-G6) があれば同じ門で判定する。"""
+    from ._fb_update import gate, hold_label
+    if step.name.startswith("T:"):
+        return True
+    if blocked:
+        return False
+    if step.uses is None:
+        return True
+    starts = step.uses(state, plan)
+    if starts is None:
+        return True   # 前提がまだ無い (build が None を返して待つ)
+    verdict = gate(state, starts)
+    if verdict == "blocked":
+        _hold(plan, step.name + ":use_conflict")
+    elif hold_label(verdict) is not None:
+        _hold(plan, step.name + ":uses:" + hold_label(verdict))
+    return verdict == "open"
+
+
+def continuation_starts(state, plan) -> list:
+    """継続を開く操作の出発点 (G6-CONTINUE-A・CG・DECL): 継続の契約が使う A*・CG・宣言を表から。"""
+    from ._fb_uses import starts_of
+    return starts_of("継続を開く", {"sui.fb.belief_adopted/1": plan.points["cause"],
+                                   "sui.f.candidate_declaration/1": plan.points["cg"],
+                                   "sui.fb.boot_declaration/1": plan.boot.d})
+
+
+def _root_blocked(state, plan) -> bool:
+    """採用の後の継続 (§6-10 K10) の過程の全部の歩は、その過程の行 (Wg・EQ・D・Ee) の終わりに加えて、きっかけの
+    A* に依存する (EQ の trigger、以後の歩は EQ の子孫)。継続の契約が使う A*・CG・宣言の閉包を、段 3 の新しい
+    使用の門で毎回見る (G6「開いた後も EQ の作成・入場と次の結論の使用で毎回」)。最初の過程には無い。"""
+    if not plan.round:
+        return False
+    from ._fb_update import gate
+    return gate(state, continuation_starts(state, plan)) != "open"
+
+
+def blocked(state, row, stage="入場") -> bool:
     """row がまだ本体に入っていない考える過程の仕事で、その過程に食い違いが見えている (紙 :864: Launch の後・
-    入場の前に上の段の食い違いが保存されたら EnterWorker を許さない。review FB2-R01)。測る仕事は対象外。"""
+    入場の前に上の段の食い違いが保存されたら EnterWorker を許さない。review FB2-R01)、または、その仕事の要求を
+    起点にした開始・入場の門 (G6-START-*・G6-*-ENTER) が開いていない。測る仕事は対象外。"""
     if row.ticket_used:
         return False
     wid = row.work.desc.work_id
     for plan in state.thinking.values():
         if wid == plan.wg or any(desc.work_id == wid for desc in plan.descs.values()):
             # 印でなく保存済みの報告から (FB2-R01-R2)。確認待ち・未保存の受け付けた報告も止める側に (FB2-R01-R3)
-            return bool(conflicts(state, plan, unconfirmed=True))
-    return False
+            if conflicts(state, plan, unconfirmed=True) or _root_blocked(state, plan):
+                return True
+            starts = enter_starts(state, row, stage)
+            if starts is None:
+                return False   # Wg (候補の生成) の開始・入場に T-G6 の行は無い
+            from ._fb_update import gate
+            return gate(state, starts) != "open"
+    from ._fb_update import blocked as update_blocked
+    return update_blocked(state, row, stage)
+
+
+def entrance(state, row):
+    """考える過程の仕事の入場の門の材料: (出発点 = 入場の行 + 継続の行, ロックの中で見る安い条件 = 行の終わりの食い違い)。
+    行の無い仕事 (Wg) は出発点 None で安い条件だけ。更新の仕事は `_fb_update.entrance`。"""
+    wid = row.work.desc.work_id
+    for plan in state.thinking.values():
+        if wid == plan.wg or any(desc.work_id == wid for desc in plan.descs.values()):
+            starts = enter_starts(state, row, "入場")
+            if plan.round and "cause" in plan.points and "cg" in plan.points:
+                starts = list(starts or ()) + continuation_starts(state, plan)
+            return starts, (lambda: bool(conflicts(state, plan, unconfirmed=True)))
+    from ._fb_update import entrance as update_entrance
+    return update_entrance(state, row)
+
+
+def enter_starts(state, row, stage):
+    """考える過程の仕事の開始・入場の門の出発点 (G6-START-EQ/D/EE・G6-EP-ENTER・G6-D-ENTER・G6-EE-ENTER)。行の無い
+    仕事 (Wg) は None。"""
+    purpose = row.work.desc.purpose
+    if purpose not in _ENTER:
+        return None
+    from ._fb_uses import Reader, contract_name, starts_of
+    operation = "仕事の開始を確保する" if stage == "開始" else _ENTER[purpose]
+    return starts_of(operation, {contract_name(_REQUEST_CONTRACT[purpose]): row.work.request}, reader=Reader(state.ledger))
 
 
 def _saved_request(state, row) -> bool:

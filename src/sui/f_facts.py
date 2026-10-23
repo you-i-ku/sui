@@ -51,6 +51,15 @@ def prepare_f_from_facts(
     意味不足/能力不足/証明不足/予算不足は既存の低/高水準診断を保つ。
     ID/時計/乱数の取得、台帳書込み、受付の実施は行わない。
     """
+    return _prepare_facts(reader,fixed_parents=fixed_parents,model_ref=model_ref,candidate_ref=candidate_ref,
+        preference_refs=preference_refs,scope_request=scope_request,context_ref=context_ref,
+        registry=registry,method=method,budget=budget,fb_evidence=None)
+
+
+def _prepare_facts(reader,*,fixed_parents,model_ref,candidate_ref,preference_refs,scope_request,context_ref,
+                   registry,method,budget,fb_evidence,fb_replay_budget=None):
+    """prepare_f_from_facts の本体。fb_evidence は F-b の入口 (`f_update2.prepare_fb_from_facts`) だけが渡す
+    同じプロセスの中の独立の観測で、compiler が F-b の採用 A* を読む時だけ使う (発行物に保存しない)。"""
     request=core.FFactsRequest(fixed_parents=fixed_parents,model=model_ref,candidates=candidate_ref,
         preferences=preference_refs,scope=scope_request,context=context_ref,method=method)
     request=core._decode(core._encode(request),core.FFactsRequest)
@@ -61,7 +70,8 @@ def prepare_f_from_facts(
     if request.fixed_parents!=tuple(sorted(request.fixed_parents)):raise core.FInputError('noncanonical',field='/fixed_parents')
     image=capture_reader(reader,budget)
     try:
-        compiler=_Compiler(request,reader=image,registry=registry,budget=budget)
+        compiler=_Compiler(request,reader=image,registry=registry,budget=budget,fb_evidence=fb_evidence,
+            fb_replay_budget=fb_replay_budget)
         value=compiler.compile()
     except (core.FSpecificationMissing,core.FIncomplete,core.FOutsideEvaluationType,core.FModelFalsified,core.FNumericalRange) as exc:
         from ._f_eval import _no_decision
@@ -876,9 +886,12 @@ def _replay_saved(data,*,reader,registry,budget):
             if op=='prepare':
                 if kind!='facts':raise core.FInputError('shape',field='/input/kind')
                 request=core._decode(input,core.FFactsRequest)
-                artifact=prepare_f_from_facts(image,fixed_parents=request.fixed_parents,model_ref=request.model,
+                # 再生は F-b の独立の観測を運べない。A* に当たったら不足 (FReplayUnavailable) で、不一致にしない (DIAG-R5)
+                from .f_update2 import EVIDENCE_NOT_CARRIED
+                artifact=_prepare_facts(image,fixed_parents=request.fixed_parents,model_ref=request.model,
                     candidate_ref=request.candidates,preference_refs=request.preferences,scope_request=request.scope,
-                    context_ref=request.context,registry=registry,method=request.method,budget=saved)
+                    context_ref=request.context,registry=registry,method=request.method,budget=saved,
+                    fb_evidence=EVIDENCE_NOT_CARRIED)
             elif op=='preflight':
                 if kind!='preflight':raise core.FInputError('shape',field='/input/kind')
                 artifact=check_f_preflight_from_facts(image,core._decode(input,core.FPreflightFacts),registry=registry,budget=saved)
