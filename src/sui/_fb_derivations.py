@@ -2721,7 +2721,6 @@ def _declared_instances(env, q):
     method_args = _declared_method_args(boot, q, {"prior": prior, "observations": observations})
     if isinstance(method_args, Missing):
         return method_args
-    method_args = {**method_args, "budget": initial.get("update_budget")}
     out = []
     for b, application in triggers:
         out.append({
