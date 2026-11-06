@@ -4,6 +4,7 @@
 保存の後に法則 law と読み方 reading を作り、保存した原 Claim の結びつき B ごとに義務を 1 つ持つ (J1)。
 義務ごとに、更新要求 Q* → 仕事 Wu → 終わりの記録 T → 結果 R* → 結果の取得 → 採用 A* か Stale を
 1 点ずつ保存する。同じ系列では、前の義務の採用の判断の保存が確認されるまで次の Q* を作らない (K13)。
+本体が終わりの知らせを出さずに止まった義務は、それを結末として次へ進む (K15。記録は足さない)。
 
 最初の輪の 1 周目は正常な道だけ。★ 1 周の後: ホストの監視の記録と入力の取得 (K4・K5)、新しい使用の門
 (食い違いの照合、G6)、失敗の後の目的の表示 (J9-c)。
@@ -33,7 +34,7 @@ class Obligation:
     points: dict = _field(default_factory=dict)
     desc: object = None          # Wu の Desc (Q* の Publish で固定)
     done: bool = False           # Wu の終わりを処理した
-    final: str | None = None     # adopted / stale / rejected / insufficient / failure / unknown / issued:*
+    final: str | None = None     # adopted / stale / rejected / insufficient / failure / unknown / stopped / issued:*
 
 
 @_dataclass
@@ -46,6 +47,7 @@ class UpdatePlan:
     points: dict = _field(default_factory=dict)
     missing: list = _field(default_factory=list)
     obligations: dict = _field(default_factory=dict)   # 原報告の Point → Obligation (見つけた順)
+    chain: list = _field(default_factory=list)         # 保存を確認した採用 A* の Point (採用した順)。最後が系列の頭
 
 
 class _Pair:
@@ -190,19 +192,28 @@ def _receipt_order(state, report):
     return None
 
 
+def _undecided(ob) -> bool:
+    """その義務の採用の判断を公開したが、保存の確認がまだ (K9: 確認待ちを「無い」にしない)。"""
+    step = next((s for s in ob.steps if s.name == "decide"), None)
+    return step is not None and step.slot is not None and step.slot.entry is None
+
+
 def _head(plan):
-    """前の採用 (K9・K13): 系列 (Q* を作った義務) の採用の判断が全部保存を確認済みなら最後の A* (無ければ None)。
-    確認待ち・未保存の判断があれば "wait" (無いことを許可にしない)。"""
-    head = None
+    """前の採用 (K9・K13): 系列 (Q* を作った義務) の結末が全部出ていて、採用の判断が全部保存を確認済みなら、
+    最後に採用した A* (無ければ None)。進行中・確認待ちがあれば "wait" (無いことを許可にしない)。終わりの知らせの
+    無い停止 (K15) は結末の 1 つで、待たない。"""
     for ob in plan.obligations.values():
-        if ob.desc is None:
-            continue
-        step = next((s for s in ob.steps if s.name == "decide"), None)
-        if ob.final is None or (step is not None and step.slot is not None and step.slot.entry is None):
+        if ob.desc is not None and (ob.final is None or _undecided(ob)):
             return "wait"
-        if ob.final == "adopted":
-            head = ob.points["A"]
-    return head
+    return plan.chain[-1] if plan.chain else None
+
+
+def _silent_stop(state, row) -> bool:
+    """終わりの知らせの無い停止 (K15): 入場した本体の実際の停止をホストが観測し、その口から受け取った封筒が
+    全部受付済みで、その中に終わりの知らせが無い。印を持たず、その都度 P.work から導く。"""
+    from ._fb_think import _ends
+    return bool(row.entered and row.stopped and all(number in state.receipts for number, _r in row.reports)
+                and not _ends(state, row))
 
 
 def _next(state, plan):
@@ -375,20 +386,18 @@ def _acquire_steps():
 
 def _adopt_step():
     def build(state, plan_ob):
-        """K9: この義務より前の系列の判断が全部確認済みの時だけ、実際の前の採用が求まる。Q* の prior と同じなら A*、
-        違えば Stale (失われた更新を作らない)。比較と公開は settle のロックの中の 1 つの決定。"""
+        """K9: 実際の前の採用 (系列の頭) が求まる時だけ決める。ほかの義務の判断が確認待ちなら待つ。先に Q* を
+        作った義務が進行中なら待つ (止まった後で終わりの知らせが遅れて届いた義務は、後の義務より先に決める、K15 (4))。
+        Q* の prior と系列の頭が同じなら A*、違えば Stale (失われた更新・二重の採用を作らない)。比較と公開は settle の
+        ロックの中の 1 つの決定。"""
         from ._fb_core import Slot, mono_ns
         plan, ob = plan_ob
-        head = None
         for other in plan.obligations.values():
             if other is ob or other.desc is None or "Q" not in other.points:
                 continue
-            if _earlier(plan, other, ob):
-                step = next((s for s in other.steps if s.name == "decide"), None)
-                if other.final is None or (step is not None and step.slot is not None and step.slot.entry is None):
-                    return None
-                if other.final == "adopted":
-                    head = other.points["A"]
+            if _undecided(other) or (other.final is None and _earlier(plan, other, ob)):
+                return None
+        head = plan.chain[-1] if plan.chain else None
         ledger = state.ledger
         origin, q, r, g = plan.boot.points["origin"], ob.points["Q"], ob.points["R"], ob.points["G"]
         if ob.desc.args.prior == head:
@@ -422,7 +431,7 @@ def _finish(state, plan, ob, row) -> None:
     if found is None:
         return
     number, receipt = found
-    ob.done = True
+    ob.done, ob.final = True, None   # 止まった後に遅れて届いた終わりの知らせも、ふつうの最初の終わり (K15 (4))
     outcome = receipt.envelope.event.outcome
     first = receipt.slots[0].entry.cid
     row.knowledge = ("success" if isinstance(outcome, _fb.WorkOutputs)
@@ -469,11 +478,15 @@ def advance(state) -> None:
                 row = state.works.get(ob.desc.work_id)
                 if row is not None and isinstance(row.work, _fb.Compute) and _saved(state, row.work.request):
                     _finish(state, plan, ob, row)
+                    if not ob.done:
+                        ob.final = "stopped" if _silent_stop(state, row) else None
             _advance(state, _Pair(plan, ob))
             decision = ob.points.get("decision")
             if decision is not None and ob.final is None and ob.points.get("decide") is not None:
                 ob.final = "adopted" if decision == "A" else "stale"
                 ob.points[decision] = ob.points["decide"]
+                if decision == "A":
+                    plan.chain.append(ob.points["A"])
             if ob.final == "adopted" and not ob.points.get("continued"):
                 _continue(state, plan, ob)
 

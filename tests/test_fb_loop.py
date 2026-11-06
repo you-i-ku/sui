@@ -1105,3 +1105,270 @@ def test_row5_pending_order_follows_received_time_and_envelope_not_report_sort_k
     assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == len(pending) + 1
     assert rig.facts(c.BELIEF_ADOPTED) == adoptions
     assert [a.value["previous"] for a in adoptions] == [None] + [a.cid for a in adoptions[:-1]]
+
+
+ROW3_ONE_POINT = {"joint": [[2, 3], [1, 3]], "evidence_mass": [3, 8]}
+
+
+def prepare_row3_rig(make_rig, with_prior):
+    rig = make_rig()
+    rig.start()
+    head = None
+    if with_prior:
+        rig.clock.set(1)
+        report = post_row5_claim(rig, slot="row3-seed", start=0, end=1)
+        work = rig.run_stage("belief_update")
+        rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 1)
+        head = rig.one(c.BELIEF_ADOPTED)
+        assert row5_report_for_work(rig, work).cid == report.cid
+        assert_update(rig, work, head, ROW3_ONE_POINT)
+    return rig, head
+
+
+def stop_row3_update(rig, head, mode, *, retain_issue=False):
+    """A real entered FWorkers body; only the test's worker and witnesses are replaced."""
+    normal_run = rig.workers.run
+    seen = {"raised": False, "error": MemoryError("row3 simulated worker exhaustion")}
+    def run(work, ctx):
+        if work.desc.purpose != "belief_update":
+            return normal_run(work, ctx)
+        entered = ctx.enter()
+        rig.workers.entry_attempts.append((work.desc.work_id, entered))
+        if not entered:
+            return
+        rig.workers.entries.append(work)
+        rig.workers.contexts["belief_update"] = ctx
+        seen.update(work=work, ctx=ctx, reading=rig.actual_reading())
+        try:
+            if retain_issue:
+                reader = ctx.reader()
+                assert reader is not None
+                issued = u.compute_finite_update(work.request, reader=reader,
+                    registry=rig.registry, evidence=ctx.evidence())
+                assert isinstance(issued, u.IssuedUpdate), issued
+                seen["issued"] = issued
+                rig.workers.updates[work.request] = issued
+            if mode == "failure":
+                try:
+                    raise ValueError("row3 unexpected calculation value")
+                except ValueError as error:
+                    failure = fb.FailureInfo(failure_kind="row3.value_error",
+                        content={"message": str(error)}, readings=(seen["reading"],), basis=())
+                    seen["failure"] = failure
+                    event = rig.workers.finished(work, fb.WorkFailure(failure=failure))
+                    rig.workers.post(ctx, event)
+            elif mode == "exception":
+                seen["raised"] = True
+                raise seen["error"]
+            else:
+                assert mode == "return"
+                # Returning is an actual stop, but is not a WorkFinished report.
+        finally:
+            rig.workers.stops.append(work.desc.work_id)
+    rig.workers.run = run
+    try:
+        rig.clock.set(3)
+        report = post_row5_claim(rig, slot="row3-stopped",
+            start=1 if head is not None else 0, end=3 if head is not None else 2)
+        request, callback = rig.callback("belief_update")
+        try:
+            callback()
+        except BaseException:
+            # OS wrappers may propagate or contain the injected worker exception.
+            # Its propagation is not the oracle; the host's independent EW is.
+            if not seen["raised"]:
+                raise
+    finally:
+        rig.workers.run = normal_run
+    work = seen["work"]
+    assert work.request == request.cid
+    assert work.desc.args.prior == (head.cid if head is not None else None)
+    assert row5_report_for_work(rig, work).cid == report.cid
+    rig.drive(lambda: execution_for(rig.workers.contexts["measure_segment"], work.desc.work_id).stopped)
+    rig.settle_steps()
+    return report, seen
+
+
+def assert_row3_stopped_without_adoption(rig, report, seen):
+    work = seen["work"]
+    assert not [r for r in rig.facts(c.UPDATE_RESULT) if r.value["request"] == work.request]
+    assert not [a for a in rig.facts(c.BELIEF_ADOPTED) if a.value["request"] == work.request]
+    assert rig.one(c.SEGMENT_REPORT, cid=report.cid).value == report.value
+    assert [ok for key, ok in rig.workers.entry_attempts if key == work.desc.work_id] == [True]
+    observed = execution_for(rig.workers.contexts["measure_segment"], work.desc.work_id)
+    assert observed.launches == ("launched",) and observed.entered == 1 and observed.stopped
+    return observed
+
+
+def continue_row3_with_new_report(rig, head, stopped_report, seen):
+    rig.clock.set(4)
+    report = post_row5_claim(rig, slot="row3-after-stop", start=2, end=3)
+    received = fb.Received(route_epoch="route-A", media_type="application/octet-stream",
+                           data=b"row3-reception-after-worker-stop", claims={})
+    rig.host.post(received)
+    rig.drive(lambda: any(raw.value == wire(received) for raw in rig.facts(c.RECEIVED)))
+    assert rig.thread.is_alive()
+    assert rig.one(c.SEGMENT_REPORT, cid=stopped_report.cid).value == stopped_report.value
+    number = 3 if head is not None else 2
+    rig.drive(lambda: len(rig.requests("belief_update")) == number)
+    work = rig.run_stage("belief_update")
+    assert work.request != seen["work"].request
+    assert row5_report_for_work(rig, work).cid == report.cid
+    rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == (2 if head is not None else 1))
+    adopted = rig.facts(c.BELIEF_ADOPTED)[-1]
+    assert_update(rig, work, adopted, FIRST if head is not None else ROW3_ONE_POINT,
+                  head.cid if head is not None else None)
+    assert_row3_stopped_without_adoption(rig, stopped_report, seen)
+    return adopted
+
+
+@pytest.mark.parametrize("with_prior", (False, True), ids=("initial", "after_adoption"))
+def test_row3_reported_failure_keeps_failure_terminal_and_resumes_from_current_head(make_rig, with_prior):
+    """Row 3 v2 :17-24,33; F-b C10/6-2 :3319,3328-3334; J9-c/K9/K13/K15 :3494,3509,3513,3515.
+
+    Waiting forever on the failed Wu fails the next-Q* observation; inventing a successful R*/adoption fails its absence.
+    Wrong prior or including the failed report fails ONE_POINT (no prior) / FIRST (prior x1=0), not SECOND.
+    Stopping reception fails the saved later Claim and Received before the next-Q* check.
+    """
+    rig, head = prepare_row3_rig(make_rig, with_prior)
+    report, seen = stop_row3_update(rig, head, "failure")
+    request = seen["work"].request
+    rig.drive(lambda: any(t.value["request"] == request for t in rig.facts(c.WORK_TERMINAL)))
+    terminal, = (t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == request)
+    raw = rig.one(c.WORK_REPORT, cid=terminal.value["first_receipt"])
+    assert terminal.value["terminal_kind"] == "failure" and terminal.value["returned"] is None
+    assert terminal.value["basis"]["failure"] == wire(seen["failure"])
+    assert raw.value["outcome"] == {"kind": "failure", "value": wire(seen["failure"])}
+    observed = assert_row3_stopped_without_adoption(rig, report, seen)
+    assert len(observed.reports) == 1 and observed.reports[0].point == raw.cid
+    continue_row3_with_new_report(rig, head, report, seen)
+    assert rig.one(c.WORK_TERMINAL, cid=terminal.cid).value == terminal.value
+
+
+@pytest.mark.parametrize("with_prior", (False, True), ids=("initial", "after_adoption"))
+@pytest.mark.parametrize("mode", ("return", "exception"), ids=("no_report_return", "no_report_exception"))
+def test_row3_unreported_stop_unblocks_next_update_without_inventing_terminal(make_rig, with_prior, mode):
+    """K15(1)-(3) F-b :3515, J9-c :3494; CE1 :2904-2923 and conditioning :2733-2741.
+
+    Waiting on the stopped Wu fails the next-Q* observation after both later Posts were saved.
+    Inventing T/R*/adoption or relaunching fails the missing-record and EW single-entry checks.
+    Wrong head or folding in the stopped Claim fails ONE_POINT / FIRST instead of the forbidden SECOND.
+    Stopping reception fails the saved later Claim and Received before the next-Q* check.
+    """
+    rig, head = prepare_row3_rig(make_rig, with_prior)
+    report, seen = stop_row3_update(rig, head, mode)
+    observed = assert_row3_stopped_without_adoption(rig, report, seen)
+    assert observed.reports == ()
+    assert not [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == seen["work"].request]
+    assert not [r for r in rig.facts(c.WORK_REPORT) if r.value["work"] == seen["work"].desc.work_id]
+    continue_row3_with_new_report(rig, head, report, seen)
+    assert not [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == seen["work"].request]
+
+
+@pytest.mark.parametrize("with_prior", (False, True), ids=("initial", "after_adoption"))
+@pytest.mark.parametrize("advance_head", (False, True), ids=("head_unchanged", "head_advanced"))
+def test_row3_late_terminal_from_stopped_port_adopts_or_is_stale_by_current_head(make_rig, with_prior, advance_head):
+    """K15(4) F-b :3515 and K9/6-2 :3509,3330-3332; use only a real retained issue and ctx.post.
+
+    Dropping the late terminal fails T/R*/A* or Stale; overwriting an advanced head fails the unchanged adoption chain.
+    Relaunching the stopped body fails EW launches/entered; no stopped-port read/monitored contract is assumed.
+    """
+    rig, head = prepare_row3_rig(make_rig, with_prior)
+    report, seen = stop_row3_update(rig, head, "return", retain_issue=True)
+    observed = assert_row3_stopped_without_adoption(rig, report, seen)
+    request, work_id = seen["work"].request, seen["work"].desc.work_id
+    assert observed.reports == ()
+    assert not [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == request]
+    newer = continue_row3_with_new_report(rig, head, report, seen) if advance_head else None
+    before = tuple(rig.facts(c.BELIEF_ADOPTED))
+    rig.clock.set(5)
+    event = fb.WorkFinished(work=work_id, started=seen["reading"], finished=seen["reading"],
+        outcome=fb.WorkOutputs(outputs=u.update_response(seen["issued"])))
+    seen["ctx"].post(event, issued=seen["issued"])
+    rig.drive(lambda: any(t.value["request"] == request for t in rig.facts(c.WORK_TERMINAL)))
+    terminal, = (t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == request)
+    assert terminal.value["terminal_kind"] == "outputs"
+    assert rig.one(c.WORK_REPORT, cid=terminal.value["first_receipt"]).value == wire(event)
+    rig.drive(lambda: any(r.value["request"] == request for r in rig.facts(c.UPDATE_RESULT)))
+    result, = (r for r in rig.facts(c.UPDATE_RESULT) if r.value["request"] == request)
+    late_expected = SECOND if head is not None else FIRST
+    assert result.value["result"] == plain(seen["issued"].result) == late_expected
+    if advance_head:
+        rig.drive(lambda: any(s.value["request"] == request for s in rig.facts(c.STALE)))
+        stale, = (s for s in rig.facts(c.STALE) if s.value["request"] == request)
+        assert stale.value == {"origin": seen["work"].desc.reader, "request": request,
+            "result": result.cid, "expected_previous": head.cid if head is not None else None,
+            "actual_previous": newer.cid}
+        assert tuple(rig.facts(c.BELIEF_ADOPTED)) == before
+        assert not [a for a in rig.facts(c.BELIEF_ADOPTED) if a.value["request"] == request]
+    else:
+        rig.drive(lambda: any(a.value["request"] == request for a in rig.facts(c.BELIEF_ADOPTED)))
+        adopted, = (a for a in rig.facts(c.BELIEF_ADOPTED) if a.value["request"] == request)
+        assert_update(rig, seen["work"], adopted, late_expected, head.cid if head is not None else None)
+        assert len(rig.facts(c.BELIEF_ADOPTED)) == len(before) + 1
+        assert not [s for s in rig.facts(c.STALE) if s.value["request"] == request]
+    observed = execution_for(rig.workers.contexts["measure_segment"], work_id)
+    assert observed.launches == ("launched",) and observed.entered == 1 and observed.stopped
+    assert len(observed.reports) == 1 and observed.reports[0].point == terminal.value["first_receipt"]
+
+
+@pytest.mark.parametrize("advance_head", (False, True), ids=("late_adopted", "late_stale"))
+def test_row3_next_update_after_late_terminal_uses_current_head_and_keeps_one_chain(make_rig, advance_head):
+    """F-b K15(4)/K9/K13 :3515,3509,3513; conjunction/CE1 :2733-2741,2904-2923.
+
+    A late adoption missing from the head fails next.prior, SECOND, and the unique previous chain.
+    Using the stale result as head fails next.prior/FIRST; mixing its x2=0 claim changes FIRST to SECOND.
+    """
+    rig, seed = prepare_row3_rig(make_rig, True)  # adopted x1=0: ONE_POINT
+    report, seen = stop_row3_update(rig, seed, "return", retain_issue=True)  # x2=x3=0, not yet reported
+    assert_row3_stopped_without_adoption(rig, report, seen)
+    assert not [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == seen["work"].request]
+    newer = continue_row3_with_new_report(rig, seed, report, seen) if advance_head else None
+    # In the stale branch the live head has x1=x3=0 (FIRST), without the stopped x2=0 claim.
+    before_late = tuple(rig.facts(c.BELIEF_ADOPTED))
+    request = seen["work"].request
+    rig.clock.set(5)
+    event = fb.WorkFinished(work=seen["work"].desc.work_id,
+        started=seen["reading"], finished=seen["reading"],
+        outcome=fb.WorkOutputs(outputs=u.update_response(seen["issued"])))
+    seen["ctx"].post(event, issued=seen["issued"])
+    rig.drive(lambda: any(t.value["request"] == request for t in rig.facts(c.WORK_TERMINAL)))
+    terminal, = (t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == request)
+    assert terminal.value["terminal_kind"] == "outputs"
+    assert rig.one(c.WORK_REPORT, cid=terminal.value["first_receipt"]).value == wire(event)
+    rig.drive(lambda: any(r.value["request"] == request for r in rig.facts(c.UPDATE_RESULT)))
+    result, = (r for r in rig.facts(c.UPDATE_RESULT) if r.value["request"] == request)
+    assert result.value["result"] == SECOND  # seed x1=0 plus the late x2=x3=0
+    if advance_head:
+        rig.drive(lambda: any(s.value["request"] == request for s in rig.facts(c.STALE)))
+        stale, = (s for s in rig.facts(c.STALE) if s.value["request"] == request)
+        assert stale.value == {"origin": seen["work"].desc.reader, "request": request,
+            "result": result.cid, "expected_previous": seed.cid, "actual_previous": newer.cid}
+        assert tuple(rig.facts(c.BELIEF_ADOPTED)) == before_late
+        assert not [a for a in rig.facts(c.BELIEF_ADOPTED) if a.value["request"] == request]
+        current_head = newer
+    else:
+        rig.drive(lambda: any(a.value["request"] == request for a in rig.facts(c.BELIEF_ADOPTED)))
+        current_head, = (a for a in rig.facts(c.BELIEF_ADOPTED) if a.value["request"] == request)
+        assert_update(rig, seen["work"], current_head, SECOND, seed.cid)
+        assert not [s for s in rig.facts(c.STALE) if s.value["request"] == request]
+    rig.clock.set(6)
+    start, end = (0, 1) if advance_head else (2, 3)
+    following = post_row5_claim(rig, slot="row3-following-late-terminal", start=start, end=end)
+    rig.drive(lambda: len(rig.requests("belief_update")) == (4 if advance_head else 3))
+    work = rig.run_stage("belief_update")
+    assert work.desc.args.prior == current_head.cid
+    assert row5_report_for_work(rig, work).cid == following.cid
+    rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 3)
+    adopted = rig.facts(c.BELIEF_ADOPTED)[-1]
+    # Each next predicate is entailed by the correct head, so cumulative mass is unchanged.
+    # Old seed head would give ONE_POINT (stale branch) or FIRST (late-adopted branch).
+    assert_update(rig, work, adopted, FIRST if advance_head else SECOND, current_head.cid)
+    adoptions = rig.facts(c.BELIEF_ADOPTED)
+    assert len(adoptions) == 3 and adoptions[0].cid == seed.cid
+    assert adoptions[1].cid == current_head.cid and adoptions[2].cid == adopted.cid
+    assert len({a.cid for a in adoptions}) == len(adoptions)
+    assert len({a.value["previous"] for a in adoptions}) == len(adoptions)
+    assert [a.value["previous"] for a in adoptions] == [None] + [a.cid for a in adoptions[:-1]]
+    assert {a.value["origin"] for a in adoptions} == {rig.one(ORIGIN).cid}
+    assert {a.value["model"] for a in adoptions} == {rig.model_point}
