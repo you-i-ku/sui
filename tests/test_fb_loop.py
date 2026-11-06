@@ -424,3 +424,64 @@ def test_continuation_uses_adopted_joint_in_math_input_and_information(make_rig,
             assert_quantity(evaluation.information[1].additional, entropy)
             assert_quantity(evaluation.G[1], -entropy)
             assert_quantity(evaluation.q_star[1], entropy.exp() / (1 + entropy.exp()))
+
+
+def test_continuation_preserves_adopted_state_order_in_asymmetric_information():
+    """F-a :289,295,320-323; F-b CE1 :2917-2923, J6/K10/K12 :3489,3510,3512.
+
+    Asymmetry: P(Y=1|a)=1/2, P(Y=1|b)=0 gives I_M(p)=h(p/2)-p*ln(2), p=P(a).
+    Correct p=4/5: I=ln(5)-6/5*ln(2)-3/5*ln(3)=0.11849392256130018846, q_M=0.52958886776763468267.
+    Reversed joint p=1/5: I=ln(5)+4/5*ln(2)-9/5*ln(3)=0.18645353727945917762, q_M=0.54647880959434444414.
+    """
+    from gate_f_facts_cases import diagonal, outcome
+
+    class AsymmetricLoopRig(LoopRig):
+        def record(self, body, *args, **kwargs):
+            # Change only the test's primary model declaration, before Boot.
+            # The host, workers and adopted values are left on the public path.
+            if isinstance(body, Prediction) and body.contract == contract("sui.f.model_source"):
+                document, _ = finite_world("FA01")
+                measurement, = (kernel for kernel in document["kernels"] if kernel["id"] == "measure")
+                measurement["outcomes"] = [
+                    outcome("y0", diagonal((F(1, 2), F(1))), value=0),
+                    outcome("y1", diagonal((F(1, 2), F(0))), value=1),
+                ]
+                self.document = document
+                body = replace(body, content=Payload.json({"document": document}))
+            return super().record(body, *args, **kwargs)
+
+    rig = AsymmetricLoopRig(continuation=True)
+    try:
+        rig.start()
+        work, adopted = rig.adopt(1)
+        result = assert_update(rig, work, adopted, FIRST)
+        rig.drive(lambda: len(rig.requests("evaluation_prepare")) == 2)
+        eq = rig.requests("evaluation_prepare")[-1]
+        assert {trigger["point"] for trigger in eq.value["desc"]["trigger"]} == {adopted.cid}
+        assert eq.value["desc"]["args"]["input"]["model"] == rig.model_point
+        rig.run_stage("evaluation_prepare")
+        prepared = rig.workers.prepared_by_request[eq.cid]
+        assert isinstance(prepared.value, f.FProblem), prepared.value
+        assert prepared.value.K.belief == rig.read_stored(result.cid)[2].id
+        rig.run_stage("selection_draw")
+        ee = rig.run_stage("evaluation")
+        selected = rig.workers.evaluated_by_request[ee.request].value
+        assert isinstance(selected, f.Selected), selected
+        assert selected.root.problem_key == prepared.value.problem_key
+        assert selected.root.K.belief == rig.read_stored(result.cid)[2].id
+        rig.drive(lambda: len(rig.facts(c.SELECTION)) == 2)
+        evaluation = selected.evaluation
+        assert evaluation.candidates == ("Q", "M")
+        with localcontext() as context:
+            context.prec = 60
+            ln2, ln3, ln5 = Decimal(2).ln(), Decimal(3).ln(), Decimal(5).ln()
+            # Hand-derived from the declared channel and CE1, never from U or FStatus.
+            information = ln5 - Decimal(6) / 5 * ln2 - Decimal(3) / 5 * ln3
+            reversed_information = ln5 + Decimal(4) / 5 * ln2 - Decimal(9) / 5 * ln3
+            assert abs(information - reversed_information) > Decimal("0.06")
+            assert_quantity(evaluation.information[0].additional, Decimal(0))
+            assert_quantity(evaluation.information[1].additional, information)
+            assert_quantity(evaluation.G[1], -information)
+            assert_quantity(evaluation.q_star[1], information.exp() / (1 + information.exp()))
+    finally:
+        rig.close()
