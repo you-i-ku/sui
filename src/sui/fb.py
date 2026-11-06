@@ -621,6 +621,7 @@ class FWorkContext(_Protocol):
     read(point) は保存済みの記録の本文を読む唯一の口で、ホストがその実使用 (UseObservation) を
     M の読みとともに記録する。monitored(interval) は測る仕事が実際に見張った区間を報告と別の
     道でホストに残す (IntervalObservation)。どちらも窓口の状態を変えず、記録を保存しない。
+    開始の札を取っていない口の read・monitored は RuntimeError で、証拠に足さない (§6-10 J8・K11)。
     reader() はその仕事の Desc の numerical_view の境界と input_points の閉包だけを読む不変の読み手
     (像の外を読ませない、§6-9 H5)。numerical_view も input_points も無い仕事では None。
     prepared() は評価 Ee の args.prepared (PR) と全照合した、評価の準備 Ep の生きた

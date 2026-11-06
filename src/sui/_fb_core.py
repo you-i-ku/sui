@@ -577,8 +577,15 @@ class WorkContext:
             if issued is not None:
                 self._row.issued.append((envelope.number, issued))
 
+    def _require_entered(self) -> None:
+        """開始の札を取っていない口は、実使用・実監視の証拠を残せない (§6-10 J8・K11)。ロックの中で呼ぶ。"""
+        if not self.entered:
+            raise RuntimeError("this work port has not entered: it cannot record evidence")
+
     def read(self, point) -> bytes:
         state = self._state
+        with state.lock:
+            self._require_entered()
         record = state.ledger.record(point)
         with state.lock:
             self._row.uses.append((point, mono_ns(state.clock)))
@@ -586,6 +593,7 @@ class WorkContext:
 
     def monitored(self, interval) -> None:
         with self._state.lock:
+            self._require_entered()
             self._row.intervals.append(interval)
 
     def evidence(self):

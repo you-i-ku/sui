@@ -485,3 +485,176 @@ def test_continuation_preserves_adopted_state_order_in_asymmetric_information():
             assert_quantity(evaluation.q_star[1], information.exp() / (1 + information.exp()))
     finally:
         rig.close()
+
+
+def cut_first_update_launch(rig, outcome):
+    """Inject only Wu's first OS launch result; keep successful callbacks deferred."""
+    normal_launch, attempts = rig.launcher.launch, []
+    def launch(work_id, body):
+        is_update = any(q.value["desc"]["work_id"] == work_id
+                        for q in rig.requests("belief_update"))
+        if is_update and (not attempts or work_id == attempts[0][0]):
+            result = outcome if not attempts else "launched"
+            attempts.append((work_id, body, result))
+            if result == "raises":
+                raise OSError("test: OS launch outcome is unavailable")
+            if result != "launched":
+                return result
+        return normal_launch(work_id, body)
+    rig.launcher.launch = launch
+    return attempts
+
+
+def post_loop_claim(rig, number):
+    """Post a normal CE1 report from the still-running measurement worker."""
+    rig.clock.set(number + 1)
+    span = f.MeasurementInterval(clock=rig.clock.run, start_ns=number - 1,
+        end_ns=number + 1, closure="(start,end]")
+    done, errors, sent = Event(), [], []
+    def emit(work, ctx):
+        event = fb.SegmentReport(segment=work.request, item_slot=f"claim-{number}",
+            item=f.CoverageClaim(route_epoch="route-A", interval=span,
+                kind="no_arrival", contract=c.NO_ARRIVAL, evidence=()))
+        rig.workers.post(ctx, event)
+        sent.append(event)
+    rig.workers.commands.put((emit, done, errors))
+    assert done.wait(2), "incomplete observation: measurement worker did not answer"
+    if errors:
+        raise errors[0]
+    rig.drive(lambda: any(raw.value == wire(sent[0]) for raw in rig.facts(c.SEGMENT_REPORT)))
+    return next(raw for raw in rig.facts(c.SEGMENT_REPORT) if raw.value == wire(sent[0]))
+
+
+def execution_for(ctx, work_id):
+    return next(observation for observation in ctx.evidence().executions
+                if observation.work_id == work_id)
+
+
+def test_update_not_started_retries_once_and_continues_ce1(make_rig):
+    """Row 7 x 1/2/3/5: v2 :17-24,37; F-b :329; FLauncher/FWorkContext docs.
+
+    No retry fails adoption; a second admission fails enter()==False; double counting fails FIRST/SECOND.
+    """
+    rig = make_rig(continuation=True)
+    rig.start()
+    attempts = cut_first_update_launch(rig, "not_started")
+    extra_admissions = []
+    def finish_once(work, ctx):
+        extra_admissions.append(ctx.enter())  # the normal worker already entered
+        event, issued = rig.workers.normal(work, ctx)
+        rig.workers.post(ctx, event, issued)
+    rig.workers.overrides["belief_update"] = finish_once
+    w1, a1 = rig.adopt(1)
+    assert_update(rig, w1, a1, FIRST)
+    assert [(work_id, result) for work_id, _body, result in attempts] == [
+        (w1.desc.work_id, "not_started"), (w1.desc.work_id, "launched")]
+    for stage in ORDER[1:]:
+        rig.run_stage(stage)
+    rig.drive(lambda: len(rig.facts(c.SELECTION)) == 2)
+    w2, a2 = rig.adopt(2)
+    assert_update(rig, w2, a2, SECOND, a1.cid)
+    for stage in ORDER[1:]:
+        rig.run_stage(stage)
+    rig.drive(lambda: len(rig.facts(c.SELECTION)) == 3)
+    assert extra_admissions == [False, False]
+    assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == 2
+    assert len(rig.facts(c.BELIEF_ADOPTED)) == 2
+    for work, launches in ((w1, ("not_started", "launched")), (w2, ("launched",))):
+        assert [ok for key, ok in rig.workers.entry_attempts if key == work.desc.work_id] == [True]
+        observed = execution_for(rig.workers.contexts["measure_segment"], work.desc.work_id)
+        assert observed.launches == launches and observed.entered == 1 and observed.stopped
+
+
+@pytest.mark.parametrize("outcome", ("unknown", "raises"))
+def test_update_unknown_launch_does_not_retry_and_measurement_keeps_reporting(make_rig, outcome):
+    """Row 7 x 4/5: v2 :20-21,37,40-44; F-b :329; FLauncher :651.
+
+    Retrying unknown fails the launch count/evidence; blocking reception fails the later measurement report.
+    """
+    rig = make_rig()
+    rig.start()
+    attempts = cut_first_update_launch(rig, outcome)
+    post_loop_claim(rig, 1)
+    rig.drive(lambda: bool(attempts))
+    request, = rig.requests("belief_update")
+    work_id = request.value["desc"]["work_id"]
+    measurement = rig.workers.contexts["measure_segment"]
+    before = execution_for(measurement, work_id)
+    assert before.launches == ("unknown",) and before.entered == 0 and not before.stopped
+    # A concrete other worker executes another command and its Post is saved.
+    later = post_loop_claim(rig, 2)
+    assert later.value["segment"] == rig.one(c.SEGMENT_REQUESTED).cid
+    assert later.value["item_slot"] == "claim-2" and rig.thread.is_alive()
+    received = fb.Received(route_epoch="route-A", media_type="application/octet-stream",
+                           data=b"row7-reception-after-unknown", claims={})
+    rig.host.post(received)
+    rig.drive(lambda: any(raw.value == wire(received) for raw in rig.facts(c.RECEIVED)))
+    rig.settle_steps()
+    assert [(key, result) for key, _body, result in attempts] == [(work_id, outcome)]
+    after = execution_for(measurement, work_id)
+    assert after.launches == ("unknown",) and after.entered == 0 and not after.stopped
+    assert after.reports == ()
+    assert not [work for work in rig.workers.entries if work.desc.work_id == work_id]
+    assert not rig.facts(c.UPDATE_RESULT) and not rig.facts(c.BELIEF_ADOPTED)
+    assert not [fact for fact in rig.facts(c.WORK_TERMINAL) if fact.value["request"] == request.cid]
+
+
+@pytest.mark.parametrize("operation", ("read", "monitored"))
+def test_unentered_update_port_cannot_record_evidence_but_entered_port_can(make_rig, operation):
+    """Row 7 admission boundary: F-b J8 :3491, K11 :3511; FWorkContext :609.
+
+    An unentered read/monitored recording evidence fails the unchanged-snapshot and RuntimeError checks.
+    The denied port never entered; stopped former workers are outside this probe (CG-ROW7-STOPPED-PORT).
+    """
+    rig = make_rig()
+    rig.start()
+    attempts = cut_first_update_launch(rig, "not_started")
+    span = f.MeasurementInterval(clock=rig.clock.run, start_ns=0, end_ns=2, closure="(start,end]")
+    seen = {}
+    normal_run = rig.workers.run
+    def observe(ctx):
+        before, rejected, returned = ctx.evidence(), False, None
+        try:
+            returned = ctx.read(rig.model_point) if operation == "read" else ctx.monitored(span)
+        except RuntimeError:
+            rejected = True
+        return ctx, before, ctx.evidence(), rejected, returned
+    def run(work, ctx):
+        if work.desc.purpose == "belief_update" and seen.get("probing"):
+            seen["denied_enter"] = ctx.enter()
+            seen["denied"] = observe(ctx)
+            return
+        normal_run(work, ctx)
+    def finish(work, ctx):
+        seen["allowed"] = observe(ctx)  # the normal worker has actually entered
+        seen["probing"] = True
+        try:
+            attempts[0][1]()  # canceled not_started launch, while the valid worker is still active
+        finally:
+            seen["probing"] = False
+        event, issued = rig.workers.normal(work, ctx)
+        rig.workers.post(ctx, event, issued)
+    rig.workers.run = run
+    rig.workers.overrides["belief_update"] = finish
+    post_loop_claim(rig, 1)
+    work = rig.run_stage("belief_update")
+    allowed, before, after, rejected, returned = seen["allowed"]
+    assert not rejected
+    if operation == "read":
+        assert isinstance(returned, bytes) and returned
+        added = tuple(use for use in after.uses if use not in before.uses)
+        assert len(after.uses) == len(before.uses) + 1 and len(added) == 1
+        assert (added[0].work_id, added[0].point) == (work.desc.work_id, rig.model_point)
+        assert after.intervals == before.intervals
+    else:
+        added = tuple(item for item in after.intervals if item not in before.intervals)
+        assert len(after.intervals) == len(before.intervals) + 1 and len(added) == 1
+        assert (added[0].work_id, added[0].interval) == (work.desc.work_id, span)
+        assert after.uses == before.uses
+    denied, before, after, rejected, _returned = seen["denied"]
+    assert denied is not allowed and seen["denied_enter"] is False
+    assert (rejected, after.uses, after.intervals) == (True, before.uses, before.intervals), (
+        f"{operation}: RuntimeError={rejected}, uses_added={len(after.uses) - len(before.uses)}, "
+        f"intervals_added={len(after.intervals) - len(before.intervals)}")
+    rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 1)
+    assert_update(rig, work, rig.one(c.BELIEF_ADOPTED), FIRST)
