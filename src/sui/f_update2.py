@@ -257,6 +257,59 @@ def compute_finite_update(
         registry_key=registry_view_key(registry)))
 
 
+def adopted_belief(compiler):
+    """F-a の評価の準備 (`sui.f.prepare_world/3`) が、固定根の中の読み手の F-b の採用 A* を読む口 (§6-10 J7・K12)。
+    A* が無ければ None (旧の道のまま)。あれば系列の頭を 1 つに決め (2 つなら競合で不完全)、入口 U と同じ作り直しで
+    頭の A* までの joint を一次事実から求め、頭が指す保存した R* と全比較して (R* の Ref, joint) を返す。
+    確定した不一致は FInputError、頭が決まらない不足は FIncomplete。"""
+    from .f import FIncomplete, FInputError
+    c = _c()
+    adoptions = {}
+    for entry in compiler.image.entries():
+        # 探すだけの読みは像から (依存に数えない。A* の無い入力の world を 1 バイトも変えない)
+        if not entry.is_event or entry.cid not in compiler.visible_cids \
+                or compiler.image.record(entry.cid).body.contract != c.BELIEF_ADOPTED:
+            continue
+        value = compiler.point(entry.cid).body.content.as_json()
+        if value["origin"] == compiler.origin_point:
+            adoptions[entry.cid] = value
+    if not adoptions:
+        return None
+    heads = set(adoptions) - {a["previous"] for a in adoptions.values()}
+    if len(heads) != 1:
+        raise FIncomplete("certificate_incomplete", "competing F-b adoptions", "/adoption")
+    head = adoptions[next(iter(heads))]
+    if head["model"] != compiler.source:
+        raise FInputError("proof_mismatch", "F-b adoption of another model", "/adoption/model")
+    reader = _CompilerReader(compiler)
+    try:
+        state = _replay(reader, head["request"])
+        saved = _content(reader, head["result"], c.UPDATE_RESULT)
+        desc = _update_desc(reader, head["request"])
+    except _Issue as issue:
+        raise FInputError(issue.code, issue.message, "/adoption") from None
+    if saved["request"] != head["request"] or saved["result"] != _encode_result(state) \
+            or saved["application_digest"] != state.digest(head["model"], desc["reader"]):
+        raise FInputError("result_mismatch", "the adopted result differs from its recomputation", "/adoption/result")
+    return compiler.point(head["result"]).id, state.joint
+
+
+class _CompilerReader:
+    """compiler の見える範囲だけの読み手。読みは compiler の point を通す (見える範囲と依存の記録は F-a の規則のまま)。"""
+
+    def __init__(self, compiler):
+        self._compiler = compiler
+
+    def record(self, cid):
+        from .f import FInputError
+        try:
+            return self._compiler.point(cid)
+        except FInputError as exc:
+            if exc.reason == "unresolved_reference":
+                raise KeyError(cid) from None
+            raise
+
+
 def update_response(returned: UpdateReturn) -> ContractValue:
     """入口 U の返答を、仕事 Wu が返す `sui.fb.update_response/1` の値にする。三枝は
     {kind: issued, value: finite_update_result/1 の値} / {kind: rejected, value: {issues}} /

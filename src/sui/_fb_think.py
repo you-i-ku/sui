@@ -48,6 +48,21 @@ class ThinkPlan:
     descs: dict = _field(default_factory=dict)      # 後続の仕事の Desc (Publish で行を置く)
     prepared: object = None      # Ep の生きた発行物 (保存しない、§2-5-2)
     problem: object = None       # その FProblem
+    round: str = ""              # 採用の後の継続の識別 (§6-10 K10)。最初の過程は ""
+
+
+def open_continuation(state, boot, adopted) -> bool:
+    """採用 A* を受けた継続 (§6-10 J6・K10、`reuse_candidates/1`): 最初の過程の CG を使い回して、A* をきっかけに
+    o・j・文脈・EQ から同じ流れを作る。CG がまだ無ければ False (後で試す)。"""
+    first = next((p for p in state.thinking.values() if p.boot is boot and not p.round), None)
+    if first is None or "cg" not in first.points:
+        return False
+    plan = ThinkPlan(boot=boot, initial=first.initial, slot=first.slot, qgen=first.qgen, wg=first.wg,
+                     round=":after:" + adopted, done={first.wg},
+                     points={"cg": first.points["cg"], "cause": adopted})
+    plan.steps = _context_steps(state, plan)
+    state.thinking[first.wg + plan.round] = plan
+    return True
 
 
 def open_plan(state, boot, initial_slot, qgen) -> None:
@@ -166,9 +181,9 @@ def _desc(plan, purpose, stage_slot, trigger, reader, method, output, args, inpu
     d = plan.boot.d
     initial = plan.initial
     return _fb.Desc(
-        work_id=_work_id(d, plan.slot, purpose, stage_slot),
+        work_id=_work_id(d, plan.slot, purpose, stage_slot + plan.round),
         process=_fb.BootSlot(declaration=d, slot=initial.process_slot),
-        trigger=frozenset({trigger}), purpose=purpose, stage_slot=stage_slot, reader=reader,
+        trigger=frozenset({trigger}), purpose=purpose, stage_slot=stage_slot + plan.round, reader=reader,
         method=method, output_contract=output, args=args, input_points=frozenset(inputs),
         numerical_view=view, allocation=_fb.BootSlot(declaration=d, slot=initial.allocation.slot),
         permissions=frozenset({_fb.BootSlot(declaration=d, slot=plan.slot),
@@ -180,7 +195,7 @@ def _promise(purpose, prefix):
     review FB2-R04)。要求を準備した時に同じ行が本物の仕事に解決される。"""
     def on_prepared(state, plan, cid):
         from ._fb_core import plan_work
-        plan_work(state, _work_id(plan.boot.d, plan.slot, purpose, prefix + plan.slot), purpose,
+        plan_work(state, _work_id(plan.boot.d, plan.slot, purpose, prefix + plan.slot + plan.round), purpose,
                   plan.boot.declaration.scope.value)
     return on_prepared
 
@@ -316,7 +331,8 @@ def _context_steps(state, plan):
             body = _Observed(route="fb", content=_Payload.json(_f._encode(value)), contract=_fc.CLOCK_READING,
                              received_ns=ns)
             # 親 (§6-9 H1): o = 時計の宣言と、読むきっかけの CG の来歴 / j = 時計の宣言と o (j は o の後に読んだ)
-            cause = plan.points["cg"] if name == "o" else plan.points["o"]
+            # 継続の過程のきっかけは採用 A* (§6-10 K10)
+            cause = plan.points.get("cause", plan.points["cg"]) if name == "o" else plan.points["o"]
             return Slot(contract=_fc.CLOCK_READING, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
                         parents=_front(state.ledger, {source, cause}))
         return _Step(name=name, build=build)
@@ -349,9 +365,13 @@ def _context_steps(state, plan):
                                    scope=_BLANK_SCOPE, context=context, method=initial.method.contract)
         # Xnum の像の境界には型つき参照で読む Prediction (モデル・CG) を直接足す。台帳の heads と出来事の
         # 祖先は Prediction を含まない (§6-9 H5「実祖先 + 宣言した追加の閉包」)
-        view = _fixed_view(state, frozenset(fixed) | {initial.model, cg})
+        # 固定根の祖先の記録が型つきで指す Prediction (更新の law・reading・R*、前の評価の発行物) も直接足す
+        # (§6-10 J6「その境界に A* と要る G・R*・更新の履歴を含める」・K12)
+        view = _fixed_view(state, frozenset(fixed) | {initial.model, cg} | _referenced_predictions(state, fixed))
         plan.points["Xnum"] = view
-        return _desc(plan, "evaluation_prepare", "prepare:" + plan.slot, _fb.Trigger(point=cg, slot="candidates"),
+        trigger = _fb.Trigger(point=plan.points["cause"], slot="adopted") if plan.round \
+            else _fb.Trigger(point=cg, slot="candidates")
+        return _desc(plan, "evaluation_prepare", "prepare:" + plan.slot, trigger,
                      origin, _c.EVALUATION_PREPARE, _fc.MATH_ARTIFACT_V2,
                      _fb.EvaluationPrepareArgs(input=request, compiler=_fc.PREPARE_FACTS,
                                                budget=initial.prepare_budget),
@@ -469,6 +489,27 @@ def _product_steps(row, first, raw, value, name, contract):
 
 # --- くじ (H4・M4) ---
 
+def _referenced_predictions(state, fixed) -> frozenset:
+    """固定根 fixed の祖先の記録が型つきの参照 (Decided の inputs・Prediction の about/basis) で指す派生物
+    (Prediction) の閉包。評価の準備の Xnum の境界に直接足す (Prediction は出来事の祖先に入らないので、足さないと
+    F-a の compiler の参照の展開が像の外に出る。最初の輪では Q* の inputs の law・reading、A* の inputs の R*、
+    前の評価の発行物)。窓口の控えでなく、祖先の記録から毎回導く。"""
+    ledger = state.ledger
+    out, pending, seen = set(), list(ledger.ancestors(frozenset(fixed))), set()
+    while pending:
+        cid = pending.pop()
+        if cid in seen:
+            continue
+        seen.add(cid)
+        body = ledger.record(cid).body
+        for ref in (*getattr(body, "inputs", ()), *getattr(body, "about", ()), *getattr(body, "basis", ())):
+            for entry in ledger.entries_of(ref):
+                if not entry.is_event and entry.cid not in out:
+                    out.add(entry.cid)
+                    pending.append(entry.cid)
+    return frozenset(out)
+
+
 def _stream_id(plan) -> str:
     import hashlib
     key = {"domain": "sui.fb.stream_id/1", "boot": plan.boot.d, "position": plan.slot, "purpose": "selection"}
@@ -478,7 +519,10 @@ def _stream_id(plan) -> str:
 def _draw_steps(state, plan):
     def d_desc(state, plan):
         pr = plan.points["PR"]
-        request = _f.DrawRequest(purpose="selection", context_key=plan.problem.problem_key, ordinal=0,
+        # 同じ問題への別の発火 (採用の後の継続) は新しい ordinal (§6-10 J6)。保存の再試行では作り直さない
+        ordinal = sum(1 for other in state.thinking.values() if other is not plan and other.problem is not None
+                      and other.problem.problem_key == plan.problem.problem_key and "D" in other.descs)
+        request = _f.DrawRequest(purpose="selection", context_key=plan.problem.problem_key, ordinal=ordinal,
                                  law=_UNIFORM_UNIT, args={})
         return _desc(plan, "selection_draw", "draw:" + plan.slot, _fb.Trigger(point=pr, slot="prepared"),
                      plan.boot.points["origin"], plan.initial.draw.contract, _c.DRAW_REPORT,

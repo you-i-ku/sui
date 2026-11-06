@@ -474,3 +474,22 @@ def advance(state) -> None:
             if decision is not None and ob.final is None and ob.points.get("decide") is not None:
                 ob.final = "adopted" if decision == "A" else "stale"
                 ob.points[decision] = ob.points["decide"]
+            if ob.final == "adopted" and not ob.points.get("continued"):
+                _continue(state, plan, ob)
+
+
+def _continue(state, plan, ob) -> None:
+    """K10: continuation が `reuse_candidates/1` の時だけ、A* をきっかけに次の評価の過程を開く。「採用したら必ず
+    考え直す」の規則ではなく、宣言した差し替えられる方法 (D7)。None は開かない。"""
+    from ._fb_think import open_continuation
+    method = plan.initial.continuation
+    if method is None:
+        ob.points["continued"] = "none"
+        return
+    if method.contract != _c.REUSE_CANDIDATES or _plain(method.args) != {} \
+            or plan.initial.generator.contract != _c.MODEL_OPERATIONS:
+        _hold(plan, "continuation:method")
+        ob.points["continued"] = "missing"
+        return
+    if open_continuation(state, plan.boot, ob.points["A"]):
+        ob.points["continued"] = "opened"
