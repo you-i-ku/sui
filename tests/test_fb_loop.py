@@ -825,3 +825,283 @@ def test_eight_updates_preserve_one_adoption_chain_and_ce1_conjunction(make_rig)
     assert {report.value["segment"] for report in reports} == {rig.one(c.SEGMENT_REQUESTED).cid}
     assert len(rig.facts(c.FINITE_JOINT_COUNT_LAW)) == len(rig.facts(c.OBSERVATION_PLAN_2)) == 1
     assert rig.thread.is_alive()
+
+
+def post_row5_claim(rig, *, slot, start, end):
+    """Identify this delivery by its new saved Point, even when its payload repeats."""
+    before = {raw.cid for raw in rig.facts(c.SEGMENT_REPORT)}
+    done, errors, sent = Event(), [], []
+    span = f.MeasurementInterval(clock=rig.clock.run, start_ns=start, end_ns=end,
+                                 closure="(start,end]")
+    def emit(work, ctx):
+        event = fb.SegmentReport(segment=work.request, item_slot=slot,
+            item=f.CoverageClaim(route_epoch="route-A", interval=span,
+                kind="no_arrival", contract=c.NO_ARRIVAL, evidence=()))
+        rig.workers.post(ctx, event)
+        sent.append(event)
+    rig.workers.commands.put((emit, done, errors))
+    assert done.wait(30), "incomplete observation: measurement worker did not post the delivery"
+    if errors:
+        raise errors[0]
+    rig.drive(lambda: any(raw.cid not in before and raw.value == wire(sent[0])
+                          for raw in rig.facts(c.SEGMENT_REPORT)))
+    return next(raw for raw in rig.facts(c.SEGMENT_REPORT)
+                if raw.cid not in before and raw.value == wire(sent[0]))
+
+
+def row5_report_for_work(rig, work):
+    use, = work.desc.args.observations
+    binding = rig.one(c.SEGMENT_BINDING, cid=use.binding)
+    return rig.one(c.SEGMENT_REPORT, cid=binding.value["report"])
+
+
+def row5_receive_behind_pending_update(rig, *, completed, token):
+    rig.drive(lambda: len(rig.requests("belief_update")) > completed)
+    pending = rig.requests("belief_update")[-1]
+    work_id = pending.value["desc"]["work_id"]
+    assert not [work for work in rig.workers.entries if work.desc.work_id == work_id]
+    event = fb.Received(route_epoch="route-A", media_type="application/octet-stream",
+                        data=token, claims={})
+    rig.host.post(event)
+    rig.drive(lambda: any(raw.value == wire(event) for raw in rig.facts(c.RECEIVED)))
+    assert len(rig.facts(c.BELIEF_ADOPTED)) == completed
+
+
+def test_row5_two_waiting_reports_are_each_used_once_in_one_adoption_chain(make_rig):
+    """Row 5: v2 :17-24,35; F-b :2605,2733-2741,2904-2923,3484,3509,3513.
+
+    Dropping a pending report or using one twice fails exact report coverage; parallel same-prior Q*s fail the chain.
+    No queue-order oracle is declared in J1/K2/K13 (CG-ROW5-PENDING-ORDER); neither FIFO nor CID order is asserted.
+    """
+    rig = make_rig()
+    rig.drive = lambda predicate: drive_loop_observation(rig, predicate)
+    rig.start()
+    rig.clock.set(3)
+    first = post_row5_claim(rig, slot="row5-first", start=0, end=1)
+    rig.drive(lambda: len(rig.requests("belief_update")) == 1)
+    # The first Wu's launcher defers its body. Both following reports wait together.
+    second = post_row5_claim(rig, slot="row5-waiting-two", start=0, end=2)
+    third = post_row5_claim(rig, slot="row5-waiting-three", start=1, end=3)
+    received = fb.Received(route_epoch="route-A", media_type="application/octet-stream",
+                           data=b"row5-post-behind-two-waiting-reports", claims={})
+    rig.host.post(received)
+    rig.drive(lambda: any(raw.value == wire(received) for raw in rig.facts(c.RECEIVED)))
+    rig.settle_steps()
+    assert len(rig.requests("belief_update")) == 1
+    assert not [work for work in rig.workers.entries if work.desc.purpose == "belief_update"]
+    assert not rig.facts(c.UPDATE_RESULT) and not rig.facts(c.BELIEF_ADOPTED)
+    work = rig.run_stage("belief_update")
+    rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 1)
+    adopted = rig.facts(c.BELIEF_ADOPTED)[0]
+    # N((0,1])=0: weights (1/4,1/8), mass 3/8, joint (2/3,1/3).
+    one_point = {"joint": [[2, 3], [1, 3]], "evidence_mass": [3, 8]}
+    assert row5_report_for_work(rig, work).cid == first.cid
+    assert_update(rig, work, adopted, one_point)
+    previous, used, adoptions = adopted.cid, set(), [adopted]
+    for number in (2, 3):
+        rig.drive(lambda: len(rig.requests("belief_update")) == number)
+        work = rig.run_stage("belief_update")
+        report = row5_report_for_work(rig, work)
+        assert report.cid in {second.cid, third.cid} and report.cid not in used
+        used.add(report.cid)
+        # With x1=0 already: E1 alone gives FIRST; any inclusion of E2 covers x1,x2,x3.
+        expected = FIRST if used == {second.cid} else SECOND
+        rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == number)
+        adopted = rig.facts(c.BELIEF_ADOPTED)[-1]
+        assert_update(rig, work, adopted, expected, previous)
+        previous = adopted.cid
+        adoptions.append(adopted)
+    assert used == {second.cid, third.cid}
+    assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == 3
+    assert rig.facts(c.BELIEF_ADOPTED) == adoptions
+    assert [a.value["previous"] for a in adoptions] == [None, adoptions[0].cid, adoptions[1].cid]
+    assert {raw.cid for raw in rig.facts(c.SEGMENT_REPORT)} >= {first.cid, second.cid, third.cid}
+
+
+@pytest.mark.parametrize("same_claim", (True, False), ids=("redelivery", "distinct_slot"))
+def test_row5_repeated_claim_keeps_every_raw_delivery_without_recounting(make_rig, same_claim):
+    """ClaimKey=(segment,item_slot), F-b :2768-2778,3484; CE1 :2917-2923.
+
+    Counting a repeated Claim twice fails FIRST/SECOND; dropping its raw delivery fails the distinct-Point check.
+    A new slot is a distinct report, but its identical predicate is entailed and adds likelihood 1 (:2741,2770).
+    """
+    rig = make_rig()
+    rig.drive = lambda predicate: drive_loop_observation(rig, predicate)
+    rig.start()
+    rig.clock.set(2)
+    first = post_row5_claim(rig, slot="row5-original", start=0, end=2)
+    w1 = rig.run_stage("belief_update")
+    rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 1)
+    a1 = rig.facts(c.BELIEF_ADOPTED)[0]
+    assert row5_report_for_work(rig, w1).cid == first.cid
+    assert_update(rig, w1, a1, FIRST)
+    rig.clock.set(3)
+    repeat = post_row5_claim(rig, slot="row5-original" if same_claim else "row5-distinct",
+                            start=0, end=2)
+    assert repeat.cid != first.cid
+    first_key = first.value["segment"], first.value["item_slot"]
+    repeat_key = repeat.value["segment"], repeat.value["item_slot"]
+    assert (repeat_key == first_key) is same_claim
+    assert (repeat.value == first.value) is same_claim
+    rig.clock.set(4)
+    later = post_row5_claim(rig, slot="row5-new-information", start=1, end=3)
+    row5_receive_behind_pending_update(rig, completed=1, token=b"row5-post-behind-repeated-claim")
+    # J1 may coalesce redelivery: its extra Q*/adoption count is not an oracle.
+    # A different slot and the later interval must each be used, even if either is a numerical no-op.
+    required = {later.cid} if same_claim else {repeat.cid, later.cid}
+    used, previous, completed = set(), a1.cid, {w1.request}
+    for number in (2, 3):
+        if number == 2 or not required <= used:
+            rig.drive(lambda: len(rig.requests("belief_update")) >= number)
+        else:
+            rig.settle_steps()
+            if len(rig.requests("belief_update")) < number:
+                break
+        work = rig.run_stage("belief_update")
+        assert work.request not in completed
+        completed.add(work.request)
+        report = row5_report_for_work(rig, work)
+        permitted = {first.cid, repeat.cid, later.cid} if same_claim else {repeat.cid, later.cid}
+        assert report.cid in permitted and report.cid not in used
+        used.add(report.cid)
+        rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == number)
+        adopted = rig.facts(c.BELIEF_ADOPTED)[-1]
+        assert_update(rig, work, adopted, SECOND if later.cid in used else FIRST, previous)
+        previous = adopted.cid
+    assert required <= used
+    assert {raw.cid for raw in rig.facts(c.SEGMENT_REPORT)} >= {first.cid, repeat.cid, later.cid}
+    assert len({first.cid, repeat.cid, later.cid}) == 3
+    assert len(rig.requests("belief_update")) == len(rig.facts(c.BELIEF_ADOPTED)) == len(completed)
+    assert 2 <= len(completed) <= 3
+    assert rig.one(c.UPDATE_RESULT, cid=rig.facts(c.BELIEF_ADOPTED)[-1].value["result"]).value["result"] == SECOND
+
+
+def test_row5_later_interval_arriving_first_has_correct_intermediate_and_final_belief(make_rig):
+    """F-b CE1 :2904-2923 and conjunction :2733-2741; row 5 v2 :35.
+
+    Reversed arrival with wrong intermediate or final weights fails FIRST then SECOND, irrespective of interval time order.
+    E2 alone has Z=(1/4,1/16), weights (1/8,1/32); E2 and E1 have weights (1/16,1/128).
+    """
+    rig = make_rig()
+    rig.drive = lambda predicate: drive_loop_observation(rig, predicate)
+    rig.start()
+    previous = None
+    for number, (start, end, expected) in enumerate(((1, 3, FIRST), (0, 2, SECOND)), 1):
+        rig.clock.set(number + 2)
+        report = post_row5_claim(rig, slot=f"row5-reversed-{number}", start=start, end=end)
+        if number == 1:
+            row5_receive_behind_pending_update(rig, completed=0, token=b"row5-post-behind-reversed-report")
+        work = rig.run_stage("belief_update")
+        assert row5_report_for_work(rig, work).cid == report.cid
+        rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == number)
+        adopted = rig.facts(c.BELIEF_ADOPTED)[-1]
+        assert_update(rig, work, adopted, expected, previous)
+        previous = adopted.cid
+    assert len(rig.requests("belief_update")) == len(rig.facts(c.BELIEF_ADOPTED)) == 2
+
+
+def test_row5_delayed_reports_keep_their_interval_evidence_and_are_adopted(make_rig):
+    """F-b :2605,2733-2741,2917-2923,3484; row 5 v2 :35.
+
+    Discarding old reports fails the saved-Point/adoption checks; using receipt age as likelihood fails FIRST/SECOND.
+    """
+    rig = make_rig()
+    rig.drive = lambda predicate: drive_loop_observation(rig, predicate)
+    rig.start()
+    previous = None
+    for number, (start, end, expected) in enumerate(((0, 2, FIRST), (1, 3, SECOND)), 1):
+        received_ns = 10**12 + number
+        rig.clock.set(received_ns)
+        report = post_row5_claim(rig, slot=f"row5-delayed-{number}", start=start, end=end)
+        assert report.received_ns == received_ns and received_ns - end > 10**11
+        assert report.value["item"]["value"]["interval"] == {
+            "clock": str(rig.clock.run), "start_ns": start, "end_ns": end, "closure": "(start,end]"}
+        if number == 1:
+            row5_receive_behind_pending_update(rig, completed=0, token=b"row5-post-behind-delayed-report")
+        work = rig.run_stage("belief_update")
+        assert row5_report_for_work(rig, work).cid == report.cid
+        rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == number)
+        adopted = rig.facts(c.BELIEF_ADOPTED)[-1]
+        assert_update(rig, work, adopted, expected, previous)
+        previous = adopted.cid
+    assert len(rig.facts(c.BELIEF_ADOPTED)) == 2 and rig.thread.is_alive()
+
+
+def test_row5_pending_order_follows_received_time_and_envelope_not_report_sort_keys(make_rig):
+    """K14 F-b :3514; K13 :3513; CE1/conjunction :2733-2741,2904-2923.
+
+    CID sorting fails the source sequence: the fixture rejects both monotone CID orders before any adoption.
+    Reversing reception fails the source sequence of at least three distinct waiting reports.
+    Sorting interval starts fails the source sequence: reception begins with starts 2,0,1.
+    Sorting item_slot names also fails: reception begins with names z,a,m.
+    """
+    rig = make_rig()
+    rig.drive = lambda predicate: drive_loop_observation(rig, predicate)
+    rig.start()
+    rig.clock.set(3)  # equal r throughout: the public envelope observation must break ties
+    first = post_row5_claim(rig, slot="row5-k14-blocker", start=0, end=1)
+    rig.drive(lambda: len(rig.requests("belief_update")) == 1)
+    # Q* for the blocker exists, but its worker has not entered. Three others wait without Q*s.
+    pending = [
+        post_row5_claim(rig, slot="row5-k14-z", start=2, end=3),
+        post_row5_claim(rig, slot="row5-k14-a", start=0, end=2),
+        post_row5_claim(rig, slot="row5-k14-m", start=1, end=2),
+    ]
+    # Actual CIDs include saved IDs/salts. Inspect them rather than assuming a useful hash order.
+    for extra in range(16):
+        posted_points = [report.cid for report in pending]
+        if posted_points not in (sorted(posted_points), sorted(posted_points, reverse=True)):
+            break
+        pending.append(post_row5_claim(rig, slot=f"row5-k14-extra-{extra}", start=1, end=2))
+    posted_points = [report.cid for report in pending]
+    assert posted_points not in (sorted(posted_points), sorted(posted_points, reverse=True)), (
+        "incomplete fixture: CID order did not discriminate reception")
+    measurement = next(work for work in rig.workers.entries if work.desc.purpose == "measure_segment")
+    ctx = rig.workers.contexts["measure_segment"]
+    rig.drive(lambda: set(posted_points) <= {
+        report.point for report in execution_for(ctx, measurement.desc.work_id).reports})
+    witnesses = [report for report in execution_for(ctx, measurement.desc.work_id).reports
+                 if report.point in set(posted_points)]
+    assert len(witnesses) == len(pending)
+    assert {report.received_ns for report in witnesses} == {3}
+    assert len({report.envelope for report in witnesses}) == len(pending)
+    received = sorted(witnesses, key=lambda report: (report.received_ns, report.envelope))
+    received_points = [report.point for report in received]
+    assert received_points == posted_points  # cross-check posting against the host's independent EH
+    by_point = {report.cid: report for report in pending}
+    assert all(by_point[report.point].received_ns == report.received_ns for report in received)
+    assert received_points != sorted(posted_points)
+    assert received_points != list(reversed(received_points))
+    assert received_points != [report.cid for report in sorted(pending,
+        key=lambda report: report.value["item"]["value"]["interval"]["start_ns"])]
+    assert received_points != [report.cid for report in sorted(pending,
+        key=lambda report: report.value["item_slot"])]
+    rig.settle_steps()
+    assert len(rig.requests("belief_update")) == 1
+    assert not [work for work in rig.workers.entries if work.desc.purpose == "belief_update"]
+    assert not rig.facts(c.BELIEF_ADOPTED)
+    first_work = rig.run_stage("belief_update")
+    rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 1)
+    first_adopted = rig.facts(c.BELIEF_ADOPTED)[0]
+    one_point = {"joint": [[2, 3], [1, 3]], "evidence_mass": [3, 8]}
+    assert row5_report_for_work(rig, first_work).cid == first.cid
+    assert_update(rig, first_work, first_adopted, one_point)
+    previous, actual_points, adoptions = first_adopted.cid, [], [first_adopted]
+    for position, expected_point in enumerate(received_points):
+        number = position + 2
+        rig.drive(lambda: len(rig.requests("belief_update")) == number)
+        work = rig.run_stage("belief_update")
+        actual_points.append(row5_report_for_work(rig, work).cid)
+        assert actual_points == received_points[:position + 1], (
+            "K14 reception order", received_points, "actual sources", actual_points)
+        assert actual_points[-1] == expected_point
+        rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == number)
+        adopted = rig.facts(c.BELIEF_ADOPTED)[-1]
+        # x1=0, then x3=0 -> two zeros (FIRST); adding x2=0 -> SECOND; the rest is entailed.
+        assert_update(rig, work, adopted, FIRST if position == 0 else SECOND, previous)
+        previous = adopted.cid
+        adoptions.append(adopted)
+    assert actual_points == received_points
+    assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == len(pending) + 1
+    assert rig.facts(c.BELIEF_ADOPTED) == adoptions
+    assert [a.value["previous"] for a in adoptions] == [None] + [a.cid for a in adoptions[:-1]]
