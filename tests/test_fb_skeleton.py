@@ -251,7 +251,7 @@ def boot(initial=False):
             draw=method("test.draw"), prepare_budget=budget(), evaluate_budget=budget(),
             allocation=allocation("thinking-allocation"),
             derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
-                contract=c.RECEIVED_UPDATE, args=delta_args))))
+                contract=c.SAVED_SEGMENT_UPDATE, args=delta_args)), continuation=None))
     return fb.Boot(declaration=fb.BootDeclaration(
         capacity=fb.QuantityValue(contract=c.SEATS, value=2),
         scope=slot("scope", c.RESOURCE_SCOPE, fb.ResourceScope(
@@ -318,7 +318,7 @@ def args_by_stage():
         "measure_segment": fb.SegmentArgs(route=point("route"), requested=interval(), start_reason="bootstrap"),
         "candidate_generation": fb.CandidateArgs(model=point("model"), generator_args={}, basis=()),
         "belief_update": fb.UpdateArgs(model=point("model"), prior=None,
-            observations=(point("segment-report"),)),
+            observations=(fb.ObservationUse(binding=point("segment-binding"), reading=point("reading")),)),
         "evaluation_prepare": fb.EvaluationPrepareArgs(input=f.FFactsRequest(
             fixed_parents=(point("boundary"),), model=point("model"), candidates=point("CG"),
             preferences=(), scope=f.EvaluationScope(name="one_step", version="1", H_ns=None, source=None),
@@ -471,10 +471,6 @@ def issued_kwargs():
                 application_digest=point("application"), numerical_view=fixed, registry_key="registry")
 
 
-def fixture_budget():
-    return RateBudget(tolerance=Fraction(1, 100), max_cells=10, max_terms=10, max_refinements=10)
-
-
 @pytest.mark.parametrize("name", ORIGINAL_GAP_IDS)
 def test_contract_gap_replacement(name):
     if name == "CG-ENV":
@@ -504,7 +500,7 @@ def test_contract_gap_replacement(name):
         issue = u2.RejectedIssue(code="shape", fields=("/request",), evidence=frozenset(), message="bad shape")
         response = u2.Rejected(request=point("Q"), issues=(issue,))
         assert response.request == point("Q") and isinstance(response, get_args(u2.UpdateReturn))
-        assert set(signature(u2.compute_finite_update).parameters) == {"request", "reader", "registry", "evidence", "budget"}
+        assert set(signature(u2.compute_finite_update).parameters) == {"request", "reader", "registry", "evidence"}
     elif name == "CG-STATUS-VIEW":
         status = fb.FStatus(**status_examples())
         for item in (status.receipts[0].slots[0], status.works[0], status.readings[0], status.pending[0],
@@ -582,7 +578,7 @@ FB_FIELD_SPEC = {
     "ResourceScope": "quantity_contract:ContractRef;need:MethodCall",
     "Allocation": "scope_slot:str;amount:QuantityValue",
     "BootstrapRoute": "config:RouteConfig;process_slot:str;allocation:SlotValue;reading_contract:ContractRef|None",
-    "InitialProcess": "process_slot:str;reader_slot:str;model:Point;generator:MethodCall;method:MethodCall;draw:MethodCall;prepare_budget:RateBudget;evaluate_budget:RateBudget;allocation:SlotValue;derivation:SlottedMethod",  # v0.26 §6-9 H3・H4
+    "InitialProcess": "process_slot:str;reader_slot:str;model:Point;generator:MethodCall;method:MethodCall;draw:MethodCall;prepare_budget:RateBudget;evaluate_budget:RateBudget;allocation:SlotValue;derivation:SlottedMethod;continuation:MethodCall|None",  # v0.26 §6-9 H3・H4、§6-10 J6・K1 (Z41: 更新の上限の欄は無い)
     "Environment": "data:ImmutableJSON",
     "BootDeclaration": "capacity:QuantityValue;scope:SlotValue;routes:tuple[SlotValue,...];initial:SlotValue|None;environment:SlotValue",
     "ReadingClock": "source:Point;reading:ClockReading",
@@ -607,7 +603,8 @@ FB_FIELD_SPEC = {
     "Ongoing": "clock:Ref",
     "SegmentArgs": "route:Point;requested:MeasurementInterval|Ongoing;start_reason:str",
     "CandidateArgs": "model:Point;generator_args:ImmutableJSON;basis:tuple[Point,...]",
-    "UpdateArgs": "model:Point;prior:Point|None;observations:tuple[Point,...]",
+    "ObservationUse": "binding:Point;reading:Point",  # v0.27 §6-10 J2
+    "UpdateArgs": "model:Point;prior:Point|None;observations:tuple[ObservationUse,...]",  # v0.27 §6-10 J2 (Z41: 上限の欄は無い)
     "EvaluationPrepareArgs": "input:FFactsRequest;compiler:ContractRef;budget:RateBudget",  # v0.26 §6-9 H3
     "DrawArgs": "prepared:Point;stream_id:str;request:DrawRequest",
     "EvaluationArgs": "evaluation_request:Point;prepared:Point;draw:Point;budget:RateBudget",  # v0.26 §6-9 H3
@@ -817,11 +814,11 @@ def test_stage3_independent_evidence_contrasts_are_constructible(contrast):
     reader = SimpleNamespace(entry=ledger.entry, entries=ledger.entries, record=ledger.record,
         ancestors=ledger.ancestors, sealed_content=lambda cid: (
             components.contents.get(ledger.entry(cid).seal)[0], ledger.record(cid).body.content))
-    call = dict(request=point("Q"), reader=reader, registry=test_registry(), budget=fixture_budget())
+    call = dict(request=point("Q"), reader=reader, registry=test_registry())
     good_call, bad_call = dict(call, evidence=legal), dict(call, evidence=illegal)
     signature(u2.compute_finite_update).bind(**good_call)
     signature(u2.compute_finite_update).bind(**bad_call)
     good_input, bad_input = (raw, good_call), (raw, bad_call)
     assert good_input[0] is bad_input[0] and legal != illegal
-    for key in ("request", "reader", "registry", "budget"):
+    for key in ("request", "reader", "registry"):
         assert good_call[key] is bad_call[key]

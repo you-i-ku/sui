@@ -35,7 +35,7 @@ __all__ = [
     "DrawFailure", "DrawUnknown", "DrawOutcome", "SegmentBoundary", "RouteAppliedItem",
     "SegmentItem", "Boot", "ClockDeclared", "Received", "SegmentReport",
     "WorkFinished", "DrawReturned", "FEvent", "Stage", "Trigger", "SegmentArgs",
-    "Ongoing", "CandidateArgs", "UpdateArgs", "EvaluationPrepareArgs", "DrawArgs", "EvaluationArgs",
+    "Ongoing", "CandidateArgs", "ObservationUse", "UpdateArgs", "EvaluationPrepareArgs", "DrawArgs", "EvaluationArgs",
     "WorkArgs", "Desc", "MeasureSegment", "Compute", "Draw", "FWork",
     "Unsaved", "Held", "StatusBasis", "SlotStatus", "ReceiptStatus", "WorkStatus",
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
@@ -142,10 +142,13 @@ class InitialProcess:
     """`sui.fb.initial_process/1`: 最初の過程・読み手・モデル・生成方法・評価方法・割当・
     更新の導出方法 (δ)。δ は保存済みの事実 (受信・区間の報告・Claim など) をきっかけに更新要求 Q* を
     導く差し替えられる方法 (紙 §6-4、TRACE-02)。契約の名前と入力の形は段 3 で決める (§2-5-4 の
-    `sui.fb.received_update/1` は受信だけを火種にしていた)。
+    `sui.fb.received_update/1` は受信だけを火種にしていた)。段 3 で契約を `sui.fb.saved_segment_update/1` に
+    (§6-10 J1・K2: 火種は保存した原報告、結びつき B は要求を作る前提)。
     draw は選択用のくじの生成器 (§6-9 H4、法則と args は F-a で既決の uniform_unit/1・{})。
     prepare_budget・evaluate_budget は評価の準備と、くじからの評価に実際に渡す計算の上限
-    (§6-9 H3)。予算は好み・範囲・費用ではなく、コードの既定値で埋めない。"""
+    (§6-9 H3)。予算は好み・範囲・費用ではなく、コードの既定値で埋めない。信念の更新には固定の上限の
+    欄を置かない (紙 F-b Z41 (a)、Z32 (え))。continuation は採用の後に考え直せる差し替えられる方法
+    (§6-10 J6・K1)。None は考え直す道を置かない。「採用したら必ず考え直す」の規則ではない (D7)。"""
     process_slot: str
     reader_slot: str
     model: Point
@@ -156,6 +159,7 @@ class InitialProcess:
     evaluate_budget: RateBudget
     allocation: SlotValue
     derivation: SlottedMethod
+    continuation: MethodCall | None
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -375,14 +379,23 @@ class CandidateArgs:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
+class ObservationUse:
+    """適用する観測 1 つ (§2-5-19-1): 結びつき B (`segment_binding/1`) と、それを読む読み方
+    (`observation_plan/2` の Point)。同じ B を別の読み方で読める。"""
+    binding: Point
+    reading: Point
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
 class UpdateArgs:
-    """信念の更新 Q* の引数 (紙 §6-2)。Q* は仕事の要求そのもので、別の Q を二重に持たない。
+    """信念の更新 Q* の引数 (紙 §6-2・§6-10 J2)。Q* は仕事の要求そのもので、別の Q を二重に持たない。
     読み手は Desc.reader、固定根 Xnum は Desc.numerical_view、計算して発行する入口 U とその版は
     Desc.method、要る来歴は Desc.input_points。prior は前の採用 A* (None は採用がまだ無い =
-    model.initial)。observations は適用する観測の並び。仕事が自分で作った joint は受けない (§6-3)。"""
+    model.initial)。U が prior から前の結果を解決する (二つを別々に選べる形にしない)。observations は
+    適用する観測の並び。仕事が自分で作った joint は受けない (§6-3)。"""
     model: Point
     prior: Point | None
-    observations: tuple[Point, ...]
+    observations: tuple[ObservationUse, ...]
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)

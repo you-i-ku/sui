@@ -12,7 +12,6 @@ from dataclasses import dataclass as _dataclass
 from typing import Literal as _Literal, TypeAlias as _TypeAlias
 
 from .f import FReader, FRegistry, ImmutableJSON, MeasurementInterval, Point, _FactoryHandle
-from .rate import RateBudget
 
 __all__ = [
     "fb_registry_v1", "FixedViewValue", "VerificationNeed", "RejectedIssue",
@@ -173,11 +172,12 @@ class TargetEvidence:
 
 def compute_finite_update(
     request: Point, *, reader: FReader, registry: FRegistry,
-    evidence: TargetEvidence, budget: RateBudget,
+    evidence: TargetEvidence,
 ) -> UpdateReturn:
     """入口 U `sui.f.finite_update_compute/1` (紙 v0.25 §6-3)。保存済みの更新要求 Q* から読み手・
     モデル・固定根・前の採用・観測の並びを解決し、保存した一次事実と境目の実観測だけを読んで、
     宣言の解決・生成の対応・入力の実取得と実使用・固定根・適用の履歴を確かめ、§2-5-19 の数学で
-    計算して発行する。F-b から完成した joint を受け取る引数は無い。入口で要求を構成できない不正や
+    計算して発行する。F-b から完成した joint を受け取る引数は無い。固定の上限の引数も無い (紙 F-b
+    Z41 (a)、Z32 (え): 計算は有理数の厳密な算術で、終わるまで続ける)。入口で要求を構成できない不正や
     物理的な欠落は例外 (三枝に無理に写さない)。"""
     raise NotImplementedError("段 3")
