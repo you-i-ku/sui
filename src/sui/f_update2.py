@@ -11,21 +11,60 @@ VerifiedFiniteUpdate・TargetVerificationReturn) をやめ、U が一次事実�
 from dataclasses import dataclass as _dataclass
 from typing import Literal as _Literal, TypeAlias as _TypeAlias
 
-from .f import FReader, FRegistry, ImmutableJSON, MeasurementInterval, Point, _FactoryHandle
+from .f import ContractValue, FReader, FRegistry, ImmutableJSON, MeasurementInterval, Point, _FactoryHandle
 
 __all__ = [
     "fb_registry_v1", "FixedViewValue", "VerificationNeed", "RejectedIssue",
     "InsufficientIssue", "IssuedUpdate", "Rejected", "Insufficient", "UpdateReturn",
     "LaunchResult", "ReportObservation", "ExecutionObservation", "UseObservation", "IntervalObservation",
     "AcquisitionObservation", "TargetEvidence",
-    "compute_finite_update",
+    "compute_finite_update", "update_response",
 ]
 
 
 def fb_registry_v1() -> FRegistry:
     """旧の宣言の集合と実装の識別をそのまま含み、`finite_update/2` と入口 U ほか §2-5-19・§6-3 の能力を
-    足した別の不変の registry (§2-4-8 の 2)。registry_key は全部の宣言と実装の識別から求まる。"""
-    raise NotImplementedError("段 3")
+    足した別の不変の registry (§2-4-8 の 2)。registry_key は全部の宣言と実装の識別から求まる。
+
+    最初の輪 (Z41) で足すのは、δ・入口 U・継続の方法と、U が読む読み方・法則・意味の契約。これらの意味は
+    窓口と入口 U の版で閉じていて、能力の呼出しの規約からは呼ばない (呼ばれたら algorithm_unavailable)。
+    宣言と実装の識別の対として registry_key に結ぶ。段 2 の生成・実行の能力は試験・ホストの側が明示に足す
+    (旧 `_BUILTIN_DECLARATIONS` は増やさない)。"""
+    from .f import CapabilityDeclaration, CapabilityImplementation, builtin_f_registry, make_f_registry
+    from .contracts import ContractRef
+    c = _c()
+    old = builtin_f_registry()
+    empty = ContractRef("sui.f.args.empty", "1")
+    rows = (
+        ("method", c.SAVED_SEGMENT_UPDATE, ContractRef("sui.fb.args.saved_segment_update", "1"),
+         c.SEGMENT_BINDING, c.WORK_REQUESTED),
+        ("method", c.FINITE_UPDATE_COMPUTE, empty, c.WORK_REQUESTED, c.UPDATE_RESPONSE),
+        ("method", c.REUSE_CANDIDATES, empty, c.BELIEF_ADOPTED, c.EVALUATION_REQUESTED),
+        ("method", c.OBSERVATION_PLAN_2, empty, c.SEGMENT_BINDING, c.FINITE_SEGMENT_PROJECTION),
+        ("projection", c.FINITE_SEGMENT_PROJECTION, ContractRef("sui.fb.args.finite_segment_projection", "1"),
+         c.SEGMENT_REPORT, c.FINITE_JOINT_COUNT_LAW),
+        ("projection", c.NO_ARRIVAL, empty, c.SEGMENT_REPORT, c.FINITE_JOINT_COUNT_LAW),
+        ("generation", c.FINITE_JOINT_COUNT_LAW, empty, c.SEGMENT_REQUESTED, c.FINITE_JOINT_COUNT_LAW),
+        ("generation", c.BOOTSTRAP_GENERATION, ContractRef("sui.fb.args.bootstrap_generation", "1"),
+         c.SEGMENT_BINDING, c.SEGMENT_BINDING),
+        ("clock", c.SEGMENT_VALUE_ONLY, empty, c.SEGMENT_REPORT, c.SEGMENT_REPORT),
+    )
+    declarations = tuple(CapabilityDeclaration(kind=kind, ref=ref, args_contract=args, input_contract=inp,
+                                               output_contract=out, dependencies=(), conditions=())
+                         for kind, ref, args, inp, out in rows)
+    implementations = tuple(CapabilityImplementation(kind=kind, ref=ref, implementation=_ExecutedByEntrance(),
+                                                     identity="sui.fb.first_loop/1:" + ref.name + "/" + ref.version)
+                            for kind, ref, *_ in rows)
+    return make_f_registry(declarations=old.declarations + declarations,
+                           implementations=old.implementations + implementations)
+
+
+class _ExecutedByEntrance:
+    """最初の輪の契約の意味は窓口と入口 U の版にある。能力の呼出しの規約から呼ばれたら不足として示す。"""
+
+    def __call__(self, *, args, input, context):
+        from .f import FIncomplete
+        raise FIncomplete("algorithm_unavailable", "executed by the F-b window and entrance U, not as a capability")
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -216,6 +255,22 @@ def compute_finite_update(
                                       reader_view_key=view["environment"]["reader_view_key"],
                                       registry_key=view["environment"]["registry_key"]),
         registry_key=registry_view_key(registry)))
+
+
+def update_response(returned: UpdateReturn) -> ContractValue:
+    """入口 U の返答を、仕事 Wu が返す `sui.fb.update_response/1` の値にする。三枝は
+    {kind: issued, value: finite_update_result/1 の値} / {kind: rejected, value: {issues}} /
+    {kind: insufficient, value: {issues}}。発行物そのもの (IssuedUpdate) は値に入らないので、
+    仕事は報告と一緒に口へ渡す (FWorkContext.post の issued)。"""
+    if isinstance(returned, IssuedUpdate):
+        value = {"kind": "issued", "value": returned.result}
+    elif isinstance(returned, Rejected):
+        value = {"kind": "rejected", "value": {"issues": [_enc(i) for i in returned.issues]}}
+    elif isinstance(returned, Insufficient):
+        value = {"kind": "insufficient", "value": {"issues": [_enc(i) for i in returned.issues]}}
+    else:
+        raise TypeError("UpdateReturn expected")
+    return ContractValue(contract=_c().UPDATE_RESPONSE, value=value)
 
 
 # --- 入口 U の中身 (一次事実からの再計算、§2-5-19-1・19-3・19-8) ---

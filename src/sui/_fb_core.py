@@ -68,6 +68,7 @@ class State:
         self.work_conflicts: list = []   # 同じ WorkId を名乗った違う仕事 (上書きしない、R08)
         self.routes: dict = {}         # 実適用した受け口: route_epoch → (RouteConfig, M の読み) (G2・R01)
         self.thinking: dict = {}       # P.units: Qgen の WorkId → 考える過程の計画 (_fb_think.ThinkPlan)
+        self.updates: dict = {}        # P.units: Boot の封筒の番号 → 信念の更新の計画 (_fb_update.UpdatePlan)
         self.clock_sources: dict = {}  # P.units: 時計の知らせの Point → 発行する sui.clock.source/1 の Slot (K1)
 
 
@@ -177,7 +178,7 @@ def save(state, slot) -> None:
 def settle(state) -> None:
     """原報告を 1 点ずつ保存し、保存した Boot から起動の計画を置いて進め、考える過程を進める。
     Need はロックの外で固定した入力で呼ぶ (§6-9 H10: 差し替えられる方法が戻らない時に Post を止めない)。"""
-    from . import _fb_bind, _fb_boot, _fb_think
+    from . import _fb_bind, _fb_boot, _fb_think, _fb_update
     try:
         with state.lock:
             for number in list(state.order):
@@ -193,6 +194,7 @@ def settle(state) -> None:
                 _fb_boot.advance(state, plan)
             _fb_think.advance(state)
             _fb_bind.bind(state)
+            _fb_update.advance(state)
     finally:
         # 保存の故障で途中から例外を上げる時も、置いた行の Need は求めておく (行と義務は残る)
         with state.lock:
@@ -590,12 +592,16 @@ class WorkContext:
         return evidence(self._state)
 
     def reader(self):
-        """その仕事の Desc の numerical_view の境界と input_points の閉包だけの読み手 (§6-9 H5)。"""
+        """その仕事の Desc の numerical_view の境界と input_points の閉包だけの読み手 (§6-9 H5)。
+        信念の更新 Wu では、その閉包に要求 Q* 自身を足す (入口 U は Q* を読む。Q* を固定根 Xnum には
+        入れない、§6-10 J2)。"""
         from ._fb_boot import _Closure
         desc = self._row.work.desc
         boundary = set(desc.input_points)
         if desc.numerical_view is not None:
             boundary |= desc.numerical_view.boundary
+        if desc.purpose == "belief_update":
+            boundary.add(self._row.work.request)
         return _Closure(self._state.ledger, frozenset(boundary)) if boundary else None
 
     def prepared(self):

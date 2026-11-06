@@ -688,7 +688,7 @@ def test_public_export_names_are_exact():
     assert set(fb.__all__) == set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
         "FbInputError", "FbHostFault", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost"}
     assert set(u2.__all__) == set(UPDATE_FIELD_SPEC) | set(UPDATE_ALIAS_SPEC) | {
-        "fb_registry_v1", "compute_finite_update"}
+        "fb_registry_v1", "compute_finite_update", "update_response"}
 
 
 def declaration_names(surface=fb):
