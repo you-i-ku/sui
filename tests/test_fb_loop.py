@@ -1372,3 +1372,248 @@ def test_row3_next_update_after_late_terminal_uses_current_head_and_keeps_one_ch
     assert [a.value["previous"] for a in adoptions] == [None] + [a.cid for a in adoptions[:-1]]
     assert {a.value["origin"] for a in adoptions} == {rig.one(ORIGIN).cid}
     assert {a.value["model"] for a in adoptions} == {rig.model_point}
+
+
+class Row2AckLoss:
+    """Test adapters around the actual public ledger/stores, never window state."""
+
+    def __init__(self, rig, target, boundary):
+        from hashlib import sha256
+        from test_fb_stage1 import entry_from_header, decode_record, encode_header, seal
+        self.rig, self.target, self.boundary = rig, target, boundary
+        self.ref = {"request": c.WORK_REQUESTED, "terminal": c.WORK_TERMINAL,
+            "result": c.UPDATE_RESULT, "acquisition_clock": CLOCK, "acquisition": ACQUIRED,
+            "adoption": c.BELIEF_ADOPTED, "continuation_request": c.EVALUATION_REQUESTED}[target]
+        self.prepared, self.attempts = None, []
+        self.failed = self.confirmed = False
+        self.loss_error = None
+        self.normal_get, normal_write = rig.contents.get, rig.ledger.write
+        normal_prepare = rig.ledger.prepare
+        self.entry_from_header, self.decode_record, self.seal = entry_from_header, decode_record, seal
+        def observe(cid):
+            # Same independent C/E observer as RealRig, bypassing this test's readback witness.
+            header = dict(rig.entry_store.load())[cid]
+            assert sha256(header).hexdigest() == cid.removeprefix("sha256:")
+            entry = entry_from_header(cid, header)
+            salt, payload = self.normal_get(entry.seal)
+            assert seal(payload, salt) == entry.seal
+            record = decode_record(header, payload)
+            assert encode_header(record, entry.seal, entry.parents) == header
+            return header, salt, record
+        rig.read_stored = observe
+        def prepare(record, parents):
+            if target == "adoption" and self.failed and record.body.contract == c.WORK_REQUESTED:
+                if record.body.content.as_json()["desc"]["purpose"] == "belief_update":
+                    assert self.confirmed, "K9/K13: next Q* prepared before the pending A* was read back"
+            return normal_prepare(record, parents)
+        rig.ledger.prepare = prepare
+        def get(value_seal):
+            is_target = self.prepared is not None and value_seal == self.target_seal
+            value = self.normal_get(value_seal)
+            if self.failed and is_target:
+                if dict(rig.entry_store.load()).get(self.prepared.cid) == self.prepared.header:
+                    self.confirmed = True
+            return value
+        rig.contents.get = get
+        def write(prepared):
+            first = self.prepared is None and self.matches(prepared)
+            if first:
+                self.prepared = prepared
+                self.target_seal = entry_from_header(prepared.cid, prepared.header).seal
+                rig.fail_next(boundary)
+            if self.prepared is not None and not self.confirmed and prepared.record.body.contract == self.ref:
+                self.attempts.append(prepared)
+            try:
+                result = normal_write(prepared)
+            except OSError as error:
+                if first and rig.faults.observed == [boundary]:
+                    self.failed, self.loss_error = True, error
+                    self.body_at_loss = self.normal_get(self.target_seal)
+                    self.header_at_loss = dict(rig.entry_store.load()).get(prepared.cid)
+                raise
+            if self.failed and prepared.cid == self.prepared.cid:
+                self.confirmed = True
+            return result
+        rig.ledger.write = write
+
+    def matches(self, prepared):
+        if prepared.record.body.contract != self.ref:
+            return False
+        value = prepared.record.body.content.as_json()
+        if self.target == "request":
+            return value["desc"]["purpose"] == "belief_update"
+        if self.target == "acquisition_clock":
+            return bool(self.rig.facts(c.UPDATE_RESULT))
+        if self.target == "acquisition":
+            return any(r.cid in value["contents"] for r in self.rig.facts(c.UPDATE_RESULT))
+        return True
+
+    def assert_commit_at_loss(self):
+        prepared = self.prepared
+        salt, payload = self.body_at_loss
+        assert salt == prepared.salt and self.seal(payload, salt) == self.target_seal
+        assert self.decode_record(prepared.header, payload) == prepared.record
+        assert self.header_at_loss == (prepared.header if self.boundary == "after_entry_commit" else None)
+
+
+class Row2Driver:
+    """The test calls run_until again after a store exception; production is not retried by a mock."""
+
+    def __init__(self, rig, cut, on_loss):
+        self.rig, self.cut, self.on_loss = rig, cut, on_loss
+        self.handled = self.handling = False
+        self.calls, self.call_at_loss = 0, None
+        self.executed = {work.desc.work_id for work in rig.workers.entries}
+        rig.drive = self.drive
+
+    def handle_loss(self):
+        self.handled, self.handling, self.call_at_loss = True, True, self.calls
+        try:
+            self.on_loss()
+        finally:
+            self.handling = False
+
+    def drive(self, predicate, *, require_confirmation=True):
+        def done():
+            return predicate() and (not require_confirmation or not self.cut.failed or self.cut.confirmed)
+        for _ in range(16):  # harness watchdog, not a product latency limit
+            self.calls += 1
+            try:
+                self.rig.host.run_until(lambda _status: done(), timeout=2)
+            except OSError as error:
+                if error is self.cut.loss_error and not self.handled:
+                    self.handle_loss()
+                    continue  # a new public run_until call, without executing the worker again
+                raise
+            if self.cut.failed and not self.handled:
+                self.handle_loss()
+                continue
+            if self.rig.workers.errors:
+                raise self.rig.workers.errors[0]
+            assert done(), "incomplete observation: row 2 transition was not reached"
+            return
+        raise AssertionError("incomplete observation: store acknowledgment did not recover")
+
+    def advance_until(self, predicate):
+        def pending():
+            return [(key, body) for key, body in self.rig.launcher.attempts if key not in self.executed]
+        while not predicate():
+            self.drive(lambda: predicate() or bool(pending()))
+            if predicate():
+                return
+            work_id, body = pending()[0]
+            assert sum(key == work_id for key, _ in self.rig.launcher.attempts) == 1
+            self.executed.add(work_id)
+            body()  # run the host's actual deferred OS body, in its observed launch order
+
+
+def post_row2_claim(driver, *, slot, start, end, wait_saved=True):
+    rig = driver.rig
+    before = {raw.cid for raw in rig.facts(c.SEGMENT_REPORT)}
+    done, errors, sent = Event(), [], []
+    def emit(work, ctx):
+        event = fb.SegmentReport(segment=work.request, item_slot=slot,
+            item=f.CoverageClaim(route_epoch="route-A", interval=f.MeasurementInterval(
+                clock=rig.clock.run, start_ns=start, end_ns=end, closure="(start,end]"),
+                kind="no_arrival", contract=c.NO_ARRIVAL, evidence=()))
+        rig.workers.post(ctx, event)
+        sent.append(event)
+    rig.workers.commands.put((emit, done, errors))
+    assert done.wait(30), "incomplete observation: measurement worker did not post"
+    if errors:
+        raise errors[0]
+    if not wait_saved:
+        return sent[0]  # the real worker's Post completed; EH independently witnesses receipt
+    driver.drive(lambda: any(raw.cid not in before and raw.value == wire(sent[0])
+                            for raw in rig.facts(c.SEGMENT_REPORT)))
+    return next(raw for raw in rig.facts(c.SEGMENT_REPORT)
+                if raw.cid not in before and raw.value == wire(sent[0]))
+
+
+@pytest.mark.parametrize("boundary", ("after_body_commit", "after_entry_commit"))
+@pytest.mark.parametrize("target", ("request", "terminal", "result", "acquisition_clock",
+                                    "acquisition", "adoption", "continuation_request"))
+def test_row2_committed_write_ack_loss_keeps_one_record_and_one_ce1_adoption_chain(make_rig, target, boundary):
+    """Row 2 v2 :17-24,32,64; F-b :324-327,3332,3488,3509,3513; CE1 :2917-2923.
+
+    Regenerating an ID/time/salt changes PreparedEntry or the final target Point and fails exact retry/one-record checks.
+    Treating unknown A* as absent/present fails the prepare-before-readback check; rebuild preserves the pending entry.
+    A permanently stuck update fails the next run_until progression; double counting fails FIRST then SECOND.
+    """
+    rig = make_rig(continuation=True)
+    rig.start()
+    cut = Row2AckLoss(rig, target, boundary)
+    second = {}
+    def on_loss():
+        cut.assert_commit_at_loss()
+        rig.clock.set(rig.clock.mono_ns() + 10)  # make regeneration observable without reversing M
+        if target == "adoption":
+            assert not cut.confirmed
+            measurement = next(work for work in rig.workers.entries if work.desc.purpose == "measure_segment")
+            ctx = rig.workers.contexts["measure_segment"]
+            before_receipt = {report.envelope for report in execution_for(ctx, measurement.desc.work_id).reports}
+            receipt_time = rig.clock.mono_ns() + 1
+            rig.clock.set(receipt_time)
+            second["event"] = post_row2_claim(driver, slot="row2-second", start=1, end=3, wait_saved=False)
+            receipt, = (report for report in execution_for(ctx, measurement.desc.work_id).reports
+                        if report.envelope not in before_receipt)
+            assert receipt.received_ns == receipt_time and receipt.point is None
+            event = fb.Received(route_epoch="route-A", media_type="application/octet-stream",
+                                data=b"row2-reception-during-unknown-adoption", claims={})
+            rig.host.post(event)
+            second["received"] = event
+            assert not cut.confirmed and len(rig.requests("belief_update")) == 1
+            assert rig.thread.is_alive()
+            if boundary == "after_entry_commit":
+                before = dict(rig.entry_store.load())
+                rig.host.rebuild_window()
+                assert dict(rig.entry_store.load()) == before
+                assert len(rig.requests("belief_update")) == 1
+    driver = Row2Driver(rig, cut, on_loss)
+    rig.clock.set(10)
+    first = post_row2_claim(driver, slot="row2-first", start=0, end=2)
+    driver.advance_until(lambda: len(rig.facts(c.BELIEF_ADOPTED)) >= 1)
+    a1 = rig.facts(c.BELIEF_ADOPTED)[0]
+    w1 = next(work for work in rig.workers.entries if work.request == a1.value["request"])
+    r1 = assert_update(rig, w1, a1, FIRST)
+    rig.clock.set(max(30, rig.clock.mono_ns() + 1))
+    if "event" in second:
+        driver.drive(lambda: any(raw.value == wire(second["event"]) for raw in rig.facts(c.SEGMENT_REPORT)))
+        second["report"] = next(raw for raw in rig.facts(c.SEGMENT_REPORT) if raw.value == wire(second["event"]))
+        driver.drive(lambda: any(raw.value == wire(second["received"]) for raw in rig.facts(c.RECEIVED)))
+    else:
+        second["report"] = post_row2_claim(driver, slot="row2-second", start=1, end=3)
+    driver.advance_until(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 2
+        and len(rig.facts(c.SELECTION)) == 3 and cut.failed and cut.confirmed)
+    a2 = rig.facts(c.BELIEF_ADOPTED)[1]
+    w2 = next(work for work in rig.workers.entries if work.request == a2.value["request"])
+    assert_update(rig, w2, a2, SECOND, a1.cid)
+    assert row5_report_for_work(rig, w1).cid == first.cid
+    assert row5_report_for_work(rig, w2).cid == second["report"].cid
+    assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == 2
+    adoptions = rig.facts(c.BELIEF_ADOPTED)
+    assert len(adoptions) == 2 and [a.value["previous"] for a in adoptions] == [None, a1.cid]
+    terminal, = (t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == w1.request)
+    acquired = rig.one(ACQUIRED, cid=a1.value["acquisition"])
+    acquired_clock = rig.one(CLOCK, cid=acquired.value["clock"])
+    eq1 = rig.requests("evaluation_prepare")[1]
+    prepared, = (p for p in rig.facts(c.PREPARED) if p.value["request"] == eq1.cid)
+    assert prepared.value["request"] == eq1.cid
+    assert {trigger["point"] for trigger in eq1.value["desc"]["trigger"]} == {a1.cid}
+    actual_target = {"request": w1.request, "terminal": terminal.cid, "result": r1.cid,
+        "acquisition_clock": acquired_clock.cid, "acquisition": acquired.cid,
+        "adoption": a1.cid, "continuation_request": eq1.cid}[target]
+    assert actual_target == cut.prepared.cid
+    assert driver.handled and cut.failed and cut.confirmed and driver.calls > driver.call_at_loss
+    assert rig.faults.observed == [boundary]
+    assert cut.attempts and all(attempt == cut.prepared for attempt in cut.attempts)
+    assert rig.read_stored(cut.prepared.cid) == (cut.prepared.header, cut.prepared.salt, cut.prepared.record)
+    # This one logical record has the same contract and causal parents throughout its retries.
+    same_preparations = [p for p in rig.ledger.preparations
+                         if p.record.body.contract == cut.ref and p.parents == cut.prepared.parents]
+    assert same_preparations and all(p == cut.prepared for p in same_preparations)
+    assert [fact.cid for fact in rig.facts(cut.ref) if fact.parents == cut.prepared.parents] == [cut.prepared.cid]
+    for work in (w1, w2):
+        assert [ok for key, ok in rig.workers.entry_attempts if key == work.desc.work_id] == [True]
+        observed = execution_for(rig.workers.contexts["measure_segment"], work.desc.work_id)
+        assert observed.launches == ("launched",) and observed.entered == 1 and observed.stopped
