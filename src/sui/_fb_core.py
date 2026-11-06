@@ -10,6 +10,7 @@ from collections.abc import Mapping as _Mapping
 from types import MappingProxyType as _MappingProxyType
 from dataclasses import dataclass as _dataclass, field as _field, fields as _fields,     is_dataclass as _is_dataclass
 from threading import RLock as _RLock
+import sqlite3 as _sqlite3
 
 from . import fb as _fb
 from . import fb_contracts as _c
@@ -43,12 +44,42 @@ class Receipt:
     index: int = 0   # 受付の順 (同じ論理の報告の代表を選ぶ、R18)
 
 
+class _WatchedStore:
+    """台帳とその本文の置き場を包む (§6-10 K16)。ホストが行った置き場の操作が OSError か sqlite3.Error を上げたら、
+    その操作の名前と例外を State に残して、例外はそのまま上げる。回す役は、上がってきた例外がこの観測と同じ物かで
+    「置き場の操作の失敗 (同じ準備のまま入り直せる)」を決める。例外の型だけでは決めない。"""
+    __slots__ = ("_target", "_state", "_prefix")
+
+    def __init__(self, target, state, prefix=""):
+        self._target, self._state, self._prefix = target, state, prefix
+
+    def __getattr__(self, name):
+        value = getattr(self._target, name)
+        if name == "contents":
+            return _WatchedStore(value, self._state, "contents.")
+        if not callable(value) or isinstance(value, type):
+            return value
+        state, operation = self._state, self._prefix + name
+
+        def call(*args, **kwargs):
+            try:
+                return value(*args, **kwargs)
+            except (OSError, _sqlite3.Error) as exc:
+                state.store_failure = (operation, exc)
+                raise
+        return call
+
+
 class State:
     """H と P。ホストが持ち、窓口を作り直しても残る。"""
 
     def __init__(self, *, ledger, clock, workers, registry, launcher):
         self.lock = _RLock()
-        self.ledger = ledger
+        self.ledger = _WatchedStore(ledger, self)
+        self.store_failure = None      # ホストが最後に観測した置き場の操作の失敗 (操作の名前, 例外)
+        self.halted = None             # 止まった理由の Interruption (K16 (3)(c)、紙 Z42)。None は動いている
+        self.interruptions: list = []  # 回す役まで上がった中断 (Interruption、同じプロセスの中だけ)
+        self.round_clean = True        # 前の周が中断なしで通った (続けて同じ中断をまとめる境目)
         self.clock = clock
         self.workers = workers
         self.registry = registry
@@ -135,8 +166,16 @@ def _event_value(event):
     return _encode(event)
 
 
+def require_running(state) -> None:
+    """止まったホスト (K16 (3)(c)) は受付・settle・仕事の開始を進めない。"""
+    if state.halted is not None:
+        raise _fb.FHalted(f"the host halted at {state.halted.operation}: "
+                          f"{state.halted.error_type}: {state.halted.message}")
+
+
 def accept(state, envelope) -> None:
     """Accept: 全欄を比べ、受信の記録の計画と受付の責務を P.receipts に一度に置く (§2-4-2)。"""
+    require_running(state)
     if not isinstance(envelope, _fb.Envelope) or type(envelope.number) is not int \
             or type(envelope.received_ns) is not int:
         raise _fb.FbInputError(reason="shape", field="/envelope")
@@ -179,6 +218,7 @@ def settle(state) -> None:
     """原報告を 1 点ずつ保存し、保存した Boot から起動の計画を置いて進め、考える過程を進める。
     Need はロックの外で固定した入力で呼ぶ (§6-9 H10: 差し替えられる方法が戻らない時に Post を止めない)。"""
     from . import _fb_bind, _fb_boot, _fb_think, _fb_update
+    require_running(state)
     try:
         with state.lock:
             for number in list(state.order):
@@ -464,9 +504,72 @@ def run_until(host, done, timeout) -> bool:
         time.sleep(0.001)
 
 
+def _interrupt(state, kind, operation, exc):
+    """回す役まで上がった中断を、ホストの観測として残す (K16 (4))。続けて同じ中断は 1 つにまとめる。"""
+    try:
+        now = mono_ns(state.clock)
+    except Exception:
+        now = None
+    key = (kind, operation, type(exc).__name__, str(exc))
+    with state.lock:
+        last = state.interruptions[-1] if state.interruptions else None
+        same = last is not None and (last.kind, last.operation, last.error_type, last.message) == key
+        if same and not state.round_clean:
+            item = _fb.Interruption(kind=kind, operation=operation, error_type=key[2], message=key[3],
+                                    first_ns=last.first_ns, last_ns=now, count=last.count + 1)
+            state.interruptions[-1] = item
+        else:
+            item = _fb.Interruption(kind=kind, operation=operation, error_type=key[2], message=key[3],
+                                    first_ns=now, last_ns=now, count=1)
+            state.interruptions.append(item)
+        state.round_clean = False
+    return item
+
+
+def keep_running(host, done, timeout) -> bool:
+    """もう一度回す役 (§6-10 K16、紙 Z42)。run_until と同じ 1 周を回し、ホストが行った置き場の操作の失敗では同じ
+    準備のまま次の周で入り直す。それ以外の例外ではホストを止めて FHalted を上げる (頭の中が信じられない時は回り続け
+    ない)。期限は入口で 1 回だけ決める。done と status の例外は呼び出し側のものとしてそのまま上げる。"""
+    import time
+    deadline = time.monotonic() + timeout
+    state = host._state
+
+    def receive():
+        with state.lock:
+            queued = list(state.queue)
+        for envelope in queued:
+            host.window.accept(envelope)
+
+    stages = (("accept", receive), ("settle", lambda: host.window.settle()), ("start", lambda: start_works(state)))
+    while True:
+        require_running(state)
+        clean = True
+        for name, stage in stages:
+            state.store_failure = None
+            try:
+                stage()
+            except Exception as exc:
+                failure = state.store_failure
+                if failure is not None and failure[1] is exc:
+                    # 置き場の操作の失敗: 窓口の状態はそのまま。次の段 (仕事の開始) は進め、次の周で入り直す
+                    _interrupt(state, "store", failure[0], exc)
+                    clean = False
+                    continue
+                state.halted = _interrupt(state, "halted", name, exc)
+                raise _fb.FHalted(f"the host halted at {name}: {type(exc).__name__}: {exc}") from exc
+        if clean:
+            state.round_clean = True
+        if done(host.window.status()):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.001)
+
+
 def start_works(state) -> None:
     """ClaimStart (占有を確保) → Launch。launched でも本体に入ったかは enter で別に決まる。
     not_started は開始待ちに戻す。unknown と例外は占有を持ったまま出し直さない (§2-4-2)。"""
+    require_running(state)
     with state.lock:
         rows = []
         for row in state.works.values():

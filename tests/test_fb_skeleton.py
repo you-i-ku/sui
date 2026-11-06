@@ -623,6 +623,8 @@ FB_FIELD_SPEC = {
     "SegmentStatus": "segment:Held;cells:tuple[CellStatus,...];ended:bool;evidence:StatusBasis",
     "PurposeStatus": "obligation:Held;o_id:str;condition:Literal['issue','save','run','handle','stop'];role:str;process:BootSlot|None;reader:Point|None;target:Held|None;part:MeasurementInterval|None;handled:bool;handed_to:Held|None;unmet:bool;evidence:StatusBasis",
     "FStatus": "receipts:tuple[ReceiptStatus,...];works:tuple[WorkStatus,...];readings:tuple[ReadingStatus,...];pending:tuple[PendingStatus,...];segments:tuple[SegmentStatus,...];purposes:tuple[PurposeStatus,...]",
+    # F-b v0.62 K16 (4): an interruption that reached the keep_running driver (host observation, in-process only).
+    "Interruption": "kind:Literal['store','halted'];operation:str;error_type:str;message:str;first_ns:int|None;last_ns:int|None;count:int",
 }
 
 FA_FIELD_SPEC = {
@@ -686,7 +688,7 @@ FA_ALIAS_SPEC = {
 
 def test_public_export_names_are_exact():
     assert set(fb.__all__) == set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
-        "FbInputError", "FbHostFault", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost"}
+        "FbInputError", "FbHostFault", "FHalted", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost"}
     assert set(u2.__all__) == set(UPDATE_FIELD_SPEC) | set(UPDATE_ALIAS_SPEC) | {
         "fb_registry_v1", "compute_finite_update", "update_response"}
 

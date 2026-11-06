@@ -27,7 +27,7 @@ from .rate import RateBudget
 from .runtime import Envelope
 
 __all__ = [
-    "FbInputError", "FbHostFault", "MethodCall", "QuantityValue", "SlotValue", "SlottedMethod",
+    "FbInputError", "FbHostFault", "FHalted", "Interruption", "MethodCall", "QuantityValue", "SlotValue", "SlottedMethod",
     "BootSlot", "FixedView", "ResourceScope", "Allocation", "BootstrapRoute",
     "InitialProcess", "Environment", "BootDeclaration", "ReadingClock",
     "ReadingEvidence", "GenerationPair", "FailureInfo", "UnknownInfo",
@@ -61,6 +61,27 @@ class FbHostFault(RuntimeError):
     """ホストの故障 (§2-4-7): 同じ番号の封筒の中身や r の食い違い、ホストの時計の逆転 (r > s)、
     別の run の時計。入力の外側の誤り (FbInputError) とも、失効した窓口 (RuntimeError) とも分ける。
     記録も預かりも作らない。"""
+
+
+class FHalted(RuntimeError):
+    """ホストが止まった (§6-10 K16 (3)(c)、紙 Z42)。回す役 `keep_running` の周の中で、置き場の操作の失敗ではない
+    例外が出た時、窓口の頭の中 (やりかけの計画) は信じられないので、回り続けない。止まったホストは受付・settle・
+    仕事の開始を進めず、これを上げる。Post は受ける。戻るのは記録から立ち上げ直す時 (★ S5)。"""
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class Interruption:
+    """回す役まで上がった中断 (§6-10 K16 (4))。ホストが自分で観測したもので、同じプロセスの中だけに残る (台帳には
+    書かない)。kind="store" は置き場の操作の失敗 (operation はその操作の名前。次の周で入り直す)、kind="halted" は
+    ホストが止まった理由 (operation は周の段 accept・settle・start)。続けて同じ中断は count にまとめ、途中で 1 周でも
+    中断なしで通ったら別のまとまりにする。first_ns・last_ns はホストの run の M の読み (読めなければ None)。"""
+    kind: _Literal["store", "halted"]
+    operation: str
+    error_type: str
+    message: str
+    first_ns: int | None
+    last_ns: int | None
+    count: int
 
 
 # --- 共通値と Boot の入れ子 (§2-5-3) ---
@@ -731,6 +752,27 @@ class FThreadHost:
         timeout を過ぎれば False。timeout の秒数は合否の物差しにしない (F8)。"""
         from . import _fb_core
         return _fb_core.run_until(self, done, timeout)
+
+    def keep_running(self, done: _Callable[[FStatus], bool], *, timeout: float) -> bool:
+        """もう一度回す役 (§6-10 K16)。run_until と同じ 1 周 (受付 → settle → 仕事の開始 → done(status)) を回す。
+        周の中でホストが行った置き場の操作が失敗した時 (OSError・sqlite3.Error をその操作の所で観測) は、窓口の状態を
+        そのままに、同じ準備のまま次の周で入り直す。それ以外の例外ではホストを止めて FHalted を上げる (元の例外が
+        原因)。KeyboardInterrupt・SystemExit、done と status の例外はそのまま上げる。期限は入口で 1 回だけ決め、
+        中断で延ばさない。回数・時間の固定の上限は無い。False は期限まで done が真にならなかったことだけ
+        (仕事の失敗・目的の放棄・再実行の許可ではない)。起きた中断は interruptions() に残る。"""
+        from . import _fb_core
+        return _fb_core.keep_running(self, done, timeout)
+
+    def interruptions(self) -> tuple[Interruption, ...]:
+        """回す役まで上がった中断の列 (古い順)。「繰り返している」は最後の中断の count が増え続けること、「戻れた」は
+        その後に done が真になる・新しい記録が保存されることで見分ける。"""
+        with self._state.lock:
+            return tuple(self._state.interruptions)
+
+    @property
+    def halted(self) -> Interruption | None:
+        """止まったホストの理由。動いている時は None。"""
+        return self._state.halted
 
     def rebuild_window(self) -> FWindow:
         """同じプロセスの中で窓口を作り直して返す (M2)。H・P・C・E と動いている係はそのまま。

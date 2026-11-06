@@ -2500,3 +2500,457 @@ def test_row1_before_first_successor_put_last_four_reads_preserve_progress(row1_
     A missing CG/EV/T/A* after a pre-put read fails R2; duplicate records or repeated work/acquisition fail R1/R2/R3.
     """
     check_row1_prewrite_target(row1_prewrite_profile, from_end)
+
+
+class KeepLauncher(LaunchCut):
+    """Real asynchronous bodies: the test never pumps the host from a worker or launcher."""
+
+    def __init__(self, rig, *, unknown_update=False):
+        super().__init__()
+        self.rig, self.unknown_update = rig, unknown_update
+        self.threads, self.errors, self.launch_errors = [], [], []
+
+    def launch(self, work_id, body):
+        super().launch(work_id, body)
+        request = next(q for stage in (*ORDER, "measure_segment", "belief_update")
+                       for q in self.rig.requests(stage) if q.value["desc"]["work_id"] == work_id)
+        purpose = request.value["desc"]["purpose"]
+        if self.unknown_update and purpose == "belief_update":
+            error = OSError("launcher outcome is unknown, not a store operation")
+            self.launch_errors.append(error)
+            assert len(self.launch_errors) == 1, "unknown launch was retried"
+            self.rig.queue_note("unknown-launch-note")
+            raise error
+        def run():
+            try:
+                body()
+            except BaseException as error:
+                self.errors.append(error)
+        thread = Thread(target=run, daemon=True)
+        self.threads.append(thread)
+        if purpose == "measure_segment":
+            self.rig.thread = thread
+        thread.start()
+        return "launched"
+
+
+class KeepStoreFault:
+    """Fail only a real public store call on the keep_running caller's thread."""
+
+    def __init__(self, rig, *, boundary=None, target="request", times=1,
+                 exception_type=OSError, each_update=False, guard=None):
+        from threading import get_ident
+        self.rig, self.boundary, self.target = rig, boundary, target
+        self.times, self.exception_type, self.each_update, self.guard = times, exception_type, each_update, guard
+        self.enabled, self.runner, self.get_ident = boundary is not None, get_ident(), get_ident
+        self.selected, self.raised, self.counts, self.fixed = [], [], {}, {}
+        self.message = "keep test store temporarily unavailable"
+        put, add, record = rig.contents.put, rig.entry_store.add, rig.ledger.record
+        def put_fault(value_seal, salt, content):
+            prepared = next((p for p in reversed(rig.ledger.preparations)
+                if p.salt == salt and rig.oracle.entry_from_header(p.cid, p.header).seal == value_seal), None)
+            if boundary == "before_body":
+                self.fail(prepared)
+            value = put(value_seal, salt, content)
+            if boundary == "after_body_commit":
+                self.fail(prepared)
+            return value
+        rig.contents.put = put_fault
+        def add_fault(cid, header):
+            value = add(cid, header)
+            if boundary == "after_entry_commit":
+                self.fail(next((p for p in reversed(rig.ledger.preparations) if p.cid == cid), None))
+            return value
+        rig.entry_store.add = add_fault
+        def record_fault(cid):
+            if boundary == "read" and cid in dict(rig.oracle.raw_load()):
+                self.fail(next((p for p in reversed(rig.ledger.preparations) if p.cid == cid), None))
+            return record(cid)
+        rig.ledger.record = record_fault
+
+    def matches(self, prepared):
+        if prepared is None:
+            return False
+        if self.target == "any":
+            return True
+        ref = {"request": c.WORK_REQUESTED, "result": c.UPDATE_RESULT, "adoption": c.BELIEF_ADOPTED}[self.target]
+        if prepared.record.body.contract != ref:
+            return False
+        return self.target != "request" or prepared.record.body.content.as_json()["desc"]["purpose"] == "belief_update"
+
+    def fail(self, prepared):
+        if not self.enabled or self.get_ident() != self.runner or not self.matches(prepared):
+            return
+        if self.selected and not self.each_update and prepared.cid != self.selected[0]:
+            return
+        if prepared.cid not in self.selected:
+            self.selected.append(prepared.cid)
+        count = self.counts.get(prepared.cid, 0)
+        if self.times is not None and count >= self.times:
+            return
+        if self.guard is not None and len(self.raised) >= self.guard:
+            raise RuntimeError("test watchdog: zero-timeout keep_running made extra attempts")
+        self.fixed.setdefault(prepared.cid, tuple(self.rig.ledger.preparations))
+        self.counts[prepared.cid] = count + 1
+        self.rig.clock.set(self.rig.clock.mono_ns() + 1)
+        error = self.exception_type(self.message)
+        self.raised.append(error)
+        raise error
+
+    def assert_preparations(self):
+        headers = dict(self.rig.oracle.raw_load())
+        for snapshot in self.fixed.values():
+            for prepared in snapshot:
+                assert prepared.cid in headers, "R1: fixed preparation was abandoned"
+                assert all(p == prepared for p in self.rig.ledger.preparations if p.record.id == prepared.record.id), \
+                    "R1: fixed preparation changed"
+                assert self.rig.read_stored(prepared.cid) == (prepared.header, prepared.salt, prepared.record)
+
+
+class KeepRig(LoopRig):
+    def __init__(self, *, fault=None, unknown_update=False, hold_update=False):
+        RealRig.__init__(self, connect=False)
+        self.clock.set(0)
+        self.registry, self.thread, self.executed = registry(), None, set()
+        self.workers = Workers(self)
+        self.launcher = KeepLauncher(self, unknown_update=unknown_update)
+        self.post_errors, self.seen, self.first_queued, self.second_queued = [], set(), False, False
+        self.update_gate, self.update_posted = Event(), Event()
+        if hold_update:
+            def held_update(work, ctx):
+                assert self.update_gate.wait(60), "incomplete observation: update gate was not released"
+                event, issued = self.workers.normal(work, ctx)
+                self.workers.post(ctx, event, issued)
+                self.update_posted.set()
+            self.workers.overrides["belief_update"] = held_update
+        self.document, _ = finite_world("FA01")
+        model = self.record(Prediction(target="model.11", about=(), basis=(),
+            content=Payload.json({"document": self.document}), contract=contract("sui.f.model_source")),
+            RefKind.PREDICTION, Role.MODEL)
+        self.model_point = self.ledger.append(model, ()).cid
+        event = boot(True)
+        initial = replace(event.declaration.initial.value, model=self.model_point,
+            generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}),
+            method=fb.MethodCall(contract=contract("sui.f.finite_evaluation"), args={}),
+            draw=fb.MethodCall(contract=contract("stage2.scripted_draw"), args={}),
+            prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET,
+            derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(contract=c.SAVED_SEGMENT_UPDATE, args=delta_args())),
+            continuation=fb.MethodCall(contract=c.REUSE_CANDIDATES, args={}))
+        self.boot_input = replace(event, declaration=replace(event.declaration,
+            initial=replace(event.declaration.initial, value=initial),
+            routes=tuple(replace(route, value=replace(route.value, config=replace(route.value.config,
+                sampling_contract=contract("sui.f.finite_measurement"),
+                clock_contract=contract("sui.f.simulated_clock")))) for route in event.declaration.routes)))
+        self.oracle = Row1StoreCut(self, "request", "keep-oracle")
+        add = self.entry_store.add
+        def observed_add(cid, header):
+            value = add(cid, header)
+            if cid not in self.seen:
+                self.seen.add(cid)
+                saved = self.read_stored(cid)[2]
+                if saved.body.contract == c.SELECTION and not self.first_queued:
+                    self.first_queued = True
+                    self.queue_claim("keep-first", 0, 2)
+                if saved.body.contract == c.BELIEF_ADOPTED and not self.second_queued:
+                    self.second_queued = True
+                    self.queue_claim("keep-second", 1, 3)
+            return value
+        self.entry_store.add = observed_add
+        self.fault = KeepStoreFault(self, **(fault or {}))
+        self.host = fb.FThreadHost(ledger=self.ledger, clock=self.clock, workers=self.workers,
+                                  registry=self.registry, launcher=self.launcher)
+        self.host.post(fb.ClockDeclared(declaration=replace(source(), run=self.clock.run,
+            measurement=contract("sui.f.simulated_clock"))))
+        self.host.post(self.boot_input)
+
+    def queue_claim(self, slot, start, end):
+        def post(work, ctx):
+            self.clock.set(self.clock.mono_ns() + 10)
+            self.workers.post(ctx, fb.SegmentReport(segment=work.request, item_slot=slot,
+                item=f.CoverageClaim(route_epoch="route-A", interval=f.MeasurementInterval(
+                    clock=self.clock.run, start_ns=start, end_ns=end, closure="(start,end]"),
+                    kind="no_arrival", contract=c.NO_ARRIVAL, evidence=())))
+        self.workers.commands.put((post, Event(), self.post_errors))
+
+    def queue_note(self, slot):
+        done = Event()
+        def post(work, ctx):
+            self.workers.post(ctx, fb.SegmentReport(segment=work.request, item_slot=slot,
+                item=f.MeasurementUnavailable(route_epoch="route-A", requested_interval=f.MeasurementInterval(
+                    clock=self.clock.run, start_ns=0, end_ns=2, closure="(start,end]"),
+                    reason="test reception while another operation cannot progress", evidence=())))
+        self.workers.commands.put((post, done, self.post_errors))
+        return done
+
+    def complete(self, _status):
+        errors = self.workers.errors + self.launcher.errors + self.post_errors
+        if errors:
+            raise errors[0]
+        return len(self.facts(c.BELIEF_ADOPTED)) == 2 and len(self.facts(c.SELECTION)) == 3
+
+    def assert_loop(self):
+        assert self.complete(None)
+        adoptions = self.facts(c.BELIEF_ADOPTED)
+        for adopted, expected, prior in ((adoptions[0], FIRST, None), (adoptions[1], SECOND, adoptions[0].cid)):
+            work = next(w for w in self.workers.entries if w.request == adopted.value["request"])
+            assert_update(self, work, adopted, expected, prior)
+        assert [a.value["previous"] for a in adoptions] == [None, adoptions[0].cid]
+        assert len(self.requests("belief_update")) == len(self.facts(c.UPDATE_RESULT)) == 2
+        assert len(self.requests("evaluation_prepare")) == len(self.facts(c.PREPARED)) == 3
+        assert len(self.requests("evaluation")) == len(self.facts(c.EVALUATED)) == 3
+        assert len(self.requests("selection_draw")) == len(self.facts(contract("sui.f.draw_fact"))) == 3
+        assert len(self.workers.entries) == len(self.launcher.attempts) == 13, "R3: extra launch/body"
+        ctx = self.workers.contexts["measure_segment"]
+        for work in self.workers.entries:
+            assert [ok for key, ok in self.workers.entry_attempts if key == work.desc.work_id] == [True]
+            observed = execution_for(ctx, work.desc.work_id)
+            assert observed.entered == 1 and observed.launches == ("launched",)
+            if work.desc.purpose not in ("measure_segment", "selection_draw"):
+                assert len([t for t in self.facts(c.WORK_TERMINAL) if t.value["request"] == work.request]) == 1
+        assert len([event for event, _ in self.workers.sent if isinstance(event, fb.DrawReturned)]) == 3
+        for result in self.facts(c.UPDATE_RESULT):
+            assert len([a for a in ctx.evidence().acquisitions if result.cid in a.contents]) == 1, "R3: repeated acquisition"
+            assert len([g for g in self.facts(ACQUIRED) if result.cid in g.value["contents"]]) == 1
+        self.fault.assert_preparations()
+        assert self.host.halted is None
+
+    def snapshot(self):
+        return tuple((cid, self.read_stored(cid)) for cid, _ in self.oracle.raw_load())
+
+    def close(self):
+        self.update_gate.set()
+        self.workers.release.set()
+        for thread in self.launcher.threads:
+            thread.join(30)
+            assert not thread.is_alive(), "incomplete observation: test worker did not stop"
+
+
+def assert_keep_interruption(interruption, error, *, kind, count):
+    assert isinstance(interruption, fb.Interruption) and interruption.kind == kind
+    assert interruption.operation
+    # The contract does not choose qualified versus unqualified Python type spelling.
+    assert interruption.error_type in (type(error).__name__, type(error).__module__ + "." + type(error).__name__)
+    assert interruption.message == str(error) and interruption.count == count
+    assert isinstance(interruption.first_ns, int) and isinstance(interruption.last_ns, int)
+    assert interruption.first_ns <= interruption.last_ns
+
+
+@pytest.mark.parametrize(("boundary", "target", "times", "error_kind"), (
+    ("before_body", "request", 1, "os"),
+    ("before_body", "request", 3, "os"),
+    ("after_body_commit", "result", 1, "os"),
+    ("after_entry_commit", "adoption", 1, "os"),
+    ("read", "result", 1, "os"),
+    ("read", "result", 3, "os"),
+    ("read", "result", 3, "sqlite"),
+))
+def test_keep_running_one_call_recovers_store_interruptions_without_extra_effects(boundary, target, times, error_kind):
+    """K16 :3516 (1)-(4), CE1 :2917-2923: one keep_running call owns every retry.
+
+    Escaping/stopping on a store error or losing a successor fails mandatory completion/FIRST/SECOND.
+    Re-preparing/re-adopting/relaunching/redrawing/reacquiring fails the fixed-record/one-chain/effect witnesses.
+    Missing/splitting/clearing interruption history fails its single entry/count and retained snapshot.
+    """
+    import sqlite3
+    error_type = OSError if error_kind == "os" else sqlite3.OperationalError
+    rig = KeepRig(fault={"boundary": boundary, "target": target, "times": times, "exception_type": error_type})
+    try:
+        assert rig.host.keep_running(rig.complete, timeout=60) is True
+        rig.assert_loop()
+        assert len(rig.fault.raised) == times
+        history = rig.host.interruptions()
+        assert len(history) == 1
+        assert_keep_interruption(history[0], rig.fault.raised[0], kind="store", count=times)
+        assert rig.host.interruptions() == history
+    finally:
+        rig.close()
+
+
+def test_keep_running_separates_identical_interruptions_after_a_successful_round():
+    """K16 (4): Q1 and Q2 have identical store exceptions with successful rounds between them.
+
+    Merging across success, splitting consecutive failures, or clearing on success fails two retained counts of three.
+    """
+    rig = KeepRig(fault={"boundary": "before_body", "times": 3, "each_update": True})
+    try:
+        assert rig.host.keep_running(rig.complete, timeout=60) is True
+        rig.assert_loop()
+        assert len(rig.fault.raised) == 6 and len(rig.fault.selected) == 2
+        first, second = rig.host.interruptions()
+        for item in (first, second):
+            assert_keep_interruption(item, rig.fault.raised[0], kind="store", count=3)
+        assert (first.operation, first.error_type, first.message) == (second.operation, second.error_type, second.message)
+        assert first.last_ns <= second.first_ns
+        assert rig.host.interruptions() == (first, second)
+    finally:
+        rig.close()
+
+
+def test_keep_running_persistent_store_times_out_then_resumes_same_preparation():
+    """K16 (5): a deadline is not success or abandonment; Post survives the outage.
+
+    Inventing R*/A*, losing the received probe, or discarding a preparation on deadline fails the saved facts.
+    Resetting counts or stopping retrying fails count == actual failures >= 2; repair must finish without extra effects.
+    """
+    rig = KeepRig(fault={"boundary": "before_body", "target": "result", "times": None}, hold_update=True)
+    try:
+        assert rig.host.keep_running(lambda _s: "belief_update" in rig.workers.contexts, timeout=60) is True
+        rig.update_gate.set()
+        assert rig.update_posted.wait(30), "incomplete observation: held update did not post"
+        assert rig.host.keep_running(rig.complete, timeout=1) is False
+        assert len(rig.fault.raised) >= 2, "incomplete observation: persistent failure did not repeat"
+        history = rig.host.interruptions()
+        assert len(history) == 1
+        assert_keep_interruption(history[0], rig.fault.raised[0], kind="store", count=len(rig.fault.raised))
+        assert not rig.facts(c.UPDATE_RESULT) and not rig.facts(c.BELIEF_ADOPTED)
+        assert rig.host.halted is None and rig.thread.is_alive()
+        probe = fb.Received(route_epoch="route-A", media_type="application/octet-stream", data=b"post-during-store-outage", claims={})
+        rig.host.post(probe)
+        rig.fault.enabled = False
+        assert rig.host.keep_running(rig.complete, timeout=60) is True
+        rig.assert_loop()
+        assert len([r for r in rig.facts(c.RECEIVED) if r.value == wire(probe)]) == 1
+        assert rig.host.interruptions() == history
+    finally:
+        rig.close()
+
+
+def test_keep_running_halts_on_non_store_error_and_guards_every_advancing_entry():
+    """K16 (3)(c), Z42 :3740: a RuntimeError from a store port must halt, not recover.
+
+    Retrying non-store errors, advancing after halt, rejecting Post, or stopping measurement fails these public witnesses.
+    """
+    rig = KeepRig(fault={"boundary": "before_body", "exception_type": RuntimeError})
+    try:
+        with pytest.raises(fb.FHalted) as caught:
+            rig.host.keep_running(rig.complete, timeout=60)
+        assert len(rig.fault.raised) == 1 and caught.value.__cause__ is rig.fault.raised[0]
+        halted = rig.host.halted
+        assert_keep_interruption(halted, rig.fault.raised[0], kind="halted", count=1)
+        assert halted.operation == "settle" and rig.host.interruptions()[-1] == halted
+        before = rig.snapshot()
+        probe = fb.Received(route_epoch="route-A", media_type="application/octet-stream", data=b"post-after-halt", claims={})
+        envelope = rig.envelope(10000, probe, rig.clock.mono_ns())
+        entries = (
+            lambda: rig.host.keep_running(lambda _s: True, timeout=0),
+            lambda: rig.host.run_until(lambda _s: True, timeout=0),
+            rig.host.window.settle,
+            lambda: rig.host.window.accept(envelope),
+        )
+        for advance in entries:
+            with pytest.raises(fb.FHalted):
+                advance()
+            assert rig.snapshot() == before
+        rig.host.post(probe)
+        done = rig.queue_note("halted-worker-note")
+        assert done.wait(30) and not rig.post_errors
+        assert rig.thread.is_alive() and rig.snapshot() == before
+        work = next(w for w in rig.workers.entries if w.desc.purpose == "measure_segment")
+        observed = execution_for(rig.workers.contexts["measure_segment"], work.desc.work_id)
+        assert observed.entered == 1 and not observed.stopped and any(r.point is None for r in observed.reports)
+        assert not rig.facts(c.UPDATE_RESULT) and not rig.facts(c.BELIEF_ADOPTED)
+    finally:
+        rig.close()
+
+
+def test_keep_running_clock_oserror_is_halted_not_misclassified_as_store():
+    """K16 (3)(a)/(c): provenance, not exception class, determines store recovery.
+
+    Classifying the clock provider's OSError as storage continues or records kind=store, failing this test.
+    """
+    from threading import get_ident
+    error = OSError("clock.now is not a store operation")
+    rig, calls, caller = KeepRig(), [], get_ident()
+    now = rig.clock.now
+    def fail_clock():
+        claims = {r.cid for r in rig.facts(c.SEGMENT_REPORT) if r.value["item"]["kind"] == "claim"}
+        ready = any(b.value["report"] in claims for b in rig.facts(c.SEGMENT_BINDING))
+        if get_ident() == caller and ready and not rig.requests("belief_update") and not calls:
+            calls.append(error)
+            raise error
+        return now()
+    rig.clock.now = fail_clock
+    try:
+        with pytest.raises(fb.FHalted) as caught:
+            rig.host.keep_running(rig.complete, timeout=60)
+        assert caught.value.__cause__ is error and calls == [error]
+        assert_keep_interruption(rig.host.halted, error, kind="halted", count=1)
+        assert all(i.kind != "store" for i in rig.host.interruptions())
+    finally:
+        rig.close()
+
+
+def test_keep_running_launcher_oserror_remains_unknown_and_measurement_can_report():
+    """K16 (3), Launch :329: a launcher OSError keeps the existing unknown semantics.
+
+    Treating the launcher as storage, retrying its work, halting, or blocking later measurement reports fails.
+    """
+    rig = KeepRig(unknown_update=True)
+    try:
+        def done(_s):
+            return bool(rig.launcher.launch_errors) and any(r.value["item_slot"] == "unknown-launch-note"
+                for r in rig.facts(c.SEGMENT_REPORT))
+        assert rig.host.keep_running(done, timeout=60) is True
+        assert len(rig.launcher.launch_errors) == 1 and rig.host.interruptions() == () and rig.host.halted is None
+        q, = rig.requests("belief_update")
+        work_id = q.value["desc"]["work_id"]
+        observed = execution_for(rig.workers.contexts["measure_segment"], work_id)
+        assert observed.launches == ("unknown",) and observed.entered == 0
+        assert sum(key == work_id for key, _ in rig.launcher.attempts) == 1
+        assert rig.thread.is_alive() and not rig.facts(c.UPDATE_RESULT) and not rig.facts(c.BELIEF_ADOPTED)
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("error_type", (OSError, RuntimeError))
+def test_keep_running_done_exception_is_the_callers_and_does_not_halt(error_type):
+    """K16 (2): done is outside recovery, including OSError and RuntimeError.
+
+    Swallowing/retrying done or turning it into store/halted history fails exact propagation and later completion.
+    """
+    rig = KeepRig()
+    error, calls = error_type("done belongs to the caller"), []
+    try:
+        def done(_s):
+            calls.append(1)
+            assert len(calls) == 1, "done was retried"
+            raise error
+        with pytest.raises(error_type) as caught:
+            rig.host.keep_running(done, timeout=60)
+        assert caught.value is error and calls == [1]
+        assert rig.host.interruptions() == () and rig.host.halted is None
+        assert rig.host.keep_running(rig.complete, timeout=60) is True
+        rig.assert_loop()
+    finally:
+        rig.close()
+
+
+def test_keep_running_zero_timeout_checks_one_deadline_even_during_store_failure():
+    """K16 (2)/(5): timeout=0 returns after the failed round, without an elapsed-time assertion.
+
+    Renewing/skipping the deadline repeats the fault and reaches the store's test watchdog instead of returning False.
+    """
+    rig = KeepRig(fault={"boundary": "before_body", "target": "any", "times": None, "guard": 4})
+    try:
+        assert rig.host.keep_running(lambda _s: False, timeout=0) is False
+        assert len(rig.fault.raised) == 1
+        history, = rig.host.interruptions()
+        assert_keep_interruption(history, rig.fault.raised[0], kind="store", count=1)
+        assert rig.host.halted is None
+    finally:
+        rig.close()
+
+
+def test_run_until_still_propagates_the_same_store_error_without_driver_history():
+    """K16 (1): the legacy entry does not gain keep_running recovery semantics.
+
+    Changing run_until into a retry loop fails exact propagation of its first store exception.
+    """
+    rig = KeepRig(fault={"boundary": "before_body", "target": "any", "times": 1})
+    try:
+        with pytest.raises(OSError) as caught:
+            rig.host.run_until(lambda _s: False, timeout=0)
+        assert len(rig.fault.raised) == 1 and caught.value is rig.fault.raised[0]
+        assert rig.host.interruptions() == () and rig.host.halted is None
+    finally:
+        rig.close()
