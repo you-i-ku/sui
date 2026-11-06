@@ -179,5 +179,250 @@ def compute_finite_update(
     宣言の解決・生成の対応・入力の実取得と実使用・固定根・適用の履歴を確かめ、§2-5-19 の数学で
     計算して発行する。F-b から完成した joint を受け取る引数は無い。固定の上限の引数も無い (紙 F-b
     Z41 (a)、Z32 (え): 計算は有理数の厳密な算術で、終わるまで続ける)。入口で要求を構成できない不正や
-    物理的な欠落は例外 (三枝に無理に写さない)。"""
-    raise NotImplementedError("段 3")
+    物理的な欠落は例外 (三枝に無理に写さない)。
+
+    最初の輪の 1 周目 (Z41) で確かめるのは、要求と記録の対応 (契約・モデル・読み方・法則・channel・
+    前の採用の系列) と数学まで。evidence (実取得・実使用・監視の独立の観測) との照合と、能力の宣言の
+    照合は ★ 1 周の後 (この版は evidence を読まない)。"""
+    from .f import FInputError
+    c = _c()
+    try:
+        record = reader.record(request)
+    except KeyError:
+        raise FInputError("unresolved_reference", "the update request is outside the reader", "/request") from None
+    if record.body.contract != c.WORK_REQUESTED:
+        raise FInputError("shape", "not a work request", "/request")
+    desc = record.body.content.as_json().get("desc")
+    if not hasattr(desc, "items") or desc.get("purpose") != "belief_update" \
+            or desc.get("method") != _enc(c.FINITE_UPDATE_COMPUTE):
+        raise FInputError("shape", "not a belief update request", "/request/desc")
+    try:
+        state = _replay(reader, request)
+    except _Issue as issue:
+        if issue.kind == "rejected":
+            return Rejected(request=request, issues=(RejectedIssue(
+                code=issue.code, fields=issue.fields, evidence=issue.evidence, message=issue.message),))
+        return Insufficient(request=request, issues=(InsufficientIssue(
+            code=issue.code, fields=issue.fields, missing=issue.missing, evidence=issue.evidence,
+            message=issue.message),))
+    from ._f_handles import issue as _issue_handle
+    from ._f_world import registry_view_key
+    from .f import _freeze, _handle
+    view = desc["numerical_view"]
+    return _issue_handle(_handle(
+        IssuedUpdate, request=request, result=_freeze(_encode_result(state)),
+        application_digest=state.digest(desc["args"]["model"], desc["reader"]),
+        numerical_view=FixedViewValue(boundary=frozenset(view["boundary"]),
+                                      reader_view_key=view["environment"]["reader_view_key"],
+                                      registry_key=view["environment"]["registry_key"]),
+        registry_key=registry_view_key(registry)))
+
+
+# --- 入口 U の中身 (一次事実からの再計算、§2-5-19-1・19-3・19-8) ---
+
+class _Issue(Exception):
+    """U が正常に判定した不適合 (rejected) か不足 (insufficient)。三枝の返答に写す。"""
+
+    def __init__(self, kind, code, message, *, fields=(), evidence=(), missing=()):
+        super().__init__(message)
+        self.kind, self.code, self.message = kind, code, message
+        self.fields, self.evidence, self.missing = tuple(fields), frozenset(evidence), tuple(missing)
+
+
+def _c():
+    from . import fb_contracts
+    return fb_contracts
+
+
+def _enc(value):
+    from .f import _encode
+    return _encode(value)
+
+
+def _content(reader, point, contract):
+    """読み手の像の中の記録の本文 (JSON)。像に無い・契約が違うは不適合。"""
+    try:
+        record = reader.record(point)
+    except KeyError:
+        raise _Issue("rejected", "unresolved_reference", f"{point} is outside the reader") from None
+    if record.body.contract != contract:
+        raise _Issue("rejected", "reference_kind", f"{point} is not {contract.name}/{contract.version}",
+                     evidence=(point,))
+    return record.body.content.as_json()
+
+
+def _meanings():
+    """初回に意味を定めた Claim の契約 → (kind, lower, upper) (§19-1 の表)。最初の輪は到着なしだけ。
+    `count_exactly_one/1` ほかは ★ 段 3 の広げ (未知の kind をこれへ寄せない)。"""
+    c = _c()
+    return {(c.NO_ARRIVAL.name, c.NO_ARRIVAL.version): ("no_arrival", 0, 0)}
+
+
+class _State:
+    """一次事実から導いた適用済みの状態 (§19-1 の Claim の部分)。呼出し側の申告ではない。"""
+
+    def __init__(self, joint):
+        from fractions import Fraction
+        self.joint, self.mass = tuple(joint), Fraction(1)
+        self.carrier_by_state, self.law_point, self.law = None, None, None
+        self.applied = {}   # ClaimKey (segment, item_slot) → Predicate
+
+    def digest(self, model, origin) -> str:
+        """application_digest (§19-1): モデル・origin・法則と、今の連言が表す行の集合 (連言を満たす正準 marks)。
+        配送の分割・B の番号・含意される述語の有無で変わらない。"""
+        from .f import _digest
+        from . import _f_count as count
+        rows = [] if self.law is None else [list(map(list, marks)) for marks, _mass in self.law.rows
+                                            if all(count.holds(marks, p) for p in self.applied.values())]
+        return _digest({"domain": "sui.fb.application/1", "model": model, "origin": origin,
+                        "law": self.law_point, "rows": rows})
+
+
+def _encode_result(state):
+    """再計算した状態の finite_update_result/1 の値 {joint, evidence_mass}。"""
+    from .f import FiniteUpdateResult, _encode
+    return _encode(FiniteUpdateResult(joint=state.joint, evidence_mass=state.mass))
+
+
+def _span(value):
+    from . import _f_count as count
+    from .f import _dumps
+    return count.Span(clock=_dumps(value["clock"]).decode("utf-8"), start_ns=value["start_ns"],
+                      end_ns=value["end_ns"], closure=value["closure"])
+
+
+def _update_desc(reader, point):
+    """保存した更新要求 Q* の Desc (JSON)。別の用途・別の方法の要求は不適合。"""
+    c = _c()
+    desc = _content(reader, point, c.WORK_REQUESTED).get("desc")
+    if not hasattr(desc, "items") or desc.get("purpose") != "belief_update" \
+            or desc.get("method") != _enc(c.FINITE_UPDATE_COMPUTE):
+        raise _Issue("rejected", "reference_kind", f"{point} is not a belief update request", evidence=(point,))
+    return desc
+
+
+def _series(reader, request):
+    """採用の系列を前の採用 A* でさかのぼった更新要求の列 (古い順)。各項は (Q* の Point, Desc, その Q* を採用した A* の
+    本文 | None)。A* は同じ model のもので、A*.previous がその要求の prior と一致する (§19-3)。"""
+    c = _c()
+    out, point, adopted = [], request, None
+    model = _update_desc(reader, request)["args"]["model"]
+    while True:
+        desc = _update_desc(reader, point)
+        if desc["args"]["model"] != model:
+            raise _Issue("rejected", "observation_binding_mismatch", "the adoption series changes its model",
+                         fields=("/args/prior",), evidence=(point,))
+        if adopted is not None and adopted["previous"] != desc["args"]["prior"]:
+            raise _Issue("rejected", "result_mismatch", "an adoption does not continue its request's prior",
+                         fields=("/args/prior",), evidence=(point,))
+        out.append((point, desc, adopted))
+        prior = desc["args"]["prior"]
+        if prior is None:
+            return out[::-1]
+        adopted = _content(reader, prior, c.BELIEF_ADOPTED)
+        if adopted["model"] != model:
+            raise _Issue("rejected", "observation_binding_mismatch", "the previous adoption is of another model",
+                         fields=("/args/prior",), evidence=(prior,))
+        point = adopted["request"]
+
+
+def _replay(reader, request) -> _State:
+    """モデルの最初の joint から、採用の系列の全部の観測を一次事実から順に条件づけ直す (P1: 保存した結果の値から
+    続きを計算しない)。前の採用が指す保存した結果 R* は、作り直した値と全比較する (§19-8)。"""
+    from .f import _Fraction, _decode
+    c = _c()
+    series = _series(reader, request)
+    model = series[-1][1]["args"]["model"]
+    try:
+        content = reader.record(model).body.content.as_json()
+    except KeyError:
+        raise _Issue("rejected", "unresolved_reference", f"{model} is outside the reader") from None
+    document = content.get("document") if hasattr(content, "items") else None
+    if not hasattr(document, "items") or "initial" not in document:
+        raise _Issue("rejected", "reference_kind", f"{model} is not a model with an initial state",
+                     fields=("/args/model",), evidence=(model,))
+    state = _State(_decode(document["initial"], tuple[_Fraction, ...]))
+    for point, desc, adopted in series:
+        for use in desc["args"]["observations"]:
+            _apply(reader, state, model, use["binding"], use["reading"])
+        if adopted is not None:
+            saved = _content(reader, adopted["result"], c.UPDATE_RESULT)
+            if saved["request"] != point or saved["result"] != _encode_result(state) \
+                    or saved["application_digest"] != state.digest(model, desc["reader"]):
+                raise _Issue("rejected", "result_mismatch", "a saved result differs from its recomputation",
+                             evidence=(adopted["result"],))
+    return state
+
+
+def _apply(reader, state, model, binding, reading) -> None:
+    """観測 1 つ (結びつき B と読み方) を、一次事実から述語に読んで条件づける (§19-1)。"""
+    from . import _f_count as count
+    from .f import CoverageClaim, FInputError, _Fraction, _decode
+    c = _c()
+    b = _content(reader, binding, c.SEGMENT_BINDING)
+    plan = _content(reader, reading, c.OBSERVATION_PLAN_2)
+    if plan["model"] != model:
+        raise _Issue("rejected", "observation_binding_mismatch", "reading of another model", evidence=(reading,))
+    projection, generation = plan["projection"], plan["generation"]
+    if projection["contract"] != _enc(c.FINITE_SEGMENT_PROJECTION) or b["reading_contract"] != projection["contract"]:
+        raise _Issue("rejected", "missing_contract", "projection", evidence=(reading, binding))
+    pargs = projection["args"]
+    if pargs.get("frame") is not None or pargs.get("time_projection") != {
+            "contract": _enc(c.SEGMENT_VALUE_ONLY), "args": {}}:
+        raise _Issue("rejected", "missing_contract", "frame or time projection", evidence=(reading,))
+    if generation != {"contract": _enc(c.BOOTSTRAP_GENERATION), "args": {"scope": "whole_window"}}:
+        raise _Issue("rejected", "missing_contract", "generation", evidence=(reading,))
+    report = _content(reader, b["report"], c.SEGMENT_REPORT)
+    item = report["item"]
+    if item["kind"] != "claim":
+        raise _Issue("rejected", "missing_contract", "only claims are read", evidence=(b["report"],))
+    claim = _decode(item["value"], CoverageClaim)
+    meaning = _meanings().get((claim.contract.name, claim.contract.version))
+    entries = [e for e in pargs["claims"] if e["meaning"] == _enc(claim.contract)]
+    if meaning is None or meaning[0] != claim.kind or len(entries) != 1:
+        raise _Issue("rejected", "missing_contract", "claim meaning", evidence=(b["report"], reading))
+    entry = entries[0]
+    law_point = entry["law"]
+    if state.law_point is not None and state.law_point != law_point:
+        raise _Issue("rejected", "missing_contract", "one count-law series (extends is not read)",
+                     evidence=(law_point,))
+    law = _content(reader, law_point, c.FINITE_JOINT_COUNT_LAW)
+    if law["model"] != model or law["extends"] is not None or law["frame_relation"] != "independent_given_carrier":
+        raise _Issue("rejected", "missing_contract", "count law", evidence=(law_point,))
+    k = _content(reader, b["segment"], c.SEGMENT_REQUESTED)["desc"]
+    # 原 Claim から channel への対応は一意 (§19-1): 過程・route が合う channel が法則にちょうど 1 つ
+    matching = [ch for ch in law["channels"] if b["route"] in ch["route_configs"] and k["process"] == ch["process"]]
+    if len(matching) != 1:
+        raise _Issue("rejected", "shape", "claim channel is not unique in the law", evidence=(law_point,))
+    if matching[0]["id"] != entry["channel"]:
+        raise _Issue("rejected", "observation_binding_mismatch", "channel route or process",
+                     evidence=(binding, law_point))
+    try:
+        if state.law is None:
+            if len(law["carrier_by_state"]) != len(state.joint):
+                raise FInputError("shape", "carrier_by_state length", "/carrier_by_state")
+            state.law = count.check_law(
+                law["carrier_by_state"], {ch["id"]: _span(ch["domain"]) for ch in law["channels"]},
+                [([(m["channel"], m["time_ns"], m["count"]) for m in row["marks"]],
+                  [_decode(q, _Fraction) for q in row["mass"]]) for row in law["rows"]])
+            state.carrier_by_state, state.law_point = tuple(law["carrier_by_state"]), law_point
+        predicate = count.Predicate(channel=entry["channel"], span=_span(_enc(claim.interval)),
+                                    lower=meaning[1], upper=meaning[2])
+        key = (b["segment"], report["item_slot"])
+        known = state.applied.get(key)
+        if known is not None:
+            if known != predicate:   # 同じ原 Claim を別の命題として足さない (CL-APPLY)
+                raise _Issue("rejected", "measurement_conflict", "same claim read differently",
+                             evidence=(b["report"],))
+            return   # 同じ原 Claim は 1 つの導出系列で 1 つの出来事 (再配送・別の B は数値の no-op)
+        state.joint, state.mass = count.condition(state.joint, state.mass, state.carrier_by_state,
+                                                  state.law, tuple(state.applied.values()), predicate)
+        state.applied[key] = predicate
+    except FInputError as exc:
+        raise _Issue("rejected", exc.reason if exc.reason in _REJECT_CODES else "shape", str(exc),
+                     evidence=(binding,)) from None
+
+
+_REJECT_CODES = {"schema", "shape", "noncanonical", "rational", "unit", "unknown_version", "normalization",
+                 "unresolved_reference", "reference_kind", "observation_binding_mismatch",
+                 "measurement_conflict", "clock_unaligned", "missing_contract", "model_falsified"}
