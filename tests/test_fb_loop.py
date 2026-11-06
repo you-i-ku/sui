@@ -1617,3 +1617,886 @@ def test_row2_committed_write_ack_loss_keeps_one_record_and_one_ce1_adoption_cha
         assert [ok for key, ok in rig.workers.entry_attempts if key == work.desc.work_id] == [True]
         observed = execution_for(rig.workers.contexts["measure_segment"], work.desc.work_id)
         assert observed.launches == ("launched",) and observed.entered == 1 and observed.stopped
+
+
+class Row1StoreCut:
+    """One public store/ledger operation fails; the independent C/E oracle never does."""
+
+    def __init__(self, rig, target, operation, *, ordinal=1, read_occurrence=1):
+        from hashlib import sha256
+        from test_fb_stage1 import SavedFact, entry_from_header, decode_record, encode_header, seal
+        self.rig, self.target, self.operation, self.ordinal = rig, target, operation, ordinal
+        self.ref = {"report": c.SEGMENT_REPORT, "binding": c.SEGMENT_BINDING,
+            "request": c.WORK_REQUESTED, "work_report": c.WORK_REPORT,
+            "terminal": c.WORK_TERMINAL, "result": c.UPDATE_RESULT,
+            "acquisition_clock": CLOCK, "acquisition": ACQUIRED,
+            "adoption": c.BELIEF_ADOPTED, "continuation_request": c.EVALUATION_REQUESTED,
+            "boot": c.BOOT_DECLARATION, "candidate": c.CANDIDATE_REQUEST,
+            "prepare": c.EVALUATION_REQUESTED, "draw": c.DRAW_REQUESTED,
+            "evaluate": c.WORK_REQUESTED,
+            "candidates": CG, "prepared": c.PREPARED, "draw_report": c.DRAW_REPORT,
+            "route": ROUTE}[target]
+        self.in_host = self.failed = self.confirmed = False
+        self.hits, self.selected, self.prepared = 0, [], None
+        self.read_occurrence, self.read_calls = read_occurrence, {}
+        self.loss_error = OSError(f"row1 one temporary {operation} failure: {target}/{ordinal}")
+        raw_load, raw_get = rig.entry_store.load, rig.contents.get
+        self.raw_load, self.raw_get = raw_load, raw_get
+        self.entry_from_header = entry_from_header
+
+        def observe(cid):
+            header = dict(raw_load())[cid]
+            assert sha256(header).hexdigest() == cid.removeprefix("sha256:")
+            entry = entry_from_header(cid, header)
+            salt, payload = raw_get(entry.seal)
+            assert seal(payload, salt) == entry.seal
+            record = decode_record(header, payload)
+            assert encode_header(record, entry.seal, entry.parents) == header
+            return header, salt, record
+        rig.read_stored = observe
+
+        def facts(wanted):
+            positions = {p.cid: i for i, p in enumerate(rig.ledger.preparations)}
+            result = []
+            for cid, _ in raw_load():
+                header, _salt, record = observe(cid)
+                if record.body.contract == wanted:
+                    result.append(SavedFact(cid=cid, record_id=record.id, contract=wanted,
+                        received_ns=getattr(record.body, "received_ns", None), at_ns=record.at.mono_ns,
+                        parents=entry_from_header(cid, header).parents, value=record.body.content.as_json()))
+            return sorted(result, key=lambda fact: positions[fact.cid])
+        rig.facts = facts
+
+        normal_write, normal_add = rig.ledger.write, rig.entry_store.add
+        normal_entry, normal_record = rig.ledger.entry, rig.ledger.record
+        self.writing = None
+        def write(prepared):
+            self.writing = prepared
+            try:
+                if operation == "before_body":
+                    self.trip(prepared)
+                result = normal_write(prepared)
+                if self.failed and prepared.cid == self.prepared.cid:
+                    self.confirmed = True
+                return result
+            finally:
+                self.writing = None
+        rig.ledger.write = write
+        def add(cid, header):
+            if operation == "before_entry" and self.writing is not None:
+                self.trip(self.writing)
+            return normal_add(cid, header)
+        rig.entry_store.add = add
+
+        def entry(cid):
+            prepared = self.saved_preparation(cid)
+            if operation == "entry" and prepared is not None:
+                self.trip(prepared, reading=True)
+            value = normal_entry(cid)
+            if self.failed and prepared is not None and prepared.cid == self.prepared.cid:
+                self.confirmed = True
+            return value
+        rig.ledger.entry = entry
+
+        def record(cid):
+            prepared = self.saved_preparation(cid)
+            if operation == "record" and prepared is not None:
+                self.trip(prepared, reading=True)
+            value = normal_record(cid)
+            if self.failed and prepared is not None and prepared.cid == self.prepared.cid:
+                self.confirmed = True
+            return value
+        rig.ledger.record = record
+        def get(value_seal):
+            # The host-only guard excludes the test worker and every oracle read.
+            if operation == "body" and self.in_host:
+                prepared = next((p for p in rig.ledger.preparations
+                    if entry_from_header(p.cid, p.header).seal == value_seal
+                    and p.cid in dict(raw_load())), None)
+                if prepared is not None:
+                    self.trip(prepared, reading=True)
+            else:
+                prepared = None
+            value = raw_get(value_seal)
+            if self.failed and prepared is not None and prepared.cid == self.prepared.cid:
+                self.confirmed = True
+            return value
+        rig.contents.get = get
+
+    def saved_preparation(self, cid):
+        if not self.in_host or cid not in dict(self.raw_load()):
+            return None
+        return next((p for p in self.rig.ledger.preparations if p.cid == cid), None)
+
+    def matches(self, prepared):
+        if prepared.record.body.contract != self.ref:
+            return False
+        value = prepared.record.body.content.as_json()
+        if self.target == "report":
+            return value["item"]["kind"] == "claim"
+        if self.target == "request":
+            return value["desc"]["purpose"] == "belief_update"
+        if self.target == "evaluate":
+            return value["desc"]["purpose"] == "evaluation"
+        if self.target in ("work_report", "terminal"):
+            return value.get("work") in {q.value["desc"]["work_id"] for q in self.rig.requests("belief_update")}
+        if self.target == "acquisition_clock":
+            ctx = self.rig.workers.contexts.get("measure_segment")
+            return ctx is not None and any(result.cid in a.contents
+                and a.acquired_ns == value["reading"]["time_ns"]
+                for result in self.rig.facts(c.UPDATE_RESULT) for a in ctx.evidence().acquisitions)
+        if self.target == "acquisition":
+            return any(r.cid in value["contents"] for r in self.rig.facts(c.UPDATE_RESULT))
+        if self.target == "continuation_request":
+            return any(t["point"] in {a.cid for a in self.rig.facts(c.BELIEF_ADOPTED)}
+                       for t in value["desc"]["trigger"])
+        return True
+
+    def trip(self, prepared, *, reading=False):
+        if not self.in_host or self.failed or not self.matches(prepared):
+            return
+        if reading:
+            self.read_calls[prepared.cid] = self.read_calls.get(prepared.cid, 0) + 1
+            if self.read_calls[prepared.cid] != self.read_occurrence:
+                return
+        if prepared.cid not in self.selected:
+            self.selected.append(prepared.cid)
+        if self.selected.index(prepared.cid) + 1 != self.ordinal:
+            return
+        self.prepared = prepared
+        self.fixed = tuple(self.rig.ledger.preparations)
+        self.headers_at_loss = dict(self.raw_load())
+        self.seals_at_loss = self.rig.contents.seals()
+        self.failed, self.hits = True, self.hits + 1
+        raise self.loss_error
+
+    def assert_fixed_preparations(self):
+        assert self.hits == 1, f"fixture: requested {self.target}/{self.operation} fault did not fire exactly once"
+        for prepared in self.fixed:
+            attempts = [p for p in self.rig.ledger.preparations if p.record.id == prepared.record.id]
+            assert attempts and all(p == prepared for p in attempts), "R1: changed a fixed preparation"
+            assert prepared.cid in dict(self.raw_load()), f"R2: prepared record was never saved: {prepared.record.body.contract}"
+            assert self.rig.read_stored(prepared.cid) == (prepared.header, prepared.salt, prepared.record), \
+                "R1: name/time/body/parents/CID changed on re-entry"
+
+
+class Row1Driver(Row2Driver):
+    def drive(self, predicate, **kwargs):
+        self.cut.in_host = True
+        try:
+            return super().drive(predicate, **kwargs)
+        except AssertionError as error:
+            if "incomplete observation" in str(error):
+                raise AssertionError(f"R2: {self.cut.target}/{self.cut.operation}: re-entry did not reach its successor; "
+                    f"read_occurrence={self.cut.read_occurrence}, faults={self.cut.hits}, confirmed={self.cut.confirmed}, "
+                    f"measure={len(self.rig.requests('measure_segment'))}, Q={len(self.rig.requests('belief_update'))}, "
+                    f"R={len(self.rig.facts(c.UPDATE_RESULT))}, A={len(self.rig.facts(c.BELIEF_ADOPTED))}, "
+                    f"selection={len(self.rig.facts(c.SELECTION))}, "
+                    f"entered={[w.desc.purpose for w in self.rig.workers.entries]}") from None
+            raise
+        finally:
+            self.cut.in_host = False
+
+    def advance_until(self, predicate):
+        def pending():
+            return [(key, body) for key, body in self.rig.launcher.attempts if key not in self.executed]
+        while not predicate():
+            self.drive(lambda: predicate() or bool(pending()))
+            if predicate():
+                return
+            work_id, body = pending()[0]
+            assert sum(key == work_id for key, _ in self.rig.launcher.attempts) == 1, "R3: duplicate launch"
+            self.executed.add(work_id)
+            request = next(q for stage in (*ORDER, "measure_segment", "belief_update")
+                           for q in self.rig.requests(stage) if q.value["desc"]["work_id"] == work_id)
+            if request.value["desc"]["purpose"] == "measure_segment":
+                self.rig.thread = Thread(target=body, daemon=True)
+                self.rig.thread.start()
+                assert self.rig.workers.entered.setdefault("measure_segment", Event()).wait(30)
+            else:
+                body()
+
+
+def finish_row1_loop(rig, cut, *, already_started=True):
+    """CE1's two literal expectations; use only the public run_until re-entry."""
+    second = {}
+    route_before = rig.facts(ROUTE)
+    def on_loss():
+        assert cut.hits == 1
+        if cut.operation in ("before_body", "before_entry"):
+            assert cut.prepared.cid not in cut.headers_at_loss, "fixture: entry was already committed"
+            present = cut.entry_from_header(cut.prepared.cid, cut.prepared.header).seal in cut.seals_at_loss
+            assert present == (cut.operation == "before_entry"), "fixture: wrong pre-commit boundary"
+        # CE1's absolute domain starts at zero; a Boot cut before measurement entry must retain it.
+        if "measure_segment" in rig.workers.contexts:
+            rig.clock.set(rig.clock.mono_ns() + 10)
+        if cut.target == "request" and cut.ordinal == 1:
+            ctx = rig.workers.contexts["measure_segment"]
+            measurement = next(w for w in rig.workers.entries if w.desc.purpose == "measure_segment")
+            before = {r.envelope for r in execution_for(ctx, measurement.desc.work_id).reports}
+            second["event"] = post_row2_claim(driver, slot="row1-second", start=1, end=3, wait_saved=False)
+            receipt, = (r for r in execution_for(ctx, measurement.desc.work_id).reports if r.envelope not in before)
+            assert receipt.point is None
+            second["envelope"] = receipt.envelope
+    driver = Row1Driver(rig, cut, on_loss)
+    if not already_started:
+        driver.advance_until(lambda: len(rig.facts(c.SELECTION)) == 1 and bool(rig.thread))
+    rig.clock.set(max(20, rig.clock.mono_ns() + 1))
+    first = post_row2_claim(driver, slot="row1-first", start=0, end=2)
+    driver.advance_until(lambda: len(rig.facts(c.BELIEF_ADOPTED)) >= 1)
+    a1 = rig.facts(c.BELIEF_ADOPTED)[0]
+    w1 = next(w for w in rig.workers.entries if w.request == a1.value["request"])
+    assert_update(rig, w1, a1, FIRST)
+    if "event" not in second:
+        rig.clock.set(rig.clock.mono_ns() + 10)
+        second["event"] = post_row2_claim(driver, slot="row1-second", start=1, end=3, wait_saved=False)
+    driver.advance_until(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 2 and len(rig.facts(c.SELECTION)) == 3)
+    a2 = rig.facts(c.BELIEF_ADOPTED)[1]
+    w2 = next(w for w in rig.workers.entries if w.request == a2.value["request"])
+    assert_update(rig, w2, a2, SECOND, a1.cid)
+    assert [a.value["previous"] for a in rig.facts(c.BELIEF_ADOPTED)] == [None, a1.cid], "R2: adoption fork"
+    assert row5_report_for_work(rig, w1).cid == first.cid
+    second_report, = (r for r in rig.facts(c.SEGMENT_REPORT) if r.value == wire(second["event"]))
+    assert row5_report_for_work(rig, w2).cid == second_report.cid
+    if "envelope" in second:
+        ctx = rig.workers.contexts["measure_segment"]
+        measurement = next(w for w in rig.workers.entries if w.desc.purpose == "measure_segment")
+        receipt, = (r for r in execution_for(ctx, measurement.desc.work_id).reports if r.envelope == second["envelope"])
+        assert receipt.point == second_report.cid
+    assert cut.hits == 1, f"fixture: {cut.target}/{cut.operation}/read-{cut.read_occurrence} did not fire"
+    assert driver.handled and driver.calls > driver.call_at_loss and cut.confirmed
+    cut.assert_fixed_preparations()
+    assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == 2
+    assert len(rig.workers.entries) == 13, "R3: unexpected extra work body"
+    ctx = rig.workers.contexts["measure_segment"]
+    for work in rig.workers.entries:
+        assert [ok for key, ok in rig.workers.entry_attempts if key == work.desc.work_id] == [True], "R3: duplicate entry"
+        observed = execution_for(ctx, work.desc.work_id)
+        assert observed.entered == 1 and observed.launches == ("launched",), "R3: duplicate execution"
+        assert sum(key == work.desc.work_id for key, _ in rig.launcher.attempts) == 1, "R3: duplicate launch"
+    assert len([event for event, _ in rig.workers.sent if isinstance(event, fb.DrawReturned)]) == 3, "R3: extra draw use"
+    for result in rig.facts(c.UPDATE_RESULT):
+        acquisitions = [a for a in ctx.evidence().acquisitions if result.cid in a.contents]
+        assert len(acquisitions) == 1, f"R3: result acquisition repeated {len(acquisitions)} times at " \
+            f"{[a.acquired_ns for a in acquisitions]}"
+        saved, = (g for g in rig.facts(ACQUIRED) if result.cid in g.value["contents"])
+        clock = rig.one(CLOCK, cid=saved.value["clock"])
+        assert clock.value["reading"]["time_ns"] == acquisitions[0].acquired_ns, "R3: acquisition time resampled"
+    if cut.target == "acquisition_clock":
+        assert cut.prepared.cid in {g.value["clock"] for g in rig.facts(ACQUIRED)
+            if any(r.cid in g.value["contents"] for r in rig.facts(c.UPDATE_RESULT))}
+    route, = rig.facts(ROUTE)
+    if route_before:
+        assert [route] == route_before, "R3: route application/time changed on re-entry"
+    route_preparations = [p for p in rig.ledger.preparations if p.record.body.contract == ROUTE]
+    assert route_preparations and all(p == route_preparations[0] for p in route_preparations), "R3: route effective time resampled"
+
+
+@pytest.mark.parametrize("operation", ("before_body", "before_entry"))
+@pytest.mark.parametrize("target", ("report", "binding", "request", "work_report", "terminal", "result",
+                                    "acquisition_clock", "acquisition", "adoption", "continuation_request"))
+def test_row1_precommit_failure_reenters_same_ce1_loop_without_extra_effects(make_rig, target, operation):
+    """Row 1 v2 :17-25,31; F-b :324-329,3328-3332,3488,3505,3509,3513-3515.
+
+    A stuck retry fails R2's mandatory Q*/R*/A*/selection successors after run_until re-entry.
+    Regenerating a time/name/boundary fails R1's saved PreparedEntry equality.
+    Reacquiring R* or resampling route application fails R3's acquisition/time/route witnesses.
+    Relaunching/re-entering/redrawing or recounting a report fails R3's counts or FIRST/SECOND.
+    """
+    rig = make_rig(continuation=True)
+    rig.start()
+    finish_row1_loop(rig, Row1StoreCut(rig, target, operation))
+
+
+@pytest.mark.parametrize("read_occurrence", (1, 2))
+@pytest.mark.parametrize("operation", ("entry", "record", "body"))
+@pytest.mark.parametrize("target", ("report", "binding", "request", "work_report", "terminal", "result",
+                                    "acquisition_clock", "acquisition", "adoption", "continuation_request"))
+def test_row1_public_host_read_failure_reenters_same_ce1_loop_without_extra_effects(make_rig, target, operation, read_occurrence):
+    """F-b ConfirmWrite :327, K5 :3505; first/second host ledger.entry/record or store.get of one saved Point.
+
+    A failed read permanently losing its successor fails R2; each requested cut must actually fire once.
+    Re-preparing a fixed record/boundary after a read error fails R1's exact stored preparation.
+    Repeated acquisition/application/draw/entry fails R3; duplicate report use changes FIRST/SECOND.
+    """
+    rig = make_rig(continuation=True)
+    rig.start()
+    finish_row1_loop(rig, Row1StoreCut(rig, target, operation, read_occurrence=read_occurrence))
+
+
+class Row1DeferredBootRig(LoopRig):
+    def drive(self, predicate):
+        # LoopRig queues actual Boot/ClockDeclared; the test installs the store cut before running them.
+        pass
+
+
+@pytest.mark.parametrize("target", ("boot", "candidate", "prepare", "draw", "evaluate"))
+def test_row1_boot_and_initial_thinking_read_failure_still_complete_both_continuations(target):
+    """F-b :324-329, K9/K13 and v2 :18-25: Boot plus candidate -> Ep -> draw -> Ee.
+
+    A lost Boot/thinking successor fails R2's initial and two continued selections.
+    Re-sampling an already fixed stage/boundary fails R1's exact preparation check.
+    Re-entering/redrawing/reacquiring or changing route application fails R3's public witnesses.
+    """
+    rig = Row1DeferredBootRig(continuation=True)
+    try:
+        finish_row1_loop(rig, Row1StoreCut(rig, target, "body"), already_started=False)
+    finally:
+        rig.close()
+
+
+def test_row1_second_update_precommit_failure_keeps_adopted_prior_and_one_chain(make_rig):
+    """K9/K13 :3509,3513: fail Q* only after A1 exists, then require SECOND/prior=A1.
+
+    A lost next Q* fails R2; changed preparation fails R1; repeated work/acquisition fails R3.
+    Counting either report twice fails CE1's literal FIRST/SECOND expectations (:2917-2923).
+    """
+    rig = make_rig(continuation=True)
+    rig.start()
+    finish_row1_loop(rig, Row1StoreCut(rig, "request", "before_body", ordinal=2))
+
+
+@pytest.mark.parametrize(("target", "operation", "read_occurrence"), (
+    ("candidates", "body", 2), ("prepared", "body", 2),
+    ("draw_report", "body", 2), ("route", "body", 2),
+))
+def test_row1_saved_boot_and_thinking_inputs_read_failure_preserves_the_loop(target, operation, read_occurrence):
+    """Row 1 :19,31; F-b PrepareOne/ConfirmWrite :324-327 and stage-2 ORDER.
+
+    A lost successor after reading saved CG/PR/draw/route fails R2's mandatory selections/updates.
+    Replacing fixed records/boundaries fails R1; extra entry/draw/acquisition/application time fails R3.
+    """
+    rig = Row1DeferredBootRig(continuation=True)
+    try:
+        finish_row1_loop(rig, Row1StoreCut(rig, target, operation, read_occurrence=read_occurrence), already_started=False)
+    finally:
+        rig.close()
+
+
+class Row1IntervalCut(Row1StoreCut):
+    """Count outermost public record reads between actual saved X and not-yet-saved Y."""
+
+    def __init__(self, rig, flow, lap, left, right, k):
+        from threading import get_ident
+        public_reads = ((rig.ledger, "entry", rig.ledger.entry),
+                        (rig.ledger, "record", rig.ledger.record), (rig.contents, "get", rig.contents.get))
+        super().__init__(rig, "request", "interval", read_occurrence=k)
+        self.flow, self.lap, self.left, self.right, self.k = flow, lap, left, right, k
+        self.target = f"{flow}{lap}:{left}->{right}:k={k}"
+        self.loss_error = OSError("one interval read failed: " + self.target)
+        self.runner, self.get_ident, self.depth = get_ident(), get_ident, 0
+        self.reads, self.committed, self.points = [], {}, {}
+        self.preexisting = {cid for cid, _ in self.raw_load()}
+        self.points_size = -1
+        self.clock_before_g = None
+        self.committed = {cid: rig.read_stored(cid)[2] for cid, _ in self.raw_load()}
+        normal_add = rig.entry_store.add
+        def add(cid, header):
+            result = normal_add(cid, header)
+            # Observe the actual saved bytes, not the caller's proposed record or a write flag.
+            self.committed[cid] = rig.read_stored(cid)[2]
+            return result
+        rig.entry_store.add = add
+        # Install before the real host is constructed, including callbacks it may retain.
+        for owner, name, normal in public_reads:
+            def read(key, _normal=normal, _name=name):
+                if not self.in_host or self.get_ident() != self.runner or self.depth:
+                    return _normal(key)
+                self.depth += 1
+                try:
+                    points = self.saved_points()
+                    if not self.failed and self.left in points and self.right not in points:
+                        self.reads.append((_name, key))
+                        if len(self.reads) == self.k:
+                            self.fixed = tuple(rig.ledger.preparations)
+                            self.prepared = next((p for p in self.fixed if p.cid == key), self.fixed[-1])
+                            self.headers_at_loss = dict(self.raw_load())
+                            assert set(self.committed) == set(self.headers_at_loss), "fixture: incomplete saved-point observer"
+                            self.seals_at_loss = rig.contents.seals()
+                            self.left_at_loss = points[self.left]
+                            assert self.left_at_loss in self.headers_at_loss
+                            self.failed, self.hits = True, self.hits + 1
+                            raise self.loss_error
+                    value = _normal(key)
+                    if self.failed:
+                        self.confirmed = True
+                    return value
+                finally:
+                    self.depth -= 1
+            setattr(owner, name, read)
+
+    def saved_points(self):
+        # The public add adapter refreshes this cache from actual C/E after each commit.
+        if self.points_size == len(self.committed):
+            return self.points
+        self.points_size = len(self.committed)
+        positions = {p.cid: i for i, p in enumerate(self.rig.ledger.preparations)}
+        assert set(self.committed) <= set(positions) | self.preexisting
+        facts = sorted(self.committed.items(), key=lambda item: positions.get(item[0], -1))
+        def find(ref, predicate=lambda value: True):
+            return next((cid for cid, record in facts if record.body.contract == ref
+                         and predicate(record.body.content.as_json())), None)
+        def value(cid):
+            return self.committed[cid].body.content.as_json()
+        def request(stage, ref):
+            return find(ref, lambda v: v["desc"]["purpose"] == stage)
+        def report(q, ref=c.WORK_REPORT):
+            return find(ref, lambda v: v["work"] == value(q)["desc"]["work_id"]) if q else None
+        if self.flow == "initial":
+            cgq = request("candidate_generation", c.CANDIDATE_REQUEST)
+            epq = request("evaluation_prepare", c.EVALUATION_REQUESTED)
+            dq = request("selection_draw", c.DRAW_REQUESTED)
+            eeq = request("evaluation", c.WORK_REQUESTED)
+            points = {"candidate_request": cgq, "candidate_report": report(cgq),
+                "candidates": find(CG), "prepare_request": epq, "prepare_report": report(epq),
+                "prepared": find(c.PREPARED), "draw_request": dq,
+                "draw_report": report(dq, c.DRAW_REPORT), "draw_fact": find(contract("sui.f.draw_fact")),
+                "evaluate_request": eeq, "evaluate_report": report(eeq),
+                "evaluated": find(c.EVALUATED), "selection": find(c.SELECTION)}
+        else:
+            claims = [cid for cid, record in facts if record.body.contract == c.SEGMENT_REPORT
+                      and record.body.content.as_json()["item"]["kind"] == "claim"]
+            raw = claims[self.lap - 1] if len(claims) >= self.lap else None
+            binding = find(c.SEGMENT_BINDING, lambda v: v["report"] == raw) if raw else None
+            q = find(c.WORK_REQUESTED, lambda v: v["desc"]["purpose"] == "belief_update"
+                and any(o["binding"] == binding for o in v["desc"]["args"]["observations"])) if binding else None
+            terminal = find(c.WORK_TERMINAL, lambda v: v["request"] == q) if q else None
+            result = find(c.UPDATE_RESULT, lambda v: v["request"] == q) if q else None
+            acquired = find(ACQUIRED, lambda v: result in v["contents"]) if result else None
+            clock = value(acquired)["clock"] if acquired else None
+            if result and not clock:
+                ctx = self.rig.workers.contexts.get("measure_segment")
+                times = {a.acquired_ns for a in ctx.evidence().acquisitions if result in a.contents} if ctx else set()
+                clock = next((cid for cid, record in facts if record.body.contract == CLOCK
+                    and positions[cid] > positions[result]
+                    and record.body.content.as_json()["reading"]["time_ns"] in times), None)
+                if clock:
+                    self.clock_before_g = clock
+            adopted = find(c.BELIEF_ADOPTED, lambda v: v["request"] == q) if q else None
+            eq = find(c.EVALUATION_REQUESTED, lambda v: any(t["point"] == adopted
+                for t in v["desc"]["trigger"])) if adopted else None
+            points = {"report": raw, "binding": binding, "request": q, "work_report": report(q),
+                "terminal": terminal, "result": result, "acquisition_clock": clock,
+                "acquisition": acquired, "adoption": adopted, "continuation_request": eq}
+        self.points = {name: cid for name, cid in points.items() if cid in self.committed}
+        return self.points
+
+
+class Row1IntervalRig(LoopRig):
+    """The same literal CE1 Boot, with the read adapter installed before host construction."""
+
+    def __init__(self, flow, lap, left, right, k):
+        RealRig.__init__(self, connect=False)
+        self.clock.set(0)
+        self.registry, self.launcher = registry(), LaunchCut()
+        self.workers, self.thread, self.executed = Workers(self), None, set()
+        self.document, _ = finite_world("FA01")
+        model = self.record(Prediction(target="model.11", about=(), basis=(),
+            content=Payload.json({"document": self.document}), contract=contract("sui.f.model_source")),
+            RefKind.PREDICTION, Role.MODEL)
+        self.model_point = self.ledger.append(model, ()).cid
+        event = boot(True)
+        initial = replace(event.declaration.initial.value, model=self.model_point,
+            generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}),
+            method=fb.MethodCall(contract=contract("sui.f.finite_evaluation"), args={}),
+            draw=fb.MethodCall(contract=contract("stage2.scripted_draw"), args={}),
+            prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET,
+            derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
+                contract=c.SAVED_SEGMENT_UPDATE, args=delta_args())),
+            continuation=fb.MethodCall(contract=c.REUSE_CANDIDATES, args={}))
+        self.boot_input = replace(event, declaration=replace(event.declaration,
+            initial=replace(event.declaration.initial, value=initial),
+            routes=tuple(replace(route, value=replace(route.value, config=replace(route.value.config,
+                sampling_contract=contract("sui.f.finite_measurement"),
+                clock_contract=contract("sui.f.simulated_clock")))) for route in event.declaration.routes)))
+        self.cut = Row1IntervalCut(self, flow, lap, left, right, k)
+        self.host = fb.FThreadHost(ledger=self.ledger, clock=self.clock, workers=self.workers,
+                                  registry=self.registry, launcher=self.launcher)
+        self.host.post(fb.ClockDeclared(declaration=replace(source(), run=self.clock.run,
+            measurement=contract("sui.f.simulated_clock"))))
+        self.host.post(self.boot_input)
+
+
+# The initial Ep/D/Ee request -> report intervals each had one runner read.
+# Their k=2/3 combinations are intentionally absent (observed, not skipped/xfail).
+@pytest.mark.parametrize(("flow", "lap", "left", "right", "k"), (
+    ("initial", 1, "candidate_request", "candidate_report", 1),
+    ("initial", 1, "candidate_request", "candidate_report", 2),
+    ("initial", 1, "candidate_request", "candidate_report", 3),
+    ("initial", 1, "candidate_report", "candidates", 1),
+    ("initial", 1, "candidate_report", "candidates", 2),
+    ("initial", 1, "candidate_report", "candidates", 3),
+    ("initial", 1, "candidates", "prepare_request", 1),
+    ("initial", 1, "candidates", "prepare_request", 2),
+    ("initial", 1, "candidates", "prepare_request", 3),
+    ("initial", 1, "prepare_request", "prepare_report", 1),
+    ("initial", 1, "prepare_report", "prepared", 1),
+    ("initial", 1, "prepare_report", "prepared", 2),
+    ("initial", 1, "prepare_report", "prepared", 3),
+    ("initial", 1, "prepared", "draw_request", 1),
+    ("initial", 1, "prepared", "draw_request", 2),
+    ("initial", 1, "prepared", "draw_request", 3),
+    ("initial", 1, "draw_request", "draw_report", 1),
+    ("initial", 1, "draw_report", "draw_fact", 1),
+    ("initial", 1, "draw_report", "draw_fact", 2),
+    ("initial", 1, "draw_report", "draw_fact", 3),
+    ("initial", 1, "draw_fact", "evaluate_request", 1),
+    ("initial", 1, "draw_fact", "evaluate_request", 2),
+    ("initial", 1, "draw_fact", "evaluate_request", 3),
+    ("initial", 1, "evaluate_request", "evaluate_report", 1),
+    ("initial", 1, "evaluate_report", "evaluated", 1),
+    ("initial", 1, "evaluate_report", "evaluated", 2),
+    ("initial", 1, "evaluate_report", "evaluated", 3),
+    ("initial", 1, "evaluated", "selection", 1),
+    ("initial", 1, "evaluated", "selection", 2),
+    ("initial", 1, "evaluated", "selection", 3),
+    ("update", 1, "report", "binding", 1),
+    ("update", 1, "report", "binding", 2),
+    ("update", 1, "report", "binding", 3),
+    ("update", 1, "binding", "request", 1),
+    ("update", 1, "binding", "request", 2),
+    ("update", 1, "binding", "request", 3),
+    ("update", 1, "request", "work_report", 1),
+    ("update", 1, "request", "work_report", 2),
+    ("update", 1, "request", "work_report", 3),
+    ("update", 1, "work_report", "terminal", 1),
+    ("update", 1, "work_report", "terminal", 2),
+    ("update", 1, "work_report", "terminal", 3),
+    ("update", 1, "terminal", "result", 1),
+    ("update", 1, "terminal", "result", 2),
+    ("update", 1, "terminal", "result", 3),
+    ("update", 1, "result", "acquisition_clock", 1),
+    ("update", 1, "result", "acquisition_clock", 2),
+    ("update", 1, "result", "acquisition_clock", 3),
+    ("update", 1, "acquisition_clock", "acquisition", 1),
+    ("update", 1, "acquisition_clock", "acquisition", 2),
+    ("update", 1, "acquisition_clock", "acquisition", 3),
+    ("update", 1, "acquisition", "adoption", 1),
+    ("update", 1, "acquisition", "adoption", 2),
+    ("update", 1, "acquisition", "adoption", 3),
+    ("update", 1, "adoption", "continuation_request", 1),
+    ("update", 1, "adoption", "continuation_request", 2),
+    ("update", 1, "adoption", "continuation_request", 3),
+    ("update", 2, "binding", "request", 1),
+    ("update", 2, "binding", "request", 2),
+    ("update", 2, "binding", "request", 3),
+    ("update", 2, "acquisition", "adoption", 1),
+    ("update", 2, "acquisition", "adoption", 2),
+    ("update", 2, "acquisition", "adoption", 3),
+))
+def test_row1_read_between_saved_public_transitions_reenters_without_losing_or_duplicating_successors(flow, lap, left, right, k):
+    """F-b :323-327,3328-3332,3505,3509-3514; CE1 :2917-2923; v2 :17-25,31.
+
+    Losing a successor after the interval's kth read fails R2's bounded mandatory progress, not just safety.
+    Replacing a fixed preparation fails R1; duplicated T/PR/EV/EQ/draw/result/adoption fails explicit counts.
+    Re-entering/relaunching/redrawing/reacquiring fails R3; recounting a report changes FIRST/SECOND.
+    """
+    rig = Row1IntervalRig(flow, lap, left, right, k)
+    cut = rig.cut
+    try:
+        try:
+            finish_row1_loop(rig, cut, already_started=False)
+        except AssertionError:
+            if cut.hits == 0:
+                raise AssertionError(f"UNFIRED_INTERVAL {cut.target}; available_reads={len(cut.reads)}") from None
+            raise
+        points = cut.saved_points()
+        assert set(cut.committed) == {cid for cid, _ in cut.raw_load()}, "fixture: incomplete saved-point observer"
+        assert cut.hits == 1 and len(cut.reads) == k
+        assert points[left] == cut.left_at_loss and points[right] in dict(cut.raw_load())
+        if cut.clock_before_g:
+            assert points["acquisition_clock"] == cut.clock_before_g, "fixture: wrong result acquisition clock boundary"
+        assert len(rig.requests("evaluation_prepare")) == len(rig.facts(c.PREPARED)) == 3, "R2: duplicate prepare successor"
+        assert len(rig.requests("selection_draw")) == len(rig.facts(contract("sui.f.draw_fact"))) == 3, "R2: duplicate draw successor"
+        assert len(rig.requests("evaluation")) == len(rig.facts(c.EVALUATED)) == 3, "R2: duplicate evaluation successor"
+        assert len(rig.facts(CG)) == 1, "R2: duplicate candidate successor"
+        for work in rig.workers.entries:
+            terminals = [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == work.request]
+            assert len(terminals) <= 1, "R2: duplicate terminal"
+            if work.desc.purpose not in ("measure_segment", "selection_draw"):
+                assert len(terminals) == 1, "R2: missing terminal"
+                assert len([r for r in rig.facts(c.WORK_REPORT) if r.value["work"] == work.desc.work_id]) == 1
+    finally:
+        rig.close()
+
+
+def complete_row1_tail_scene(rig, *, inject):
+    """Use the identical public Boot/Post schedule for calibration and the fault walk."""
+    cut = rig.cut
+    def on_loss():
+        assert cut.hits == 1
+        if "measure_segment" in rig.workers.contexts:
+            rig.clock.set(rig.clock.mono_ns() + 10)
+    driver = Row1Driver(rig, cut, on_loss)
+    driver.advance_until(lambda: len(rig.facts(c.SELECTION)) == 1 and bool(rig.thread))
+    rig.clock.set(max(20, rig.clock.mono_ns() + 1))
+    first = post_row2_claim(driver, slot="tail-first", start=0, end=2)
+    driver.advance_until(lambda: len(rig.facts(c.BELIEF_ADOPTED)) >= 1)
+    a1 = rig.facts(c.BELIEF_ADOPTED)[0]
+    w1 = next(w for w in rig.workers.entries if w.request == a1.value["request"])
+    assert_update(rig, w1, a1, FIRST)
+    rig.clock.set(rig.clock.mono_ns() + 10)
+    second = post_row2_claim(driver, slot="tail-second", start=1, end=3, wait_saved=False)
+    driver.advance_until(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 2 and len(rig.facts(c.SELECTION)) == 3)
+    a2 = rig.facts(c.BELIEF_ADOPTED)[1]
+    w2 = next(w for w in rig.workers.entries if w.request == a2.value["request"])
+    assert_update(rig, w2, a2, SECOND, a1.cid)
+    assert row5_report_for_work(rig, w1).cid == first.cid
+    assert row5_report_for_work(rig, w2).value == wire(second)
+    assert [a.value["previous"] for a in rig.facts(c.BELIEF_ADOPTED)] == [None, a1.cid], "R2: adoption fork"
+    assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == 2
+    assert len(rig.requests("evaluation_prepare")) == len(rig.facts(c.PREPARED)) == 3, "R2: duplicate prepare successor"
+    assert len(rig.requests("selection_draw")) == len(rig.facts(contract("sui.f.draw_fact"))) == 3, "R2: duplicate draw successor"
+    assert len(rig.requests("evaluation")) == len(rig.facts(c.EVALUATED)) == 3, "R2: duplicate evaluation successor"
+    assert len(rig.facts(CG)) == 1
+    assert len(rig.workers.entries) == len(rig.launcher.attempts) == 13, "R3: extra launch or body"
+    ctx = rig.workers.contexts["measure_segment"]
+    for work in rig.workers.entries:
+        assert [ok for key, ok in rig.workers.entry_attempts if key == work.desc.work_id] == [True], "R3: duplicate entry"
+        observed = execution_for(ctx, work.desc.work_id)
+        assert observed.entered == 1 and observed.launches == ("launched",), "R3: duplicate execution"
+        terminals = [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == work.request]
+        assert len(terminals) <= 1, "R2: duplicate terminal"
+        if work.desc.purpose not in ("measure_segment", "selection_draw"):
+            assert len(terminals) == 1, "R2: missing terminal"
+            assert len([r for r in rig.facts(c.WORK_REPORT) if r.value["work"] == work.desc.work_id]) == 1
+    assert len([event for event, _ in rig.workers.sent if isinstance(event, fb.DrawReturned)]) == 3, "R3: extra draw use"
+    for result in rig.facts(c.UPDATE_RESULT):
+        acquisitions = [a for a in ctx.evidence().acquisitions if result.cid in a.contents]
+        assert len(acquisitions) == 1, f"R3: repeated acquisition at {[a.acquired_ns for a in acquisitions]}"
+        acquired, = (g for g in rig.facts(ACQUIRED) if result.cid in g.value["contents"])
+        clock = rig.one(CLOCK, cid=acquired.value["clock"])
+        assert clock.value["reading"]["time_ns"] == acquisitions[0].acquired_ns, "R3: acquisition time changed"
+    points = cut.saved_points()
+    assert set(cut.committed) == {cid for cid, _ in cut.raw_load()}, "fixture: incomplete saved-point observer"
+    assert cut.left in points and cut.right in points, "R2: missing interval successor"
+    if inject:
+        assert cut.hits == 1, f"UNFIRED_TAIL {cut.target}; available_reads={len(cut.reads)}"
+        assert len(cut.reads) == cut.k and points[cut.left] == cut.left_at_loss
+        assert driver.handled and driver.calls > driver.call_at_loss and cut.confirmed
+        cut.assert_fixed_preparations()
+    else:
+        assert cut.hits == 0 and not cut.failed, "fixture: calibration must have no injected failure"
+
+
+@pytest.fixture(scope="module")
+def row1_tail_profile(request):
+    flow, lap, left, right = request.param
+    rig = Row1IntervalRig(flow, lap, left, right, None)
+    try:
+        complete_row1_tail_scene(rig, inject=False)
+        count = len(rig.cut.reads)
+        assert count >= 3, f"TAIL_BASELINE_TOO_SHORT {flow}{lap}:{left}->{right}; reads={count}"
+        print(f"TAIL_BASELINE {flow}{lap}:{left}->{right} reads={count}", flush=True)
+        return flow, lap, left, right, count
+    finally:
+        rig.close()
+
+
+def check_row1_tail_target(profile, k):
+    flow, lap, left, right, count = profile
+    rig = Row1IntervalRig(flow, lap, left, right, k)
+    try:
+        try:
+            complete_row1_tail_scene(rig, inject=True)
+        except AssertionError as error:
+            if rig.cut.hits == 0:
+                raise AssertionError(f"UNFIRED_TAIL {flow}{lap}:{left}->{right}; "
+                    f"baseline_reads={count}, target={k}, available_reads={len(rig.cut.reads)}; {error}") from None
+            raise
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("from_end", (0, 1, 2), ids=("last", "last-minus-1", "last-minus-2"))
+@pytest.mark.parametrize("row1_tail_profile", (
+    pytest.param(("update", 1, "binding", "request"), id="update1-binding-request"),
+    pytest.param(("update", 2, "binding", "request"), id="update2-binding-request"),
+    pytest.param(("update", 1, "work_report", "terminal"), id="update1-report-terminal"),
+    pytest.param(("update", 2, "work_report", "terminal"), id="update2-report-terminal"),
+    pytest.param(("update", 1, "terminal", "result"), id="update1-terminal-result"),
+    pytest.param(("update", 2, "terminal", "result"), id="update2-terminal-result"),
+    pytest.param(("update", 1, "acquisition", "adoption"), id="update1-acquisition-adoption"),
+    pytest.param(("update", 2, "acquisition", "adoption"), id="update2-acquisition-adoption"),
+    pytest.param(("update", 1, "adoption", "continuation_request"), id="update1-adoption-continuation"),
+    pytest.param(("update", 2, "adoption", "continuation_request"), id="update2-adoption-continuation"),
+    pytest.param(("initial", 1, "candidate_report", "candidates"), id="initial-report-candidates"),
+    pytest.param(("initial", 1, "candidates", "prepare_request"), id="initial-candidates-prepare"),
+    pytest.param(("initial", 1, "prepare_report", "prepared"), id="initial-report-prepared"),
+    pytest.param(("initial", 1, "draw_fact", "evaluate_request"), id="initial-draw-evaluate"),
+    pytest.param(("initial", 1, "evaluate_report", "evaluated"), id="initial-report-evaluated"),
+), indirect=True)
+def test_row1_interval_tail_reads_reenter_without_losing_or_duplicating_successors(row1_tail_profile, from_end):
+    """F-b :323-327,3328-3332,3437,3509-3513; CE1 :2917-2923; v2 :19,31.
+
+    A lost request/terminal successor after a late read fails R2's bounded mandatory progression.
+    New preparation/time/boundary fails R1; duplicate successors or external effects fail R2/R3.
+    Select N, N-1, N-2 from this scene's fault-free count; a shorter fault walk fails UNFIRED_TAIL.
+    Positions are relative to the measured baseline, never silently recalibrated or skipped after a miss.
+    """
+    count = row1_tail_profile[-1]
+    check_row1_tail_target(row1_tail_profile, count - from_end)
+
+
+@pytest.mark.parametrize("row1_tail_profile", (
+    pytest.param(("update", 1, "binding", "request"), id="update1-binding-request"),
+    pytest.param(("update", 2, "binding", "request"), id="update2-binding-request"),
+), indirect=True)
+def test_row1_interval_middle_read_reenters_without_losing_the_update_request(row1_tail_profile):
+    """Use the measured midpoint ceil(N/2) as well as the tail for the two B -> Q* intervals.
+
+    Losing Q* after this read fails R2; replacing a preparation or repeating work/acquisition fails R1/R3.
+    """
+    count = row1_tail_profile[-1]
+    check_row1_tail_target(row1_tail_profile, (count + 1) // 2)
+
+
+class Row1ReadsBeforeAttempt(list):
+    """The old interval recorder stops appending at the physical store's first attempt."""
+
+    def __init__(self, boundary):
+        super().__init__()
+        self.boundary = boundary
+
+    def append(self, item):
+        if self.boundary.first is None:
+            super().append(item)
+
+
+class Row1FirstWriteAttempt:
+    """Observe put/add arguments, without treating a proposed Point as a saved Point."""
+
+    def __init__(self, rig):
+        from test_fb_stage1 import decode_record, seal
+        self.rig, self.cut, self.first = rig, rig.cut, None
+        self.target_k = self.cut.k
+        self.cut.reads = Row1ReadsBeforeAttempt(self)
+        normal_put, normal_add = rig.contents.put, rig.entry_store.add
+        def put(value_seal, salt, content):
+            prepared = next((p for p in reversed(rig.ledger.preparations)
+                if p.salt == salt and self.cut.entry_from_header(p.cid, p.header).seal == value_seal), None)
+            if prepared is not None and self.matches(prepared):
+                assert seal(content, salt) == value_seal
+                assert decode_record(prepared.header, content) == prepared.record
+                self.observe(prepared, "put")
+            return normal_put(value_seal, salt, content)
+        rig.contents.put = put
+        def add(cid, header):
+            prepared = next((p for p in reversed(rig.ledger.preparations) if p.cid == cid), None)
+            if prepared is not None and self.matches(prepared):
+                assert header == prepared.header
+                self.observe(prepared, "add")
+            return normal_add(cid, header)
+        rig.entry_store.add = add
+
+    def matches(self, prepared):
+        refs = {"request": c.WORK_REQUESTED, "candidates": CG, "evaluated": c.EVALUATED,
+                "terminal": c.WORK_TERMINAL, "adoption": c.BELIEF_ADOPTED}
+        if prepared.record.body.contract != refs[self.cut.right]:
+            return False
+        points = self.cut.saved_points()
+        if self.cut.left not in points:
+            return False
+        value = prepared.record.body.content.as_json()
+        if self.cut.right == "request":
+            return value["desc"]["purpose"] == "belief_update" and any(
+                o["binding"] == points["binding"] for o in value["desc"]["args"]["observations"])
+        if self.cut.right in ("terminal", "adoption"):
+            return value["request"] == points.get("request")
+        # Only the initial CG/EV can follow the first candidate/evaluation report in this scene.
+        return self.cut.flow == "initial"
+
+    def observe(self, prepared, port):
+        if self.first is not None:
+            return
+        points = self.cut.saved_points()
+        headers = dict(self.cut.raw_load())
+        value_seal = self.cut.entry_from_header(prepared.cid, prepared.header).seal
+        self.first = {"port": port, "prepared": prepared, "reads": len(self.cut.reads),
+            "left": points[self.cut.left], "fault_already_fired": self.cut.failed,
+            "entry_present": prepared.cid in headers, "body_present": value_seal in self.rig.contents.seals()}
+        assert self.cut.right not in points and not self.first["entry_present"], "fixture: cutoff was after entry commit"
+        if not self.cut.failed:
+            # A shorter fault walk must never move the injection into put's/add's later reads.
+            self.cut.k = None
+
+    def assert_boundary(self, *, inject):
+        assert self.first is not None, "fixture: target write attempt was not observed"
+        assert self.first["port"] == "put" and not self.first["body_present"], \
+            "fixture: the first body-put boundary was missed"
+        points = self.cut.saved_points()
+        assert points[self.cut.left] == self.first["left"]
+        assert points[self.cut.right] == self.first["prepared"].cid, "R1/R2: first attempted record was replaced"
+        assert len(self.cut.reads) == self.first["reads"], "fixture: reads after the first attempt were counted"
+        assert self.first["fault_already_fired"] == inject, "fixture: failure was not before the first write attempt"
+
+
+def make_row1_prewrite_rig(flow, lap, left, right, k):
+    rig = Row1IntervalRig(flow, lap, left, right, k)
+    # Boot is only queued so far; attach both public store ports before the first run_until.
+    rig.prewrite = Row1FirstWriteAttempt(rig)
+    return rig
+
+
+@pytest.fixture(scope="module")
+def row1_prewrite_profile(request):
+    flow, lap, left, right = request.param
+    rig = make_row1_prewrite_rig(flow, lap, left, right, None)
+    try:
+        complete_row1_tail_scene(rig, inject=False)
+        rig.prewrite.assert_boundary(inject=False)
+        count = len(rig.cut.reads)
+        required = 12 if right == "request" else 4
+        assert count >= required, f"PREWRITE_BASELINE_TOO_SHORT {flow}{lap}:{left}->{right}; reads={count}"
+        print(f"PREWRITE_BASELINE {flow}{lap}:{left}->{right} reads={count} first=put", flush=True)
+        return flow, lap, left, right, count
+    finally:
+        rig.close()
+
+
+def check_row1_prewrite_target(profile, from_end):
+    flow, lap, left, right, count = profile
+    k = count - from_end
+    rig = make_row1_prewrite_rig(flow, lap, left, right, k)
+    try:
+        try:
+            complete_row1_tail_scene(rig, inject=True)
+        except AssertionError as error:
+            if rig.cut.hits == 0:
+                raise AssertionError(f"UNFIRED_PREWRITE {flow}{lap}:{left}->{right}; "
+                    f"baseline_reads={count}, target={k}, before_first_attempt={len(rig.cut.reads)}; {error}") from None
+            raise
+        rig.prewrite.assert_boundary(inject=True)
+        assert rig.cut.k == k and rig.cut.hits == 1
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("from_end", (0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11))
+@pytest.mark.parametrize("row1_prewrite_profile", (
+    pytest.param(("update", 1, "binding", "request"), id="update1-binding-request"),
+    pytest.param(("update", 2, "binding", "request"), id="update2-binding-request"),
+), indirect=True)
+def test_row1_before_first_request_put_last_twelve_reads_keep_the_update_chain(row1_prewrite_profile, from_end):
+    """F-b PrepareOne/PutBody :324-325, update request :3328, K13 :3513; CE1 :2917-2923.
+
+    A lost Q* after a read before its first put fails R2's mandatory successors, even if no write was attempted.
+    Replacing a fixed preparation or duplicating a successor fails R1/R2; repeated external effects fail R3.
+    Count N before the first physical put/add, then inject N..N-11; UNFIRED is a failure, never a late injection.
+    """
+    check_row1_prewrite_target(row1_prewrite_profile, from_end)
+
+
+@pytest.mark.parametrize("from_end", (0, 1, 2, 3))
+@pytest.mark.parametrize("row1_prewrite_profile", (
+    pytest.param(("initial", 1, "candidate_report", "candidates"), id="initial-report-candidates"),
+    pytest.param(("initial", 1, "evaluate_report", "evaluated"), id="initial-report-evaluated"),
+    pytest.param(("update", 1, "work_report", "terminal"), id="update1-report-terminal"),
+    pytest.param(("update", 1, "acquisition", "adoption"), id="update1-acquisition-adoption"),
+), indirect=True)
+def test_row1_before_first_successor_put_last_four_reads_preserve_progress(row1_prewrite_profile, from_end):
+    """F-b :323-327,3330-3332,3442-3444,3509: the permitted four-position smaller range.
+
+    A missing CG/EV/T/A* after a pre-put read fails R2; duplicate records or repeated work/acquisition fail R1/R2/R3.
+    """
+    check_row1_prewrite_target(row1_prewrite_profile, from_end)

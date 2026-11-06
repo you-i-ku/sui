@@ -600,14 +600,31 @@ def _selection_step():
 # --- 進め方 ---
 
 def _finish(state, plan, row):
-    """row の論理の終わりが決まっていれば、T と許された後続を計画する。"""
+    """row の論理の終わりが決まっていれば、T と許された後続を計画する。途中の読み (モデル・固定像) が失敗したら、
+    置きかけた「済み」の印と歩を元に戻して上げる (紙 §2-4 :323「『済み』の印だけ先に置かない」): 入り直した時に、
+    同じ終わりを最初から処理し直せる。"""
     wid = row.work.desc.work_id
     if wid in plan.done:
         return
     found = first_end(state, row)
     if found is None:
         return
-    number, receipt = found
+    before = (len(plan.steps), list(plan.unmet), list(plan.missing), dict(plan.responses), plan.prepared,
+              plan.problem, row.knowledge)
+    try:
+        _plan_end(state, plan, row, *found)
+    except BaseException:
+        del plan.steps[before[0]:]
+        plan.unmet[:], plan.missing[:] = before[1], before[2]
+        plan.responses.clear()
+        plan.responses.update(before[3])
+        plan.prepared, plan.problem, row.knowledge = before[4:]
+        plan.done.discard(wid)
+        raise
+
+
+def _plan_end(state, plan, row, number, receipt):
+    wid = row.work.desc.work_id
     plan.done.add(wid)
     outcome = receipt.envelope.event.outcome
     first = receipt.slots[0].entry.cid

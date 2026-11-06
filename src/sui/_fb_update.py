@@ -35,6 +35,7 @@ class Obligation:
     desc: object = None          # Wu の Desc (Q* の Publish で固定)
     done: bool = False           # Wu の終わりを処理した
     final: str | None = None     # adopted / stale / rejected / insufficient / failure / unknown / stopped / issued:*
+    acquired_ns: int | None = None   # 結果 R* を実際に取得した時の M の読み (最初の 1 回で固定、入り直しで取り直さない)
 
 
 @_dataclass
@@ -261,6 +262,8 @@ def _inputs(state, plan, ob, prior) -> frozenset:
 
 
 def _q_step(ob):
+    drafted = {}   # build が作った Desc。準備が通った時 (prepared) に義務へ置く
+
     def build(state, plan_ob):
         from ._fb_core import Slot
         plan, ob = plan_ob
@@ -284,7 +287,9 @@ def _q_step(ob):
             allocation=_fb.BootSlot(declaration=d, slot=initial.allocation.slot),
             permissions=frozenset({_fb.BootSlot(declaration=d, slot=initial.derivation.slot),
                                    _fb.BootSlot(declaration=d, slot=initial.allocation.slot)}))
-        ob.desc = desc
+        # Desc を義務に置く (= 要求を作った印) のは、記録の準備が通った後 (紙 §2-4 :323「『済み』の印だけ先に
+        # 置かない」)。ここで置くと、下の読みや準備が失敗した時に、入り直しで同じ義務の Q* を作り直せなくなる
+        drafted["desc"] = desc
         ledger = state.ledger
         body = _Decided(inputs=tuple(ledger.record(p).id for p in sorted(inputs)),
                         content=_Payload.json({"desc": _encode(desc)}), contract=_c.WORK_REQUESTED)
@@ -294,6 +299,7 @@ def _q_step(ob):
     def prepared(state, plan_ob, cid):
         from ._fb_core import add_work
         plan, ob = plan_ob
+        ob.desc = drafted["desc"]
         add_work(state, _fb.Compute(request=cid, desc=ob.desc), plan.boot.declaration.scope.value)
 
     return _Step(name="Q", build=build, on_prepared=prepared)
@@ -361,11 +367,14 @@ def _acquire_steps():
         if source is None:
             return None
         r = ob.points["R"]
-        state.ledger.record(r)   # 本文を実際に読む
-        a = mono_ns(state.clock)
-        state.acquisitions.append(AcquisitionObservation(origin=plan.boot.points["origin"],
-                                                         contents=frozenset({r}), acquired_ns=a))
-        value = _f.FClockReadingFact(source=source, reading=_f.ClockReading(run=state.clock.run, time_ns=a))
+        if ob.acquired_ns is None:
+            state.ledger.record(r)   # 本文を実際に読む
+            a = mono_ns(state.clock)
+            state.acquisitions.append(AcquisitionObservation(origin=plan.boot.points["origin"],
+                                                             contents=frozenset({r}), acquired_ns=a))
+            ob.acquired_ns = a   # 済んだ実際の取得は 1 回。この後で記録の準備に失敗しても、同じ取得のまま入り直す
+        a = ob.acquired_ns
+        value =_f.FClockReadingFact(source=source, reading=_f.ClockReading(run=state.clock.run, time_ns=a))
         body = _Observed(route="fb", content=_Payload.json(_f._encode(value)), contract=_fc.CLOCK_READING,
                          received_ns=a)
         return Slot(contract=_fc.CLOCK_READING, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
