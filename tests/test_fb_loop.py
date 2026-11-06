@@ -658,3 +658,170 @@ def test_unentered_update_port_cannot_record_evidence_but_entered_port_can(make_
         f"intervals_added={len(after.intervals) - len(before.intervals)}")
     rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 1)
     assert_update(rig, work, rig.one(c.BELIEF_ADOPTED), FIRST)
+
+
+def drive_loop_observation(rig, predicate):
+    """A harness watchdog, not a product latency or computation-time limit (F8)."""
+    rig.host.run_until(lambda _status: predicate(), timeout=30)
+    if rig.workers.errors:
+        raise rig.workers.errors[0]
+    assert predicate(), "incomplete observation: public transition not witnessed before harness watchdog"
+
+
+def post_ce1_interval(rig, *, slot, start, end):
+    """A fresh raw report, with a finite interval inside the fixed CE1 law."""
+    done, errors, sent = Event(), [], []
+    span = f.MeasurementInterval(clock=rig.clock.run, start_ns=start, end_ns=end,
+                                 closure="(start,end]")
+    def emit(work, ctx):
+        event = fb.SegmentReport(segment=work.request, item_slot=slot,
+            item=f.CoverageClaim(route_epoch="route-A", interval=span,
+                kind="no_arrival", contract=c.NO_ARRIVAL, evidence=()))
+        rig.workers.post(ctx, event)
+        sent.append(event)
+    rig.workers.commands.put((emit, done, errors))
+    assert done.wait(30), "incomplete observation: measurement worker did not answer"
+    if errors:
+        raise errors[0]
+    rig.drive(lambda: any(raw.value == wire(sent[0]) for raw in rig.facts(c.SEGMENT_REPORT)))
+    return next(raw for raw in rig.facts(c.SEGMENT_REPORT) if raw.value == wire(sent[0]))
+
+
+def test_running_update_keeps_receiving_and_resumes_with_waiting_ce1_report(make_rig):
+    """Row 4: v2 :17-24,34,40-42; F-b J9-d/K13 :3495,3513; CE1 :2917-2923.
+
+    Blocking Post or the measurement worker while Wu is held prevents their saved reports before release.
+    Premature R*/adoption/terminal fails the held snapshots; dropping E2 or double-applying E1 fails FIRST/SECOND.
+    """
+    rig = make_rig()
+    rig.drive = lambda predicate: drive_loop_observation(rig, predicate)
+    rig.start()
+    holding, release, returned, received = Event(), Event(), Event(), Event()
+    update_errors, receiving_errors, seen = [], [], {}
+    update_thread = receiving_thread = None
+    def hold_then_finish(work, ctx):
+        seen["work"] = work
+        holding.set()  # the normal worker has already taken the actual entry ticket
+        release.wait()  # only test cleanup or the witnessed reception permits release
+        event, issued = rig.workers.normal(work, ctx)
+        rig.workers.post(ctx, event, issued)
+    rig.workers.overrides["belief_update"] = hold_then_finish
+    try:
+        rig.clock.set(2)
+        first = post_ce1_interval(rig, slot="row4-first", start=0, end=2)
+        q1, callback = rig.callback("belief_update")
+        def run_update():
+            try:
+                callback()
+            except BaseException as error:
+                update_errors.append(error)
+            finally:
+                returned.set()
+        update_thread = Thread(target=run_update, daemon=True)
+        update_thread.start()
+        assert holding.wait(30), "incomplete observation: Wu did not enter its held body"
+        assert update_thread.is_alive() and not returned.is_set()
+        def receive_while_held():
+            try:
+                rig.clock.set(3)
+                # This command is executed by the other, still-running measurement worker.
+                seen["second"] = post_ce1_interval(rig, slot="row4-waiting", start=1, end=3)
+                event = fb.Received(route_epoch="route-A", media_type="application/octet-stream",
+                                    data=b"row4-receiving-while-update-is-held", claims={})
+                rig.host.post(event)
+                rig.drive(lambda: any(raw.value == wire(event) for raw in rig.facts(c.RECEIVED)))
+                rig.settle_steps()
+                work_id = q1.value["desc"]["work_id"]
+                seen["held_execution"] = execution_for(rig.workers.contexts["measure_segment"], work_id)
+                seen["held_requests"] = tuple(q.cid for q in rig.requests("belief_update"))
+                seen["held_results"] = tuple(rig.facts(c.UPDATE_RESULT))
+                seen["held_adoptions"] = tuple(rig.facts(c.BELIEF_ADOPTED))
+                seen["held_terminals"] = tuple(t for t in rig.facts(c.WORK_TERMINAL)
+                                               if t.value["request"] == q1.cid)
+                seen["held_reports"] = tuple(t for t in rig.facts(c.WORK_REPORT)
+                                             if t.value["work"] == work_id)
+            except BaseException as error:
+                receiving_errors.append(error)
+            finally:
+                received.set()
+        # A bad host lock must not trap the test thread before its finally can release Wu.
+        receiving_thread = Thread(target=receive_while_held, daemon=True)
+        receiving_thread.start()
+        assert received.wait(30), "incomplete observation: reception did not progress while Wu was held"
+        if receiving_errors:
+            raise receiving_errors[0]
+        assert not release.is_set() and not returned.is_set() and update_thread.is_alive()
+        observed = seen["held_execution"]
+        assert observed.launches == ("launched",) and observed.entered == 1 and not observed.stopped
+        assert seen["held_requests"] == (q1.cid,)  # K13: waiting is permitted; a new Q* is not yet due
+        assert seen["held_results"] == seen["held_adoptions"] == ()
+        assert seen["held_terminals"] == seen["held_reports"] == ()
+        assert seen["second"].value["segment"] == first.value["segment"] == rig.one(c.SEGMENT_REQUESTED).cid
+        assert rig.thread.is_alive()
+        release.set()
+        assert returned.wait(30), "incomplete observation: released Wu did not return"
+        if update_errors:
+            raise update_errors[0]
+        rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) >= 1)
+        w1, a1 = seen["work"], rig.facts(c.BELIEF_ADOPTED)[0]
+        assert w1.request == q1.cid
+        assert_update(rig, w1, a1, FIRST)
+        rig.drive(lambda: len(rig.requests("belief_update")) == 2)
+        w2 = rig.run_stage("belief_update")
+        rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 2)
+        a2 = rig.facts(c.BELIEF_ADOPTED)[1]
+        assert_update(rig, w2, a2, SECOND, a1.cid)
+        use, = w2.desc.args.observations
+        assert rig.one(c.SEGMENT_BINDING, cid=use.binding).value["report"] == seen["second"].cid
+        assert len(rig.facts(c.UPDATE_RESULT)) == len(rig.facts(c.BELIEF_ADOPTED)) == 2
+        assert w1.desc.work_id != w2.desc.work_id
+        for work in (w1, w2):
+            assert [ok for key, ok in rig.workers.entry_attempts if key == work.desc.work_id] == [True]
+            observed = execution_for(rig.workers.contexts["measure_segment"], work.desc.work_id)
+            assert observed.launches == ("launched",) and observed.entered == 1 and observed.stopped
+    finally:
+        release.set()
+        for thread in (update_thread, receiving_thread):
+            if thread is not None:
+                thread.join(30)
+                assert not thread.is_alive(), "incomplete observation: test worker did not stop"
+
+
+def test_eight_updates_preserve_one_adoption_chain_and_ce1_conjunction(make_rig):
+    """Row 4 history: v2 :17-24,51; F-b :2605,2733-2741,2917-2923,3513.
+
+    E1=(0,2], E2=(1,3] alternate in eight distinct reports: FIRST, then SECOND seven times.
+    From E3 on, A entails E: Z(A and E)/Z(A)=1, so joint and cumulative mass stay (8/9,1/9;9/128).
+    A wrong prior or a fork fails every previous/prior link and the final single-chain check.
+    """
+    rig = make_rig()
+    rig.drive = lambda predicate: drive_loop_observation(rig, predicate)
+    rig.start()
+    n, previous, reports, adoptions, work_ids = 8, None, [], [], []
+    for number in range(1, n + 1):
+        rig.clock.set(number + 1)
+        start, end = (0, 2) if number % 2 else (1, 3)
+        report = post_ce1_interval(rig, slot=f"row4-round-{number}", start=start, end=end)
+        reports.append(report)
+        rig.drive(lambda: len(rig.requests("belief_update")) == number)
+        work = rig.run_stage("belief_update")
+        rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == number)
+        adopted = rig.facts(c.BELIEF_ADOPTED)[-1]
+        assert_update(rig, work, adopted, FIRST if number == 1 else SECOND, previous)
+        use, = work.desc.args.observations
+        assert rig.one(c.SEGMENT_BINDING, cid=use.binding).value["report"] == report.cid
+        assert [ok for key, ok in rig.workers.entry_attempts if key == work.desc.work_id] == [True]
+        observed = execution_for(rig.workers.contexts["measure_segment"], work.desc.work_id)
+        assert observed.launches == ("launched",) and observed.entered == 1 and observed.stopped
+        adoptions.append(adopted)
+        work_ids.append(work.desc.work_id)
+        previous = adopted.cid
+    assert len(set(work_ids)) == n and len({report.cid for report in reports}) == n
+    assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == n
+    assert rig.facts(c.BELIEF_ADOPTED) == adoptions
+    assert [adopted.value["previous"] for adopted in adoptions] == [None] + [a.cid for a in adoptions[:-1]]
+    assert {adopted.value["origin"] for adopted in adoptions} == {rig.one(ORIGIN).cid}
+    assert {adopted.value["model"] for adopted in adoptions} == {rig.model_point}
+    assert {report.value["segment"] for report in reports} == {rig.one(c.SEGMENT_REQUESTED).cid}
+    assert len(rig.facts(c.FINITE_JOINT_COUNT_LAW)) == len(rig.facts(c.OBSERVATION_PLAN_2)) == 1
+    assert rig.thread.is_alive()
