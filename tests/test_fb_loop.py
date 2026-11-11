@@ -3269,3 +3269,189 @@ def test_row6_rejection_and_store_recovery_share_one_keep_running_call():
         assert [i.kind for i in rig.host.interruptions()] == ["store", "rejected"]
     finally:
         rig.close()
+
+
+class Row8Rig(KeepRig):
+    """Advance the injected Clock at witnessed Posts/body entry/public store boundaries."""
+
+    def __init__(self, phase, jump_ns):
+        self.row8_phase, self.row8_jump_ns = phase, jump_ns
+        self.row8_jumps, self.row8_posts, self.row8_batches = [], [], []
+        super().__init__(hold_update=phase in ("running_update", "deadline"))
+        self.first_queued = True  # Start E1 explicitly after the initial public selection is saved.
+        add = self.entry_store.add
+
+        def add_and_advance(cid, header):
+            result = add(cid, header)
+            if phase == "result_saved" and not self.row8_jumps:
+                saved = self.read_stored(cid)[2]
+                if saved.body.contract == c.UPDATE_RESULT:
+                    assert not self.facts(c.BELIEF_ADOPTED)
+                    self.row8_jump("result_saved", cid)
+            return result
+
+        self.entry_store.add = add_and_advance
+
+    def row8_jump(self, boundary, point=None):
+        assert not self.row8_jumps, "test connection: the intended forward jump occurred twice"
+        before = self.clock.mono_ns()
+        prepared = tuple(self.ledger.preparations)
+        self.clock.set(before + self.row8_jump_ns)
+        after = self.clock.mono_ns()
+        assert after - before == self.row8_jump_ns
+        self.row8_jumps.append((boundary, point, before, after, prepared))
+
+    def queue_claim(self, slot, start, end):
+        done = Event()
+        self.row8_batches.append(done)
+
+        def post(work, ctx):
+            self.clock.set(self.clock.mono_ns() + 10)
+            if slot == "keep-first" and self.row8_phase == "before_report":
+                self.row8_jump("before_report")
+            if slot == "keep-second" and self.row8_phase == "after_adoption":
+                adopted, = self.facts(c.BELIEF_ADOPTED)
+                self.row8_jump("after_adoption", adopted.cid)
+            event = fb.SegmentReport(segment=work.request, item_slot=slot,
+                item=f.CoverageClaim(route_epoch="route-A", interval=f.MeasurementInterval(
+                    clock=self.clock.run, start_ns=start, end_ns=end, closure="(start,end]"),
+                    kind="no_arrival", contract=c.NO_ARRIVAL, evidence=()))
+            previous = {r.envelope for r in execution_for(ctx, work.desc.work_id).reports}
+            expected_r = self.clock.mono_ns()  # Independent M read immediately before this actual Post.
+            self.workers.post(ctx, event)
+            observed, = (r for r in execution_for(ctx, work.desc.work_id).reports if r.envelope not in previous)
+            self.row8_posts.append((event, expected_r, observed.envelope))
+            if slot == "keep-first" and self.row8_phase == "after_report":
+                self.row8_jump("after_report")
+
+        self.workers.commands.put((post, done, self.post_errors))
+        return done
+
+    def row8_start(self):
+        assert self.host.keep_running(lambda _s: row6_initial_ready(self), timeout=60) is True
+        assert not self.facts(c.BELIEF_ADOPTED) and not self.requests("belief_update")
+        assert self.queue_claim("keep-first", 0, 2).wait(30), "incomplete observation: E1 was not posted"
+        assert not self.post_errors
+
+    def row8_held_update(self):
+        assert self.host.keep_running(lambda _s: "belief_update" in self.workers.contexts, timeout=60) is True
+        work, = (w for w in self.workers.entries if w.desc.purpose == "belief_update")
+        ctx = self.workers.contexts["measure_segment"]
+        observed = execution_for(ctx, work.desc.work_id)
+        assert observed.entered == 1 and not observed.stopped and not observed.reports
+        assert observed.launches == ("launched",) and not self.update_gate.is_set()
+        return work
+
+    def row8_assert_still_held(self, work):
+        observed = execution_for(self.workers.contexts["measure_segment"], work.desc.work_id)
+        assert observed.entered == 1 and not observed.stopped and not observed.reports
+        assert observed.launches == ("launched",)
+        assert [q.cid for q in self.requests("belief_update")] == [work.request]
+        assert not self.facts(c.WORK_TERMINAL) or not any(
+            t.value["request"] == work.request for t in self.facts(c.WORK_TERMINAL))
+        assert not self.facts(c.UPDATE_RESULT) and not self.facts(c.BELIEF_ADOPTED)
+        assert self.host.halted is None and self.host.interruptions() == ()
+
+    def row8_assert_complete(self):
+        for done in self.row8_batches:
+            assert done.wait(30), "incomplete observation: a row8 producer did not finish"
+        for thread in self.launcher.threads:
+            if thread is not self.thread:
+                thread.join(30)
+                assert not thread.is_alive(), "incomplete observation: a row8 worker did not stop"
+        self.assert_loop()  # FIRST/SECOND, one prior chain, 13 entries/launches, 3 draws, one acquisition/result.
+        assert self.host.halted is None and self.host.interruptions() == ()
+        assert len(self.row8_jumps) == 1 and len(self.row8_posts) == 2
+        boundary, point, before, after, prepared = self.row8_jumps[0]
+        for fixed in prepared:
+            assert self.read_stored(fixed.cid) == (fixed.header, fixed.salt, fixed.record), \
+                "K18: a fixed record was discarded or rebuilt after the forward jump"
+            assert all(p == fixed for p in self.ledger.preparations if p.record.id == fixed.record.id)
+        ctx = self.workers.contexts["measure_segment"]
+        measurement, = (w for w in self.workers.entries if w.desc.purpose == "measure_segment")
+        eh = execution_for(ctx, measurement.desc.work_id)
+        reports = []
+        for event, expected_r, envelope in self.row8_posts:
+            observed, = (r for r in eh.reports if r.envelope == envelope)
+            raw = self.one(c.SEGMENT_REPORT, cid=observed.point)
+            assert observed.received_ns == raw.received_ns == expected_r, "K18: stale M reused for Post"
+            assert raw.value == wire(event)
+            assert raw.received_ns <= raw.at_ns
+            reports.append(raw)
+        started, = (r for r in self.facts(c.SEGMENT_REPORT) if r.value["item_slot"] == "started")
+        earlier, later = (started, reports[0]) if boundary == "before_report" else reports
+        assert earlier.received_ns <= before and later.received_ns >= after
+        assert later.received_ns - earlier.received_ns >= self.row8_jump_ns
+        for _cid, (_header, _salt, record) in self.snapshot():
+            received_ns = getattr(record.body, "received_ns", None)
+            if received_ns is not None:
+                assert received_ns <= record.at.mono_ns, "K18 / acceptance: r > s"
+        if boundary == "after_report":
+            assert reports[0].at_ns - reports[0].received_ns >= self.row8_jump_ns
+        if boundary == "result_saved":
+            result = self.one(c.UPDATE_RESULT, cid=point)
+            adopted = self.facts(c.BELIEF_ADOPTED)[0]
+            assert adopted.value["result"] == result.cid and result.at_ns <= before
+            assert adopted.at_ns >= after
+            acquired = self.one(ACQUIRED, cid=adopted.value["acquisition"])
+            assert self.one(CLOCK, cid=acquired.value["clock"]).value["reading"]["time_ns"] >= after
+        if boundary == "after_adoption":
+            assert self.facts(c.BELIEF_ADOPTED)[0].cid == point
+            assert self.facts(c.BELIEF_ADOPTED)[0].at_ns <= before
+
+
+@pytest.mark.parametrize("jump_ns", (341 * 10**9, 8 * 60 * 60 * 10**9), ids=("341s", "8h"))
+@pytest.mark.parametrize("phase", ("before_report", "after_report", "running_update", "result_saved", "after_adoption"))
+def test_row8_forward_clock_jump_preserves_two_updates_receipt_times_and_effects(phase, jump_ns):
+    """K18 :3518 (1)-(2), acceptance :486; advance injected M, without sleeping.
+
+    CE1 :2917-2923: E1 weights=(1/8,1/32), mass=5/32, joint=(4/5,1/5).
+    E1 AND E2 weights=(1/16,1/128), mass=9/128, joint=(8/9,1/9); M is not a likelihood.
+    Treating a large forward M step as a host fault fails completion/empty interruptions/no halted.
+    Discarding/rebuilding the update or recounting reports fails literal FIRST/SECOND, one chain and effect counts.
+    Failing/marking unknown/aborting Wu by elapsed M fails the held no-terminal witness and eventual adoption.
+    Reusing a pre-jump M for receipt fails independent pre-Post reads, EH/raw equality and r's jump-sized increase.
+    """
+    rig = Row8Rig(phase, jump_ns)
+    try:
+        rig.row8_start()
+        if phase == "running_update":
+            work = rig.row8_held_update()
+            rig.row8_jump("running_update", work.request)
+            expected_r = rig.clock.mono_ns()
+            probe = fb.Received(route_epoch="route-A", media_type="application/octet-stream",
+                data=b"row8-reception-after-forward-jump-while-Wu-is-entered", claims={})
+            rig.host.post(probe)
+            assert rig.host.keep_running(lambda _s: any(
+                r.value == wire(probe) for r in rig.facts(c.RECEIVED)), timeout=60) is True
+            received, = (r for r in rig.facts(c.RECEIVED) if r.value == wire(probe))
+            assert received.received_ns == expected_r <= received.at_ns
+            assert received.received_ns - rig.row8_posts[0][1] >= jump_ns
+            rig.row8_assert_still_held(work)
+            rig.update_gate.set()
+        assert rig.host.keep_running(rig.complete, timeout=60) is True
+        rig.row8_assert_complete()
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("jump_ns", (341 * 10**9, 8 * 60 * 60 * 10**9), ids=("341s", "8h"))
+def test_row8_keep_running_deadline_preserves_entered_update_for_the_next_call(jump_ns):
+    """K18 (3), K16 (5): timeout=0 observes the caller's deadline, separate from injected M.
+
+    Treating False as failure/unknown/abandonment fails the still-entered same Q* and no T/R*/A* witness.
+    Rebuilding/relaunching on the next call fails the unchanged Q*, FIRST/SECOND, chain and exact effect counts.
+    No elapsed wall-time assertion or time.monotonic replacement is used; reverse-M control is row6's clock-fault test.
+    """
+    rig = Row8Rig("deadline", jump_ns)
+    try:
+        rig.row8_start()
+        work = rig.row8_held_update()
+        rig.row8_jump("deadline", work.request)
+        assert rig.host.keep_running(lambda _s: False, timeout=0) is False
+        rig.row8_assert_still_held(work)
+        rig.update_gate.set()
+        assert rig.host.keep_running(rig.complete, timeout=60) is True
+        rig.row8_assert_complete()
+    finally:
+        rig.close()
