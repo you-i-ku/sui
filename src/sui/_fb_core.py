@@ -80,6 +80,7 @@ class State:
         self.halted = None             # 止まった理由の Interruption (K16 (3)(c)、紙 Z42)。None は動いている
         self.interruptions: list = []  # 回す役まで上がった中断 (Interruption、同じプロセスの中だけ)
         self.round_clean = True        # 前の周が中断なしで通った (続けて同じ中断をまとめる境目)
+        self.rejected: set = set()     # 形がおかしくて断った封筒の番号 (K17。記録も預かりも無い)
         self.clock = clock
         self.workers = workers
         self.registry = registry
@@ -526,6 +527,22 @@ def _interrupt(state, kind, operation, exc):
     return item
 
 
+def _reject(state, envelope, exc) -> None:
+    """形のおかしい封筒を断る (§6-10 K17): 列から外し、番号を「断った」に置き、ホストの観測に 1 件残す。
+    受信の記録も預かりも作らない。中身は持ち続けない。"""
+    try:
+        now = mono_ns(state.clock)
+    except Exception:
+        now = None
+    number = getattr(envelope, "number", None)
+    with state.lock:
+        state.queue = [queued for queued in state.queue if queued is not envelope]
+        state.rejected.add(number)
+        state.interruptions.append(_fb.Interruption(
+            kind="rejected", operation="accept", error_type=type(exc).__name__,
+            message=f"envelope {number}: {exc}", first_ns=now, last_ns=now, count=1))
+
+
 def keep_running(host, done, timeout) -> bool:
     """もう一度回す役 (§6-10 K16、紙 Z42)。run_until と同じ 1 周を回し、ホストが行った置き場の操作の失敗では同じ
     準備のまま次の周で入り直す。それ以外の例外ではホストを止めて FHalted を上げる (頭の中が信じられない時は回り続け
@@ -538,7 +555,10 @@ def keep_running(host, done, timeout) -> bool:
         with state.lock:
             queued = list(state.queue)
         for envelope in queued:
-            host.window.accept(envelope)
+            try:
+                host.window.accept(envelope)
+            except _fb.FbInputError as exc:
+                _reject(state, envelope, exc)   # 外側の形の誤りだけ断って、後ろの封筒へ進む (K17)
 
     stages = (("accept", receive), ("settle", lambda: host.window.settle()), ("start", lambda: start_works(state)))
     while True:

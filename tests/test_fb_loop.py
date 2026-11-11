@@ -2954,3 +2954,318 @@ def test_run_until_still_propagates_the_same_store_error_without_driver_history(
         assert rig.host.interruptions() == () and rig.host.halted is None
     finally:
         rig.close()
+
+
+class Row6Rig(KeepRig):
+    """Schedule malformed and valid Posts through entered workers; only keep_running advances."""
+
+    def __init__(self, *, prefix=(), prefix_slot="keep-first", quiet=False, worker_mode=None, fault=None):
+        self.row6_prefix, self.row6_prefix_slot = prefix, prefix_slot
+        self.row6_bad, self.row6_good, self.row6_terminals, self.row6_batches = [], [], [], []
+        self.row6_bad_work, self.row6_worker_mode = None, worker_mode
+        super().__init__(fault=fault)
+        if quiet:
+            self.first_queued = True
+        if worker_mode is not None:
+            self.workers.overrides["belief_update"] = self.row6_update
+
+    def row6_bad_input(self, kind, segment):
+        if kind == "non_event":
+            return object(), ""  # Root JSON Pointer spelling is not fixed by K17.
+        if kind == "media_type":
+            return fb.Received(route_epoch="route-A", media_type=999999,
+                data=b"row6-poison", claims={"row6-poison": True}), "media_type"
+        assert kind == "item_slot"
+        # If used, this three-position Claim gives SECOND before the first legal two-position Claim.
+        return fb.SegmentReport(segment=segment, item_slot=999999,
+            item=f.CoverageClaim(route_epoch="route-A", interval=f.MeasurementInterval(
+                clock=self.clock.run, start_ns=0, end_ns=3, closure="(start,end]"),
+                kind="no_arrival", contract=c.NO_ARRIVAL, evidence=())), "item_slot"
+
+    def row6_post(self, work, ctx, event, *, field=None, issued=None, category="good"):
+        before = {r.envelope for r in execution_for(ctx, work.desc.work_id).reports}
+        try:
+            self.workers.post(ctx, event, issued)
+        except Exception as error:
+            raise AssertionError(f"ROW6_POST_CONNECTION: {type(error).__name__}: {error}") from None
+        observed, = (r for r in execution_for(ctx, work.desc.work_id).reports if r.envelope not in before)
+        item = {"event": event, "field": field, "work": work.desc.work_id, "envelope": observed.envelope}
+        target = self.row6_bad if field is not None else self.row6_terminals if category == "terminal" else self.row6_good
+        target.append(item)
+
+    def queue_claim(self, slot, start, end):
+        done = Event()
+        self.row6_batches.append(done)
+        def post(work, ctx):
+            self.clock.set(self.clock.mono_ns() + 10)
+            if slot == self.row6_prefix_slot:
+                for kind in self.row6_prefix:
+                    event, field = self.row6_bad_input(kind, work.request)
+                    self.row6_post(work, ctx, event, field=field)
+            self.row6_post(work, ctx, fb.SegmentReport(segment=work.request, item_slot=slot,
+                item=f.CoverageClaim(route_epoch="route-A", interval=f.MeasurementInterval(
+                    clock=self.clock.run, start_ns=start, end_ns=end, closure="(start,end]"),
+                    kind="no_arrival", contract=c.NO_ARRIVAL, evidence=())))
+        self.workers.commands.put((post, done, self.post_errors))
+
+    def row6_bad_batch(self, kinds):
+        done = Event()
+        self.row6_batches.append(done)
+        def post(work, ctx):
+            self.clock.set(self.clock.mono_ns() + 10)
+            for kind in kinds:
+                event, field = self.row6_bad_input(kind, work.request)
+                self.row6_post(work, ctx, event, field=field)
+        self.workers.commands.put((post, done, self.post_errors))
+        return done
+
+    def row6_update(self, work, ctx):
+        if work.desc.args.prior is not None and self.row6_bad_work is None:
+            self.row6_bad_work = work
+            reading = self.actual_reading()
+            self.row6_post(work, ctx, fb.WorkFinished(work=work.desc.work_id,
+                started=reading, finished=reading, outcome="not-a-WorkOutcome"), field="outcome")
+            if self.row6_worker_mode == "only_bad":
+                self.queue_claim("row6-after-silent-stop", 1, 3)
+                return
+        event, issued = self.workers.normal(work, ctx)
+        self.row6_post(work, ctx, event, issued=issued, category="terminal")
+
+    def row6_observation(self, posted):
+        ctx = self.workers.contexts["measure_segment"]
+        return next(r for r in execution_for(ctx, posted["work"]).reports if r.envelope == posted["envelope"])
+
+    def row6_assert_rejected(self):
+        import re
+        for done in self.row6_batches:
+            assert done.wait(30), "incomplete observation: row6 producer did not finish posting"
+        for thread in self.launcher.threads:
+            if thread is not self.thread:
+                thread.join(30)
+                assert not thread.is_alive(), "incomplete observation: row6 report producer did not stop"
+        assert not self.post_errors and self.row6_bad
+        history = self.host.interruptions()
+        rejected = [i for i in history if i.kind == "rejected"]
+        assert len(rejected) == len(self.row6_bad), "K17: one retained rejection per envelope, without coalescing"
+        for item, posted in zip(rejected, self.row6_bad):
+            assert item.operation == "accept" and item.error_type == "FbInputError" and item.count == 1
+            if posted["field"]:
+                assert posted["field"] in item.message
+            # CG-ROW6-ROOT-FIELD: do not invent a root-field spelling for a non-FEvent.
+            assert re.search(r"(?<![0-9A-Za-z_])" + str(posted["envelope"]) + r"(?![0-9A-Za-z_])", item.message)
+            assert isinstance(item.first_ns, int) and item.first_ns <= item.last_ns
+            assert self.row6_observation(posted).point is None
+        rejected_numbers = {p["envelope"] for p in self.row6_bad}
+        assert rejected_numbers.isdisjoint(r.envelope for r in self.host.window.status().receipts), \
+            "K17: rejected envelope still has receipt custody"
+        ctx = self.workers.contexts["measure_segment"]
+        numbers = [r.envelope for e in ctx.evidence().executions for r in e.reports]
+        assert len(numbers) == len(set(numbers)), "K17: envelope number reused"
+        for posted in self.row6_good:
+            observed = self.row6_observation(posted)
+            assert observed.point is not None, "L-HOST: a later legal report was not saved"
+            assert self.one(c.SEGMENT_REPORT, cid=observed.point).value == wire(posted["event"])
+        if self.row6_good:
+            assert [p["envelope"] for p in self.row6_good] == sorted(p["envelope"] for p in self.row6_good)
+        assert self.host.interruptions() == history, "K17: observation cleared its history"
+        assert self.host.halted is None
+
+    def row6_assert_adopted_inputs(self):
+        adoptions = self.facts(c.BELIEF_ADOPTED)
+        for adopted, posted in ((adoptions[0], self.row6_good[0]), (adoptions[1], self.row6_good[-1])):
+            work = next(w for w in self.workers.entries if w.request == adopted.value["request"])
+            assert row5_report_for_work(self, work).cid == self.row6_observation(posted).point, \
+                "K17: a rejected payload entered the belief instead of the legal report"
+
+
+def row6_keep(rig, done=None):
+    try:
+        result = rig.host.keep_running(rig.complete if done is None else done, timeout=60)
+    except fb.FHalted as error:
+        cause = error.__cause__
+        if isinstance(cause, fb.FbInputError) and cause.reason == "shape":
+            raise AssertionError(f"K17: shape at {cause.field} halted instead of rejecting; "
+                f"interruption_kinds={[i.kind for i in rig.host.interruptions()]}; "
+                f"store_failures={len(rig.fault.raised)}") from None
+        raise
+    except fb.FbInputError as error:
+        raise AssertionError(f"K17: shape at {error.field} escaped keep_running") from None
+    assert result is True, "K17/L-HOST: rejection left the queue or a successor blocked"
+    assert rig.host.halted is None
+
+
+def row6_initial_ready(rig):
+    errors = rig.workers.errors + rig.launcher.errors + rig.post_errors
+    if errors:
+        raise errors[0]
+    if len(rig.facts(c.SELECTION)) != 1 or len(rig.workers.entries) != 5:
+        return False
+    for work in rig.workers.entries:
+        if work.desc.purpose != "measure_segment" and work.desc.work_id not in rig.workers.stops:
+            return False
+        if work.desc.purpose not in ("measure_segment", "selection_draw"):
+            if len([t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == work.request]) != 1:
+                return False
+    ctx = rig.workers.contexts.get("measure_segment")
+    work = next(w for w in rig.workers.entries if w.desc.purpose == "measure_segment")
+    return ctx is not None and any(r.point is not None for r in execution_for(ctx, work.desc.work_id).reports)
+
+
+@pytest.mark.parametrize("kind", ("non_event", "media_type", "item_slot"))
+def test_row6_rejected_head_does_not_block_or_change_the_two_ce1_updates(kind):
+    """K17 :3517 (2)-(4), L-HOST :693, CE1 :2917-2923; Boot and entered-worker Posts.
+
+    Halting/escaping/retaining the malformed head fails mandatory progress; rejecting its successor also fails.
+    Using the malformed three-position Claim fails FIRST or the exact adopted report bindings.
+    Losing/clearing a rejection or reusing its number fails the per-envelope history/evidence checks.
+    """
+    rig = Row6Rig(prefix=(kind,))
+    try:
+        row6_keep(rig)
+        rig.assert_loop()
+        rig.row6_assert_rejected()
+        rig.row6_assert_adopted_inputs()
+        assert len(rig.row6_bad) == 1 and len(rig.row6_good) == 2
+        assert rig.row6_good[0]["envelope"] == rig.row6_bad[0]["envelope"] + 1
+        assert len(rig.facts(c.SEGMENT_REPORT)) == 3 and not rig.facts(c.RECEIVED)
+    finally:
+        rig.close()
+
+
+def test_row6_two_rejections_create_no_record_or_custody_and_survive_later_success():
+    """K17 (1)-(3), Z43 :3742: an idle entered measurement process isolates rejection's effects.
+
+    A rejected receipt/diagnostic record/preparation/custody fails the unchanged physical snapshot/preparations.
+    Coalescing two envelopes or erasing them on a successful round fails two count=1 observations.
+    Reusing numbers fails the later legal envelope and the global independent EH numbers.
+    """
+    rig = Row6Rig(quiet=True)
+    try:
+        row6_keep(rig, lambda _s: row6_initial_ready(rig))
+        before, prepared = rig.snapshot(), tuple(rig.ledger.preparations)
+        assert rig.row6_bad_batch(("media_type", "media_type")).wait(30)
+        assert not rig.post_errors and len(rig.row6_bad) == 2
+        row6_keep(rig, lambda _s: len([i for i in rig.host.interruptions() if i.kind == "rejected"]) == 2)
+        assert rig.snapshot() == before and tuple(rig.ledger.preparations) == prepared
+        assert len(rig.workers.entries) == len(rig.launcher.attempts) == 5
+        rig.row6_assert_rejected()
+        history = rig.host.interruptions()
+        rig.queue_claim("keep-first", 0, 2)
+        row6_keep(rig)
+        rig.assert_loop()
+        rig.row6_assert_rejected()
+        rig.row6_assert_adopted_inputs()
+        assert rig.host.interruptions() == history
+        first, second = rig.row6_bad
+        assert second["envelope"] == first["envelope"] + 1
+        assert rig.row6_good[0]["envelope"] == second["envelope"] + 1
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("mode", ("only_bad", "bad_then_readable"))
+def test_row6_worker_rejected_terminal_is_not_an_end_but_a_readable_terminal_is(mode):
+    """K17 (4), K15 :3515: reject malformed WorkFinished after entry; preserve a later real end.
+
+    Counting rejection as unread blocks the replacement update; counting it as an end creates forbidden T/R*/A*.
+    Ignoring the later readable end fails ordinary adoption or T.first_receipt's exact EH Point.
+    """
+    rig = Row6Rig(worker_mode=mode)
+    try:
+        row6_keep(rig)
+        rig.row6_assert_rejected()
+        work = rig.row6_bad_work
+        assert work is not None and work.desc.args.prior == rig.facts(c.BELIEF_ADOPTED)[0].cid
+        observed = execution_for(rig.workers.contexts["measure_segment"], work.desc.work_id)
+        assert observed.entered == 1 and observed.stopped and observed.launches == ("launched",)
+        assert rig.row6_observation(rig.row6_bad[0]).point is None
+        if mode == "bad_then_readable":
+            rig.assert_loop()
+            terminal, = (t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == work.request)
+            readable, = (p for p in rig.row6_terminals if p["work"] == work.desc.work_id)
+            assert terminal.value["first_receipt"] == rig.row6_observation(readable).point
+            assert len(observed.reports) == 2
+        else:
+            assert len(observed.reports) == 1
+            assert not [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == work.request]
+            assert not [r for r in rig.facts(c.UPDATE_RESULT) if r.value["request"] == work.request]
+            assert not [a for a in rig.facts(c.BELIEF_ADOPTED) if a.value["request"] == work.request]
+            a1, a2 = rig.facts(c.BELIEF_ADOPTED)
+            for adopted, expected, prior in ((a1, FIRST, None), (a2, SECOND, a1.cid)):
+                accepted = next(w for w in rig.workers.entries if w.request == adopted.value["request"])
+                assert_update(rig, accepted, adopted, expected, prior)
+            assert [a.value["previous"] for a in (a1, a2)] == [None, a1.cid]
+            assert len(rig.requests("belief_update")) == 3 and len(rig.facts(c.UPDATE_RESULT)) == 2
+            assert len(rig.workers.entries) == len(rig.launcher.attempts) == 14
+            for entered in rig.workers.entries:
+                assert [ok for key, ok in rig.workers.entry_attempts if key == entered.desc.work_id] == [True]
+            for result in rig.facts(c.UPDATE_RESULT):
+                assert len([a for a in rig.workers.contexts["measure_segment"].evidence().acquisitions if result.cid in a.contents]) == 1
+        rig.row6_assert_adopted_inputs()
+    finally:
+        rig.close()
+
+
+def test_row6_accept_clock_fault_halts_instead_of_rejecting_a_legal_report():
+    """K17 (5), r<=s :486: a valid Post at 40 followed by save clock 20 is FbHostFault.
+
+    Rejecting a non-shape host failure and continuing fails FHalted/cause/history and the unchanged ledger.
+    """
+    rig = Row6Rig(quiet=True)
+    try:
+        row6_keep(rig, lambda _s: row6_initial_ready(rig))
+        rig.clock.set(40)
+        rig.host.post(fb.Received(route_epoch="route-A", media_type="application/octet-stream", data=b"valid-clock-probe", claims={}))
+        rig.clock.set(20)
+        before = rig.snapshot()
+        with pytest.raises(fb.FHalted) as caught:
+            rig.host.keep_running(lambda _s: False, timeout=60)
+        assert isinstance(caught.value.__cause__, fb.FbHostFault)
+        assert not isinstance(caught.value.__cause__, fb.FbInputError)
+        assert rig.host.halted.kind == "halted" and rig.host.halted.operation == "accept"
+        assert all(i.kind != "rejected" for i in rig.host.interruptions())
+        assert rig.snapshot() == before
+    finally:
+        rig.close()
+
+
+def test_row6_run_until_still_raises_shape_and_keeps_the_malformed_head():
+    """K17 (1): the legacy entry propagates FbInputError and retains the same head.
+
+    Dropping/recovering/halting on shape in run_until fails the second exception, empty history, or snapshot.
+    """
+    rig = Row6Rig(quiet=True)
+    try:
+        row6_keep(rig, lambda _s: row6_initial_ready(rig))
+        before = rig.snapshot()
+        assert rig.row6_bad_batch(("media_type",)).wait(30)
+        assert not rig.post_errors and len(rig.row6_bad) == 1
+        for _ in range(2):
+            with pytest.raises(fb.FbInputError) as caught:
+                rig.host.run_until(lambda _s: False, timeout=0)
+            assert caught.value.reason == "shape" and "media_type" in caught.value.field
+            assert rig.snapshot() == before
+        assert rig.host.halted is None and rig.host.interruptions() == ()
+    finally:
+        rig.close()
+
+
+def test_row6_rejection_and_store_recovery_share_one_keep_running_call():
+    """K17 plus K16: Q1's store failure precedes a malformed head before the second legal Claim.
+
+    Confusing store and shape or retrying with duplicate effects fails both retained kinds and CE1's one chain.
+    """
+    rig = Row6Rig(prefix=("media_type",), prefix_slot="keep-second",
+                  fault={"boundary": "before_body", "target": "request", "times": 1})
+    try:
+        row6_keep(rig)
+        rig.assert_loop()
+        rig.row6_assert_rejected()
+        rig.row6_assert_adopted_inputs()
+        assert len(rig.fault.raised) == 1
+        stores = [i for i in rig.host.interruptions() if i.kind == "store"]
+        assert len(stores) == 1
+        assert_keep_interruption(stores[0], rig.fault.raised[0], kind="store", count=1)
+        assert [i.kind for i in rig.host.interruptions()] == ["store", "rejected"]
+    finally:
+        rig.close()

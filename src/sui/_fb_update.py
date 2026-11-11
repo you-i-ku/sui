@@ -211,9 +211,10 @@ def _head(plan):
 
 def _silent_stop(state, row) -> bool:
     """終わりの知らせの無い停止 (K15): 入場した本体の実際の停止をホストが観測し、その口から受け取った封筒が
-    全部受付済みで、その中に終わりの知らせが無い。印を持たず、その都度 P.work から導く。"""
+    全部受付済みで、その中に終わりの知らせが無い。印を持たず、その都度 P.work から導く。形がおかしくて断った封筒
+    (K17) は済んだものに数え、終わりの知らせには数えない。"""
     from ._fb_think import _ends
-    return bool(row.entered and row.stopped and all(number in state.receipts for number, _r in row.reports)
+    return bool(row.entered and row.stopped and all(number in state.receipts or number in state.rejected for number, _r in row.reports)
                 and not _ends(state, row))
 
 

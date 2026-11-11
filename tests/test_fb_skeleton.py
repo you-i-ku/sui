@@ -624,7 +624,7 @@ FB_FIELD_SPEC = {
     "PurposeStatus": "obligation:Held;o_id:str;condition:Literal['issue','save','run','handle','stop'];role:str;process:BootSlot|None;reader:Point|None;target:Held|None;part:MeasurementInterval|None;handled:bool;handed_to:Held|None;unmet:bool;evidence:StatusBasis",
     "FStatus": "receipts:tuple[ReceiptStatus,...];works:tuple[WorkStatus,...];readings:tuple[ReadingStatus,...];pending:tuple[PendingStatus,...];segments:tuple[SegmentStatus,...];purposes:tuple[PurposeStatus,...]",
     # F-b v0.62 K16 (4): an interruption that reached the keep_running driver (host observation, in-process only).
-    "Interruption": "kind:Literal['store','halted'];operation:str;error_type:str;message:str;first_ns:int|None;last_ns:int|None;count:int",
+    "Interruption": "kind:Literal['store','halted','rejected'];operation:str;error_type:str;message:str;first_ns:int|None;last_ns:int|None;count:int",
 }
 
 FA_FIELD_SPEC = {

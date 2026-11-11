@@ -73,9 +73,11 @@ class FHalted(RuntimeError):
 class Interruption:
     """回す役まで上がった中断 (§6-10 K16 (4))。ホストが自分で観測したもので、同じプロセスの中だけに残る (台帳には
     書かない)。kind="store" は置き場の操作の失敗 (operation はその操作の名前。次の周で入り直す)、kind="halted" は
-    ホストが止まった理由 (operation は周の段 accept・settle・start)。続けて同じ中断は count にまとめ、途中で 1 周でも
+    ホストが止まった理由 (operation は周の段 accept・settle・start)、kind="rejected" は形のおかしい封筒を断ったこと
+    (§6-10 K17。operation="accept"、error_type="FbInputError"、message は封筒の番号と形のおかしい欄を含む。1 通ごとに
+    1 件で count=1)。続けて同じ中断は count にまとめ、途中で 1 周でも
     中断なしで通ったら別のまとまりにする。first_ns・last_ns はホストの run の M の読み (読めなければ None)。"""
-    kind: _Literal["store", "halted"]
+    kind: _Literal["store", "halted", "rejected"]
     operation: str
     error_type: str
     message: str
@@ -756,7 +758,8 @@ class FThreadHost:
     def keep_running(self, done: _Callable[[FStatus], bool], *, timeout: float) -> bool:
         """もう一度回す役 (§6-10 K16)。run_until と同じ 1 周 (受付 → settle → 仕事の開始 → done(status)) を回す。
         周の中でホストが行った置き場の操作が失敗した時 (OSError・sqlite3.Error をその操作の所で観測) は、窓口の状態を
-        そのままに、同じ準備のまま次の周で入り直す。それ以外の例外ではホストを止めて FHalted を上げる (元の例外が
+        そのままに、同じ準備のまま次の周で入り直す。列の封筒の外側の形がおかしい時 (受付が FbInputError(reason="shape"))
+        は、その封筒を断って列から外し (記録も預かりも作らない)、止まらずに後ろの封筒へ進む (K17)。それ以外の例外ではホストを止めて FHalted を上げる (元の例外が
         原因)。KeyboardInterrupt・SystemExit、done と status の例外はそのまま上げる。期限は入口で 1 回だけ決め、
         中断で延ばさない。回数・時間の固定の上限は無い。False は期限まで done が真にならなかったことだけ
         (仕事の失敗・目的の放棄・再実行の許可ではない)。起きた中断は interruptions() に残る。"""
