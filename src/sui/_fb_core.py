@@ -9,7 +9,7 @@ H (ホスト) と P (預かり) は FThreadHost が持ち、窓口 FWindow は�
 from collections.abc import Mapping as _Mapping
 from types import MappingProxyType as _MappingProxyType
 from dataclasses import dataclass as _dataclass, field as _field, fields as _fields,     is_dataclass as _is_dataclass
-from threading import RLock as _RLock
+from threading import RLock as _RLock, local as _local
 import sqlite3 as _sqlite3
 
 from . import fb as _fb
@@ -65,7 +65,7 @@ class _WatchedStore:
             try:
                 return value(*args, **kwargs)
             except (OSError, _sqlite3.Error) as exc:
-                state.store_failure = (operation, exc)
+                state.store_failures.last = (operation, exc)
                 raise
         return call
 
@@ -76,7 +76,9 @@ class State:
     def __init__(self, *, ledger, clock, workers, registry, launcher):
         self.lock = _RLock()
         self.ledger = _WatchedStore(ledger, self)
-        self.store_failure = None      # ホストが最後に観測した置き場の操作の失敗 (操作の名前, 例外)
+        # 置き場の操作の失敗の観測 (操作の名前, 例外)。呼び出したスレッドごとに持つ: 回す役が見るのは自分の呼び出しの
+        # 所で観測した失敗だけで、仕事の口 (別のスレッド) の失敗では変わらない (K16 (3)(a))
+        self.store_failures = _local()
         self.halted = None             # 止まった理由の Interruption (K16 (3)(c)、紙 Z42)。None は動いている
         self.interruptions: list = []  # 回す役まで上がった中断 (Interruption、同じプロセスの中だけ)
         self.round_clean = True        # 前の周が中断なしで通った (続けて同じ中断をまとめる境目)
@@ -190,6 +192,9 @@ def accept(state, envelope) -> None:
             if wire(known.envelope) != wire(envelope):
                 raise _fb.FbHostFault(f"envelope {envelope.number}: different content or r for the same number")
             return
+        if envelope.number in state.rejected:
+            # 断った封筒の番号は使ったまま (K17 (2))。形を直した中身でも、同じ番号では受け付けない
+            raise _fb.FbHostFault(f"envelope {envelope.number}: the number of a rejected envelope is not reused")
         # H が Post で押した原本があれば、最初の受付もその原本と同じ bytes でなければならない (R21)
         if any(wire(queued) != wire(envelope) for queued in state.queue if queued.number == envelope.number):
             raise _fb.FbHostFault(f"envelope {envelope.number}: different content or r from the posted envelope")
@@ -565,11 +570,11 @@ def keep_running(host, done, timeout) -> bool:
         require_running(state)
         clean = True
         for name, stage in stages:
-            state.store_failure = None
+            state.store_failures.last = None
             try:
                 stage()
             except Exception as exc:
-                failure = state.store_failure
+                failure = state.store_failures.last
                 if failure is not None and failure[1] is exc:
                     # 置き場の操作の失敗: 窓口の状態はそのまま。次の段 (仕事の開始) は進め、次の周で入り直す
                     _interrupt(state, "store", failure[0], exc)

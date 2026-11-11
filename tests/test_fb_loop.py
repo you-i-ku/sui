@@ -3455,3 +3455,406 @@ def test_row8_keep_running_deadline_preserves_entered_update_for_the_next_call(j
         rig.row8_assert_complete()
     finally:
         rig.close()
+
+
+def scene17_keep(rig, done=None):
+    assert rig.host.keep_running(rig.complete if done is None else done, timeout=60) is True, \
+        "incomplete observation: the required public successor did not appear"
+
+
+def scene17_post_claim(rig, slot, start, end):
+    """Post from the entered measurement thread, without advancing the receiver."""
+    done, posted = Event(), []
+    def emit(work, ctx):
+        rig.clock.set(rig.clock.mono_ns() + 10)
+        event = fb.SegmentReport(segment=work.request, item_slot=slot,
+            item=f.CoverageClaim(route_epoch="route-A", interval=f.MeasurementInterval(
+                clock=rig.clock.run, start_ns=start, end_ns=end, closure="(start,end]"),
+                kind="no_arrival", contract=c.NO_ARRIVAL, evidence=()))
+        before = {r.envelope for r in execution_for(ctx, work.desc.work_id).reports}
+        rig.workers.post(ctx, event)
+        observed, = (r for r in execution_for(ctx, work.desc.work_id).reports if r.envelope not in before)
+        posted.append(fb.Envelope(number=observed.envelope, event=event, received_ns=observed.received_ns))
+    rig.workers.commands.put((emit, done, rig.post_errors))
+    assert done.wait(30), "incomplete observation: measurement Post did not finish"
+    assert not rig.post_errors and len(posted) == 1
+    return posted[0]
+
+
+class Scene17ConcurrentRead:
+    """Interleave at public accept/settle return, after releasing that operation's lock but before the driver catches E1."""
+
+    def __init__(self, rig, mode):
+        from threading import get_ident
+        self.rig, self.mode, self.get_ident, self.runner = rig, mode, get_ident, get_ident()
+        self.ready, self.go, self.done = Event(), Event(), Event()
+        self.worker = None
+        self.armed = self.in_runner_read = self.worker_read = False
+        self.runner_error = OSError("scene17 runner store E1" if mode == "store" else "scene17 clock E1 is not storage")
+        self.worker_error = OSError("scene17 entered worker ctx.read E2")
+        self.order, self.worker_caught, self.fixed = [], [], ()
+        get, record, now = rig.contents.get, rig.ledger.record, rig.clock.now
+
+        def get_with_fault(value_seal):
+            if get_ident() == self.worker and self.worker_read:
+                self.worker_read = False
+                self.order.append("worker store E2")
+                raise self.worker_error
+            if get_ident() == self.runner and self.in_runner_read:
+                self.in_runner_read = False
+                self.order.append("runner store E1")
+                raise self.runner_error
+            return get(value_seal)
+
+        def record_with_interleaving(point):
+            if get_ident() != self.runner or not self.armed or mode != "store":
+                return record(point)
+            self.armed = False
+            self.fixed = tuple(rig.ledger.preparations)
+            self.in_runner_read = True
+            try:
+                record(point)
+            except OSError as error:
+                assert error is self.runner_error
+                raise
+            finally:
+                self.in_runner_read = False
+            raise AssertionError("CONNECTION: the runner's store fault did not fire")
+
+        def clock_with_interleaving():
+            if get_ident() == self.runner and self.armed and mode == "clock":
+                self.armed = False
+                self.fixed = tuple(rig.ledger.preparations)
+                self.order.append("runner clock E1")
+                raise self.runner_error
+            return now()
+
+        rig.contents.get, rig.ledger.record, rig.clock.now = get_with_fault, record_with_interleaving, clock_with_interleaving
+        def interleave(operation):
+            def call(*args, **kwargs):
+                try:
+                    value = operation(*args, **kwargs)
+                except OSError as error:
+                    if error is self.runner_error:
+                        # The public operation has unwound, so ctx.read can acquire its own locks.
+                        # keep_running has not received E1 yet; E2 must finish before this rethrow.
+                        self.release_worker()
+                        self.order.append("runner rethrows E1")
+                    raise
+                if mode == "worker_only" and self.armed:
+                    self.armed = False
+                    self.fixed = tuple(rig.ledger.preparations)
+                    self.release_worker()
+                return value
+            return call
+        window = rig.host.window
+        window.accept = interleave(window.accept)
+        window.settle = interleave(window.settle)
+        def read_from_entered_worker(work, ctx):
+            self.worker = get_ident()
+            assert self.worker != self.runner
+            assert execution_for(ctx, work.desc.work_id).entered == 1
+            self.ready.set()
+            assert self.go.wait(30), "CONNECTION: runner did not release the independent worker read"
+            self.worker_read = True
+            try:
+                ctx.read(rig.model_point)
+            except OSError as error:
+                self.worker_caught.append(error)
+            else:
+                raise AssertionError("CONNECTION: ctx.read did not encounter E2")
+            finally:
+                self.worker_read = False
+        rig.workers.commands.put((read_from_entered_worker, self.done, rig.post_errors))
+        assert self.ready.wait(30), "CONNECTION: measurement worker did not reach the read gate"
+        self.armed = True
+
+    def release_worker(self):
+        self.go.set()
+        assert self.done.wait(30), "CONNECTION: entered ctx.read could not finish while the runner was suspended"
+        assert not self.rig.post_errors and self.worker_caught == [self.worker_error]
+
+    def assert_fixed(self):
+        for prepared in self.fixed:
+            assert self.rig.read_stored(prepared.cid) == (prepared.header, prepared.salt, prepared.record)
+            assert all(p == prepared for p in self.rig.ledger.preparations if p.record.id == prepared.record.id)
+
+
+def test_row1_concurrent_store_error_retries_despite_a_later_worker_read_error():
+    """K16 :3516 (3)(a)/(4): E1 leaves public settle/accept, then E2 finishes, then the driver receives E1.
+
+    One shared last-store-error overwritten by the worker fails no FHalted, store(E1), and CE1 completion.
+    Losing/rebuilding the preparation or rerunning effects fails fixed bytes, FIRST/SECOND and exact loop counts.
+    Counting the worker's E2 as a driver interruption fails the sole store(E1) history.
+    """
+    rig, cut = Row6Rig(quiet=True), None
+    try:
+        scene17_keep(rig, lambda _s: row6_initial_ready(rig))
+        scene17_post_claim(rig, "keep-first", 0, 2)
+        cut = Scene17ConcurrentRead(rig, "store")
+        try:
+            scene17_keep(rig)
+        except fb.FHalted as error:
+            assert cut.order == ["runner store E1", "worker store E2", "runner rethrows E1"]
+            assert cut.worker_caught == [cut.worker_error]
+            raise AssertionError(f"K16(a): runner E1 was halted after worker E2; "
+                f"cause={error.__cause__}; kinds={[i.kind for i in rig.host.interruptions()]}") from None
+        assert cut.order == ["runner store E1", "worker store E2", "runner rethrows E1"]
+        rig.assert_loop()
+        cut.assert_fixed()
+        interruption, = rig.host.interruptions()
+        assert_keep_interruption(interruption, cut.runner_error, kind="store", count=1)
+        assert rig.host.halted is None
+    finally:
+        if cut is not None:
+            cut.go.set()
+        rig.close()
+
+
+def test_row1_concurrent_nonstore_clock_error_still_halts_despite_worker_store_error():
+    """K16 (3)(c): Clock.now's OSError E1 stays non-store after entered ctx.read encountered E2.
+
+    Treating any recent storage failure as permission to retry fails exact FHalted(cause=clock E1), without store history.
+    """
+    rig, cut = Row6Rig(quiet=True), None
+    try:
+        scene17_keep(rig, lambda _s: row6_initial_ready(rig))
+        scene17_post_claim(rig, "keep-first", 0, 2)
+        cut = Scene17ConcurrentRead(rig, "clock")
+        before = rig.snapshot()
+        with pytest.raises(fb.FHalted) as caught:
+            scene17_keep(rig)
+        assert caught.value.__cause__ is cut.runner_error
+        assert cut.order == ["runner clock E1", "worker store E2", "runner rethrows E1"]
+        interruption, = rig.host.interruptions()
+        assert_keep_interruption(interruption, cut.runner_error, kind="halted", count=1)
+        assert rig.host.halted == interruption and rig.snapshot() == before
+    finally:
+        if cut is not None:
+            cut.go.set()
+        rig.close()
+
+
+def test_row1_concurrent_worker_read_error_is_not_a_driver_interruption():
+    """K16 (4) counts only exceptions reaching the driver; the entered measurement worker catches its own E2.
+
+    Counting a worker-only read failure as a driver interruption fails empty history/no halted despite normal CE1 completion.
+    """
+    rig, cut = Row6Rig(quiet=True), None
+    try:
+        scene17_keep(rig, lambda _s: row6_initial_ready(rig))
+        scene17_post_claim(rig, "keep-first", 0, 2)
+        cut = Scene17ConcurrentRead(rig, "worker_only")
+        scene17_keep(rig)
+        assert cut.order == ["worker store E2"] and cut.worker_caught == [cut.worker_error]
+        rig.assert_loop()
+        cut.assert_fixed()
+        assert rig.host.interruptions() == () and rig.host.halted is None
+    finally:
+        if cut is not None:
+            cut.go.set()
+        rig.close()
+
+
+def scene17_reject_number(rig):
+    scene17_keep(rig, lambda _s: row6_initial_ready(rig))
+    assert rig.row6_bad_batch(("item_slot",)).wait(30)
+    assert not rig.post_errors
+    scene17_keep(rig, lambda _s: len(rig.host.interruptions()) == 1)
+    rig.row6_assert_rejected()
+    posted, = rig.row6_bad
+    observed = rig.row6_observation(posted)
+    assert observed.point is None
+    return posted, observed
+
+
+def scene17_finish_after_direct_rejection(rig, posted, before, prepared, history):
+    assert rig.snapshot() == before and tuple(rig.ledger.preparations) == prepared
+    assert rig.row6_observation(posted).point is None
+    assert all(r.envelope != posted["envelope"] for r in rig.host.window.status().receipts)
+    assert not rig.requests("belief_update") and not rig.facts(c.BELIEF_ADOPTED)
+    assert rig.host.halted is None
+    # K16(4) observes errors reaching keep_running, not a caller's direct accept exception.
+    assert rig.host.interruptions() == history
+    rig.queue_claim("keep-first", 0, 2)
+    scene17_keep(rig)
+    rig.assert_loop()
+    rig.row6_assert_rejected()
+    rig.row6_assert_adopted_inputs()
+    assert rig.row6_good[0]["envelope"] == posted["envelope"] + 1
+    raw_points = {r.cid for r in rig.facts(c.SEGMENT_REPORT)}
+    assert len(raw_points) == 3
+    assert all(b.value["report"] in raw_points for b in rig.facts(c.SEGMENT_BINDING))
+    assert rig.host.interruptions() == history
+
+
+def test_row6_rejected_number_changed_payload_is_host_fault_and_new_post_still_updates():
+    """K17 :3517 (2)/(4)/(5): consumed number n and r may not be reused with a repaired Claim.
+
+    Checking only accepted/queued numbers fails FbHostFault for this rejected n with changed payload.
+    Calling every rejected-n replay a shape error fails the precise host-fault exception class.
+    Letting the rejected three-position Claim leak into belief/bindings fails unchanged records and FIRST/SECOND.
+    """
+    rig = Row6Rig(quiet=True)
+    try:
+        posted, observed = scene17_reject_number(rig)
+        before, prepared, history = rig.snapshot(), tuple(rig.ledger.preparations), rig.host.interruptions()
+        repaired = replace(posted["event"], item_slot="row6-rejected-number-repaired")
+        envelope = fb.Envelope(number=observed.envelope, event=repaired, received_ns=observed.received_ns)
+        try:
+            rig.host.window.accept(envelope)
+        except fb.FbHostFault:
+            pass
+        except fb.FbInputError as error:
+            raise AssertionError(f"K17(5): repaired payload for consumed number was misclassified as shape at {error.field}") from None
+        else:
+            raise AssertionError("K17(2)/(5): changed payload accepted under a rejected envelope number")
+        scene17_finish_after_direct_rejection(rig, posted, before, prepared, history)
+    finally:
+        rig.close()
+
+
+def test_row6_rejected_number_same_malformed_payload_stays_shape_without_custody():
+    """K17 (1)/(2), refusal :484: replaying the identical malformed envelope still raises shape.
+
+    Silently accepting a remembered malformed payload fails repeated FbInputError and no new preparation/custody.
+    """
+    rig = Row6Rig(quiet=True)
+    try:
+        posted, observed = scene17_reject_number(rig)
+        before, prepared, history = rig.snapshot(), tuple(rig.ledger.preparations), rig.host.interruptions()
+        envelope = fb.Envelope(number=observed.envelope, event=posted["event"], received_ns=observed.received_ns)
+        for _ in range(2):
+            with pytest.raises(fb.FbInputError) as caught:
+                rig.host.window.accept(envelope)
+            assert caught.value.reason == "shape" and "item_slot" in caught.value.field
+        scene17_finish_after_direct_rejection(rig, posted, before, prepared, history)
+    finally:
+        rig.close()
+
+
+class Scene17AcceptOrderRig(KeepRig):
+    """Three single-position CE1 Claims; independently gate each entered Wu and observe actual Q*/B/report links."""
+
+    def __init__(self):
+        self.waiting = {}
+        self.gates = {slot: Event() for slot in ("H", "A", "B")}
+        self.posted = {slot: Event() for slot in ("H", "A", "B")}
+        super().__init__()
+        self.first_queued = self.second_queued = True
+        def finish_after_gate(work, ctx):
+            report = row5_report_for_work(self, work)
+            slot = report.value["item_slot"]
+            assert slot in self.gates and slot not in self.waiting
+            self.waiting[slot] = work
+            assert self.gates[slot].wait(180), "incomplete observation: Wu gate not released"
+            event, issued = self.workers.normal(work, ctx)
+            self.workers.post(ctx, event, issued)
+            self.posted[slot].set()
+        self.workers.overrides["belief_update"] = finish_after_gate
+
+    def wait_for_update(self, number, slot):
+        def ready(_s):
+            errors = self.workers.errors + self.launcher.errors + self.post_errors
+            if errors:
+                raise errors[0]
+            return len(self.waiting) >= number
+        scene17_keep(self, ready)
+        assert list(self.waiting) == list(("H", "A", "B")[:number]), "K14: binding discovery order replaced actual receipt order"
+        assert len(self.requests("belief_update")) == number
+        return self.waiting[slot]
+
+    def accept_and_bind(self, envelope):
+        self.host.window.accept(envelope)
+        ctx = self.workers.contexts["measure_segment"]
+        measurement = next(w for w in self.workers.entries if w.desc.purpose == "measure_segment")
+        for _ in range(64):
+            self.host.window.settle()  # Deliberately never pump the host's still-queued earlier envelope.
+            observed = next(r for r in execution_for(ctx, measurement.desc.work_id).reports if r.envelope == envelope.number)
+            if observed.point is not None and any(b.value["report"] == observed.point for b in self.facts(c.SEGMENT_BINDING)):
+                return observed.point
+        raise AssertionError("incomplete observation: directly accepted report was not bound")
+
+    def close(self):
+        for gate in self.gates.values():
+            gate.set()
+        super().close()
+
+
+@pytest.mark.parametrize("accept_order", (("B", "A"), ("A", "B")), ids=("reverse_accept", "receipt_order_control"))
+def test_row2_accept_order_ack_loss_confirms_a_before_q_b_and_keeps_one_chain(accept_order):
+    """K14 :3514, K9 :3509, K13 :3513: H/A/B arrive in order, while A/B may be accepted in reverse.
+
+    Choosing binding-discovery order fails Q_A before Q_B and the exact Q*/B/raw-report sequence.
+    Treating pending a as absent fails no Q_B before readback, Q_B.prior=a and h->a->b without Stale.
+    Treating pending a as confirmed fails Row2AckLoss's public prepare/readback guard before any Q_B.
+    Rebuilding a or retrying external effects fails fixed preparation, unique adoption, entry/draw/acquisition counts.
+    CE1 :2904-2923: one/two/three zeros give (2/3,1/3;3/8), FIRST, SECOND, by conjunction.
+    """
+    rig = Scene17AcceptOrderRig()
+    try:
+        scene17_keep(rig, lambda _s: row6_initial_ready(rig))
+        h_envelope = scene17_post_claim(rig, "H", 0, 1)
+        h_work = rig.wait_for_update(1, "H")
+        envelopes = {"A": scene17_post_claim(rig, "A", 1, 2), "B": scene17_post_claim(rig, "B", 2, 3)}
+        assert (h_envelope.received_ns, h_envelope.number) < (envelopes["A"].received_ns, envelopes["A"].number) \
+            < (envelopes["B"].received_ns, envelopes["B"].number)
+        points = {}
+        for slot in accept_order:
+            points[slot] = rig.accept_and_bind(envelopes[slot])
+        physical = [r.value["item_slot"] for r in rig.facts(c.SEGMENT_REPORT) if r.value["item_slot"] in ("A", "B")]
+        assert physical == list(accept_order)
+        assert not rig.facts(c.BELIEF_ADOPTED) and len(rig.requests("belief_update")) == 1
+        rig.gates["H"].set()
+        a_work = rig.wait_for_update(2, "A")
+        h, = rig.facts(c.BELIEF_ADOPTED)
+        assert_update(rig, h_work, h, {"joint": [[2, 3], [1, 3]], "evidence_mass": [3, 8]})
+        assert a_work.desc.args.prior == h.cid and row5_report_for_work(rig, a_work).cid == points["A"]
+        cut = Row2AckLoss(rig, "adoption", "after_entry_commit")
+        rig.gates["A"].set()
+        assert rig.posted["A"].wait(30), "incomplete observation: A's readable terminal was not posted"
+        for _ in range(64):
+            rig.host.keep_running(lambda _s: cut.failed, timeout=0)
+            if cut.failed:
+                break
+        assert cut.failed, "UNFIRED: a's committed adoption did not lose its acknowledgement"
+        cut.assert_commit_at_loss()
+        assert not cut.confirmed, "test connection: a was read back before the loss observation"
+        assert len(rig.requests("belief_update")) == 2, "K13: Q_B created before a was confirmed"
+        assert [w.desc.work_id for w in rig.waiting.values()] == [h_work.desc.work_id, a_work.desc.work_id]
+        a = rig.one(c.BELIEF_ADOPTED, cid=cut.prepared.cid)
+        assert a.value["previous"] == h.cid and a.value["request"] == a_work.request
+        rig.gates["B"].set()
+        def complete(_s):
+            errors = rig.workers.errors + rig.launcher.errors + rig.post_errors
+            if errors:
+                raise errors[0]
+            return len(rig.facts(c.BELIEF_ADOPTED)) == 3 and len(rig.facts(c.SELECTION)) == 4
+        scene17_keep(rig, complete)
+        assert cut.confirmed and all(attempt == cut.prepared for attempt in cut.attempts)
+        assert rig.read_stored(a.cid) == (cut.prepared.header, cut.prepared.salt, cut.prepared.record)
+        h, same_a, b = rig.facts(c.BELIEF_ADOPTED)
+        assert same_a == a and [x.value["previous"] for x in (h, a, b)] == [None, h.cid, a.cid]
+        assert len({x.value["previous"] for x in (h, a, b)}) == 3
+        b_work = rig.waiting["B"]
+        assert_update(rig, a_work, a, FIRST, h.cid)
+        assert_update(rig, b_work, b, SECOND, a.cid)
+        assert row5_report_for_work(rig, b_work).cid == points["B"]
+        assert not rig.facts(c.STALE)
+        assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == 3
+        assert len([x for x in rig.facts(c.BELIEF_ADOPTED) if x.value["request"] == a_work.request]) == 1
+        ctx = rig.workers.contexts["measure_segment"]
+        assert len(rig.workers.entries) == len(rig.launcher.attempts) == 17
+        for work in rig.workers.entries:
+            assert [ok for key, ok in rig.workers.entry_attempts if key == work.desc.work_id] == [True]
+            observed = execution_for(ctx, work.desc.work_id)
+            assert observed.entered == 1 and observed.launches == ("launched",)
+        assert len([event for event, _ in rig.workers.sent if isinstance(event, fb.DrawReturned)]) == 4
+        for result in rig.facts(c.UPDATE_RESULT):
+            assert len([g for g in ctx.evidence().acquisitions if result.cid in g.contents]) == 1
+            assert len([g for g in rig.facts(ACQUIRED) if result.cid in g.value["contents"]]) == 1
+        store, = rig.host.interruptions()
+        assert_keep_interruption(store, cut.loss_error, kind="store", count=1)
+        assert rig.host.halted is None
+    finally:
+        rig.close()
