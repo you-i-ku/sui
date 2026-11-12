@@ -3858,3 +3858,170 @@ def test_row2_accept_order_ack_loss_confirms_a_before_q_b_and_keeps_one_chain(ac
         assert rig.host.halted is None
     finally:
         rig.close()
+
+
+class RowUModelZeroRig(KeepRig):
+    """Real Boot with a normalized two-row law, and the existing unmodified U worker."""
+
+    def __init__(self):
+        RealRig.__init__(self, connect=False)
+        self.clock.set(0)
+        self.registry, self.thread, self.executed = registry(), None, set()
+        self.workers = Workers(self)
+        self.launcher = KeepLauncher(self)
+        self.post_errors, self.update_gate = [], Event()
+        self.document, _ = finite_world("FA01")
+        model = self.record(Prediction(target="model.11", about=(), basis=(),
+            content=Payload.json({"document": self.document}), contract=contract("sui.f.model_source")),
+            RefKind.PREDICTION, Role.MODEL)
+        self.model_point = self.ledger.append(model, ()).cid
+        declared = delta_args()
+        declared["law"]["rows"] = [
+            {"marks": [{"channel": "arrivals", "time_ns": 1, "count": 1}],
+             "mass": [[1, 2], [1, 4]]},
+            {"marks": [{"channel": "arrivals", "time_ns": 1, "count": 1},
+                       {"channel": "arrivals", "time_ns": 2, "count": 1}],
+             "mass": [[1, 2], [3, 4]]},
+        ]
+        # Each carrier sums to one. Both rows have N((0,1])=1; outside it,
+        # P(N((1,2])=0 | a,b)=(1/2,1/4). No zero-mass row or malformed law is needed.
+        event = boot(True)
+        initial = replace(event.declaration.initial.value, model=self.model_point,
+            generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}),
+            method=fb.MethodCall(contract=contract("sui.f.finite_evaluation"), args={}),
+            draw=fb.MethodCall(contract=contract("stage2.scripted_draw"), args={}),
+            prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET,
+            derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
+                contract=c.SAVED_SEGMENT_UPDATE, args=declared)),
+            continuation=fb.MethodCall(contract=c.REUSE_CANDIDATES, args={}))
+        self.boot_input = replace(event, declaration=replace(event.declaration,
+            initial=replace(event.declaration.initial, value=initial),
+            routes=tuple(replace(route, value=replace(route.value, config=replace(route.value.config,
+                sampling_contract=contract("sui.f.finite_measurement"),
+                clock_contract=contract("sui.f.simulated_clock")))) for route in event.declaration.routes)))
+        self.oracle = Row1StoreCut(self, "request", "rowU-observer")
+        self.host = fb.FThreadHost(ledger=self.ledger, clock=self.clock, workers=self.workers,
+            registry=self.registry, launcher=self.launcher)
+        self.host.post(fb.ClockDeclared(declaration=replace(source(), run=self.clock.run,
+            measurement=contract("sui.f.simulated_clock"))))
+        self.host.post(self.boot_input)
+
+    def start_publicly(self):
+        scene17_keep(self, lambda _s: row6_initial_ready(self))
+
+    def wait_for_update_stop(self, number):
+        def stopped(_s):
+            updates = [w for w in self.workers.entries if w.desc.purpose == "belief_update"]
+            if len(updates) < number:
+                return False
+            return execution_for(self.workers.contexts["measure_segment"], updates[number - 1].desc.work_id).stopped
+        # Worker errors are deliberately observed after return, not raised by done():
+        # a crashed U must remain distinguishable from a normal Rejected and must not hide reception.
+        scene17_keep(self, stopped)
+        for thread in self.launcher.threads:
+            if thread is not self.thread:
+                thread.join(30)
+                assert not thread.is_alive(), "incomplete observation: update producer did not stop"
+        return [w for w in self.workers.entries if w.desc.purpose == "belief_update"][number - 1]
+
+    def assert_legal_adoption(self, work, expected_updates, earlier_errors=()):
+        def finished(_s):
+            fresh = [e for e in self.workers.errors + self.launcher.errors if e not in earlier_errors]
+            if fresh:
+                raise AssertionError(f"legal outside-interval update failed: {type(fresh[0]).__name__}: {fresh[0]}")
+            return any(a.value["request"] == work.request for a in self.facts(c.BELIEF_ADOPTED)) \
+                and len(self.facts(c.SELECTION)) >= 2
+        scene17_keep(self, finished)
+        adopted, = self.facts(c.BELIEF_ADOPTED)
+        # Paper :2733-2739: equal prior times (1/2,1/4) gives weights (1/4,1/8), z=3/8.
+        assert_update(self, work, adopted, {"joint": [[2, 3], [1, 3]], "evidence_mass": [3, 8]}, None)
+        assert len(self.requests("belief_update")) == expected_updates
+        result, = self.facts(c.UPDATE_RESULT)
+        assert result.value["request"] == work.request
+        assert not self.facts(c.CONFLICT) and not self.facts(c.STALE)
+        assert self.host.halted is None and self.host.interruptions() == ()
+        ctx = self.workers.contexts["measure_segment"]
+        assert len(self.workers.entries) == len(self.launcher.attempts) == 8 + expected_updates
+        for entered in self.workers.entries:
+            assert [ok for key, ok in self.workers.entry_attempts if key == entered.desc.work_id] == [True]
+            execution = execution_for(ctx, entered.desc.work_id)
+            assert execution.entered == 1 and execution.launches == ("launched",)
+        assert len([event for event, _ in self.workers.sent if isinstance(event, fb.DrawReturned)]) == 2
+        assert len([g for g in ctx.evidence().acquisitions if result.cid in g.contents]) == 1
+        return adopted
+
+
+def test_rowU_model_zero_normal_claim_is_rejected_and_not_applied_to_the_next_update():
+    """F-b :2739,2868,3076,3493: possible N((0,1])=0 has zero law mass, not a logical contradiction.
+
+    Crashing the whole U worker fails the required normal rejected/model_falsified terminal and saved raw response.
+    Calling zero mass measurement_conflict fails no Conflict and the exact model_falsified issue codes.
+    Adding epsilon and adopting fails the absence of R*/A* for this request and the sole later adoption.
+    Keeping the zero-mass Claim in applied belief fails next.prior=None and the outside Claim's (2/3,1/3;3/8).
+    """
+    rig = RowUModelZeroRig()
+    try:
+        rig.start_publicly()
+        zero_envelope = scene17_post_claim(rig, "rowU-zero", 0, 1)
+        zero_work = rig.wait_for_update_stop(1)
+        zero_report = row5_report_for_work(rig, zero_work)
+        use, = zero_work.desc.args.observations
+        zero_binding = rig.one(c.SEGMENT_BINDING, cid=use.binding)
+        assert zero_report.value == wire(zero_envelope.event) and zero_report.received_ns == zero_envelope.received_ns
+        assert zero_binding.value["report"] == zero_report.cid and zero_work.desc.args.prior is None
+        saved = {p: rig.read_stored(p) for p in (zero_report.cid, zero_binding.cid)}
+        observed = execution_for(rig.workers.contexts["measure_segment"], zero_work.desc.work_id)
+        worker_errors = tuple({id(e): e for e in rig.workers.errors + rig.launcher.errors}.values())
+        assert observed.entered == 1 and observed.stopped
+        assert not rig.facts(c.CONFLICT), "zero model mass is not measurement_conflict"
+        assert not rig.facts(c.UPDATE_RESULT) and not rig.facts(c.BELIEF_ADOPTED), "epsilon/zero-mass adoption"
+        assert rig.host.halted is None and rig.host.interruptions() == ()
+        probe = fb.Received(route_epoch="route-A", media_type="application/octet-stream",
+            data=b"rowU-reception-after-model-zero", claims={})
+        rig.host.post(probe)
+        legal_envelope = scene17_post_claim(rig, "rowU-after-zero", 1, 2)
+        legal_work = rig.wait_for_update_stop(2)
+        assert legal_work.desc.args.prior is None and legal_work.desc.work_id != zero_work.desc.work_id
+        assert row5_report_for_work(rig, legal_work).value == wire(legal_envelope.event)
+        rig.assert_legal_adoption(legal_work, 2, worker_errors)
+        assert len([r for r in rig.facts(c.RECEIVED) if r.value == wire(probe)]) == 1
+        assert all(rig.read_stored(point) == original for point, original in saved.items())
+        terminal = [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == zero_work.request]
+        assert not worker_errors and len(terminal) == 1, (
+            "expected rejected/model_falsified, not a stopped worker: "
+            f"errors={[type(e).__name__ + ': ' + str(e) for e in worker_errors]}; "
+            f"T={len(terminal)}, EW.stopped={observed.stopped}, EH.reports={len(observed.reports)}")
+        returned = rig.workers.updates[zero_work.request]
+        assert isinstance(returned, u.Rejected) and returned.request == zero_work.request
+        assert returned.issues and {issue.code for issue in returned.issues} == {"model_falsified"}
+        terminal, = terminal
+        assert terminal.value["terminal_kind"] == "outputs", "Rejected is not WorkFailure/WorkUnknown"
+        response = terminal.value["returned"]
+        assert response["kind"] == "output" and response["value"]["contract"] == plain(c.UPDATE_RESPONSE)
+        response = response["value"]["value"]
+        assert response["kind"] == "rejected"
+        assert response["value"]["issues"] and {i["code"] for i in response["value"]["issues"]} == {"model_falsified"}
+        raw = rig.one(c.WORK_REPORT, cid=terminal.value["first_receipt"])
+        assert raw.value["outcome"]["kind"] == "outputs"
+        assert raw.value["outcome"]["value"] == terminal.value["returned"]["value"]
+        observed = execution_for(rig.workers.contexts["measure_segment"], zero_work.desc.work_id)
+        assert len(observed.reports) == 1 and observed.reports[0].point == raw.cid
+    finally:
+        rig.close()
+
+
+def test_rowU_model_zero_law_still_adopts_a_normal_claim_outside_the_forced_interval():
+    """Same normalized law: :2733-2739 gives Z(a,b)=(1/2,1/4) outside the forced-arrival interval.
+
+    Rejecting the whole law or all no_arrival Claims fails ordinary IssuedUpdate and (2/3,1/3;3/8) adoption.
+    """
+    rig = RowUModelZeroRig()
+    try:
+        rig.start_publicly()
+        event = scene17_post_claim(rig, "rowU-outside-control", 1, 2)
+        work = rig.wait_for_update_stop(1)
+        assert row5_report_for_work(rig, work).value == wire(event.event)
+        rig.assert_legal_adoption(work, 1)
+        assert not rig.workers.errors and not rig.launcher.errors
+    finally:
+        rig.close()

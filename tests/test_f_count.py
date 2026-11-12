@@ -155,10 +155,12 @@ def test_weight_on_an_excluded_carrier_is_an_input_error():
     assert error.value.reason == "normalization"
 
 
-def test_zero_evidence_is_loud_and_not_yet_classified():
-    """全体の質量が 0 になる条件づけは、成功にも小さい数にもせず止まる (区別は 1 周の後の ★)。"""
+def test_zero_evidence_on_possible_claims_is_model_falsified():
+    """論理的に満たせる「到着なし」に法則が質量 0 を置く時は model_falsified (§19-6)。成功にも小さい数にもしない。
+    誤実装: 質量 0 を論理の矛盾 (measurement_conflict) にする / 例外で落とす / 小さい数で正規化して返す。"""
     rows = [([("arrivals", 1, 1)], (F(1), F(1)))]   # どの carrier でも必ず到着する
     law = count.check_law(STATES, {"arrivals": DOMAIN}, rows)
     none = count.Predicate("arrivals", count.Span(CLOCK, 0, 1, "(start,end]"), 0, 0)
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(FInputError) as error:
         count.condition(PRIOR, F(1), STATES, law, (), none)
+    assert error.value.reason == "model_falsified"

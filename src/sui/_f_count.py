@@ -108,8 +108,8 @@ def mass(law: Law, predicates) -> tuple[_Fraction, ...]:
 def condition(joint, evidence_mass, carrier_by_state, law: Law, applied, new: Predicate):
     """連言 A (applied) の下の joint に、新しい述語 E を条件づけて (joint, evidence_mass) を返す。
     状態 s の重みは q_s · Z_c(A∧E) / Z_c(A) (c は s の carrier)。A で質量 0 の carrier に重みが
-    残っていれば FInputError (0/0 で重みを復活させない)。条件づけの後の全体の質量が 0 の場合
-    (論理の矛盾か、モデルが質量 0 を置いたかの区別) は最初の輪の 1 周目では扱わない。"""
+    残っていれば FInputError (0/0 で重みを復活させない)。条件づけの後の全体の質量が 0 の時は、連言が
+    論理的に満たせるならモデルが質量 0 を置いた (FInputError(model_falsified)、§19-6)。小さい数を足して続けない。"""
     check_predicate(law, new)
     index = {c: i for i, c in enumerate(law.carriers)}
     before, after = mass(law, applied), mass(law, (*applied, new))
@@ -124,6 +124,8 @@ def condition(joint, evidence_mass, carrier_by_state, law: Law, applied, new: Pr
             weights.append(q * after[i] / before[i])
     z = sum(weights, _Fraction(0))
     if z == 0:
-        # ★ 一覧 §3「モデルではありえない報告」: 論理の矛盾とモデルの質量 0 を分ける (§19-6) のは 1 周の後
-        raise NotImplementedError("zero evidence mass: 論理の矛盾とモデルの質量 0 の区別は最初の輪の 1 周の後")
+        if all(p.lower == 0 for p in (*applied, new)):   # 何も来ない道が全部を満たす = 論理の矛盾ではない
+            raise FInputError("model_falsified", "the model puts zero mass on the applied claims", "/predicate")
+        # ★ 論理の矛盾 (J9-b の探索・Conflict) は下限 1 以上の述語 (count_exactly_one) を読む席で (紙 F-b Z45 の仕分け)
+        raise NotImplementedError("zero evidence mass with a positive lower bound: J9-b は count_exactly_one を読む席で")
     return tuple(w / z for w in weights), evidence_mass * z
