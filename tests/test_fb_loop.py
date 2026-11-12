@@ -87,6 +87,7 @@ class Workers(Stage2Workers):
     def __init__(self, rig):
         super().__init__(rig)
         self.commands, self.release = Queue(), Event()
+        self.measurement_started_posted = Event()
         self.updates, self.prepared_by_request, self.evaluated_by_request = {}, {}, {}
 
     def prepare(self, work, ctx):
@@ -111,6 +112,7 @@ class Workers(Stage2Workers):
             self.post(ctx, fb.SegmentReport(segment=work.request, item_slot="started",
                 item=fb.SegmentBoundary(kind="started", work=work.desc.work_id,
                     reading=self.rig.actual_reading(), reason="test actual entry", evidence=())))
+            self.measurement_started_posted.set()
             while not self.release.is_set():
                 try:
                     action, done, errors = self.commands.get(timeout=.05)
@@ -1457,7 +1459,7 @@ class Row2AckLoss:
 
 
 class Row2Driver:
-    """The test calls run_until again after a store exception; production is not retried by a mock."""
+    """Drive bounded public host rounds, including re-entry after the one injected store exception."""
 
     def __init__(self, rig, cut, on_loss):
         self.rig, self.cut, self.on_loss = rig, cut, on_loss
@@ -1476,10 +1478,12 @@ class Row2Driver:
     def drive(self, predicate, *, require_confirmation=True):
         def done():
             return predicate() and (not require_confirmation or not self.cut.failed or self.cut.confirmed)
-        for _ in range(16):  # harness watchdog, not a product latency limit
+        # timeout=0 makes each call one public round, as in the deadline tests.
+        # The harness step bound also detects a missing successor under CPU load.
+        for _ in range(128):
             self.calls += 1
             try:
-                self.rig.host.run_until(lambda _status: done(), timeout=2)
+                self.rig.host.run_until(lambda _status: done(), timeout=0)
             except OSError as error:
                 if error is self.cut.loss_error and not self.handled:
                     self.handle_loss()
@@ -1490,9 +1494,9 @@ class Row2Driver:
                 continue
             if self.rig.workers.errors:
                 raise self.rig.workers.errors[0]
-            assert done(), "incomplete observation: row 2 transition was not reached"
-            return
-        raise AssertionError("incomplete observation: store acknowledgment did not recover")
+            if done():
+                return
+        raise AssertionError("incomplete observation: public successor not reached within the harness step bound")
 
     def advance_until(self, predicate):
         def pending():
@@ -1812,7 +1816,8 @@ class Row1Driver(Row2Driver):
             if request.value["desc"]["purpose"] == "measure_segment":
                 self.rig.thread = Thread(target=body, daemon=True)
                 self.rig.thread.start()
-                assert self.rig.workers.entered.setdefault("measure_segment", Event()).wait(30)
+                assert self.rig.workers.measurement_started_posted.wait(30), \
+                    "incomplete observation: measurement Started Post did not finish"
             else:
                 body()
 
@@ -2221,7 +2226,11 @@ def test_row1_read_between_saved_public_transitions_reenters_without_losing_or_d
 
 
 def complete_row1_tail_scene(rig, *, inject):
-    """Use the identical public Boot/Post schedule for calibration and the fault walk."""
+    """Fix the public Boot/Post schedule and one-round host calls before measuring or cutting.
+
+    The driver waits for measurement Started's actual completed Post, not its earlier entry signal.
+    Other deferred worker bodies run synchronously; each later measurement Post finishes before driving.
+    """
     cut = rig.cut
     def on_loss():
         assert cut.hits == 1
@@ -2333,6 +2342,9 @@ def test_row1_interval_tail_reads_reenter_without_losing_or_duplicating_successo
     New preparation/time/boundary fails R1; duplicate successors or external effects fail R2/R3.
     Select N, N-1, N-2 from this scene's fault-free count; a shorter fault walk fails UNFIRED_TAIL.
     Positions are relative to the measured baseline, never silently recalibrated or skipped after a miss.
+    Completed Started Post plus single host rounds fix the external schedule in both walks.
+    The position is the kth outer public read between the same named saved-record boundaries,
+    not a CID selected from a different execution. It is chosen once; ending the interval before k fails.
     """
     count = row1_tail_profile[-1]
     check_row1_tail_target(row1_tail_profile, count - from_end)
@@ -2346,6 +2358,7 @@ def test_row1_interval_middle_read_reenters_without_losing_the_update_request(ro
     """Use the measured midpoint ceil(N/2) as well as the tail for the two B -> Q* intervals.
 
     Losing Q* after this read fails R2; replacing a preparation or repeating work/acquisition fails R1/R3.
+    The same Started-Post barrier and host rounds fix the schedule; the measured kth position is never retargeted.
     """
     count = row1_tail_profile[-1]
     check_row1_tail_target(row1_tail_profile, (count + 1) // 2)
@@ -2483,6 +2496,9 @@ def test_row1_before_first_request_put_last_twelve_reads_keep_the_update_chain(r
     A lost Q* after a read before its first put fails R2's mandatory successors, even if no write was attempted.
     Replacing a fixed preparation or duplicating a successor fails R1/R2; repeated external effects fail R3.
     Count N before the first physical put/add, then inject N..N-11; UNFIRED is a failure, never a late injection.
+    Completed Started Post and one-round calls fix both walks' external schedule. The position is
+    the kth outer read from the named saved left record to the right record's first physical put/add.
+    No new baseline or second fault walk is allowed after a miss; a shorter walk still fails UNFIRED.
     """
     check_row1_prewrite_target(row1_prewrite_profile, from_end)
 
@@ -2498,6 +2514,7 @@ def test_row1_before_first_successor_put_last_four_reads_preserve_progress(row1_
     """F-b :323-327,3330-3332,3442-3444,3509: the permitted four-position smaller range.
 
     A missing CG/EV/T/A* after a pre-put read fails R2; duplicate records or repeated work/acquisition fail R1/R2/R3.
+    The fixed Started-Post/host-round schedule identifies the measured kth read before first put; misses still fail UNFIRED.
     """
     check_row1_prewrite_target(row1_prewrite_profile, from_end)
 
