@@ -118,6 +118,14 @@ def conflicts(state, plan, *, unconfirmed=False) -> list:
             if _clash(_ends(state, row), unconfirmed=unconfirmed)]
 
 
+def _belief_blocked(state, plan, bad) -> bool:
+    """その過程の評価が読む見立て (採用 A*) が、食い違った鍵の原報告 bad に頼っている (紙 §2-5-19-6、Z4)。評価の
+    準備は、きっかけが CG でも A* でも、固定根に見える採用の頭を読む (§6-10 J7、`f_update2.adopted_belief`)。境界 X を
+    固めた後は X に見える採用、固める前は今の置き場に見える採用 (これから固める境界に入る) で数える。"""
+    from ._fb_update import belief_conflicted
+    return bool(bad) and belief_conflicted(state, plan.boot, plan.points.get("X") or state.ledger.heads(), bad)
+
+
 def unmet(state, plan) -> list:
     """元の「候補を作って比べる」処理の未達 pG の理由。確定返答・使用条件の不足 (plan.unmet) と、保存済みの
     報告から導いた食い違い (初めでも後着でも、M3 :1971、review FB2-R07)。"""
@@ -704,7 +712,9 @@ def _plan_end(state, plan, row, number, receipt):
 def advance(state) -> None:
     """各考える過程の仕事の終わりを処理し、計画した記録を 1 点ずつ保存する。後から食い違いが見えたら、
     作った記録は消さず、まだ作っていない後続を作らない (§2-4-3「後着で食い違ったら…新しい使用では使えない」)。"""
+    from ._fb_bind import clashed_reports
     from ._fb_boot import advance as _advance
+    bad = clashed_reports(state)
     for plan in state.thinking.values():
         for name in ("wg", "EQ", "D", "Ee"):
             wid = plan.wg if name == "wg" else (plan.descs[name].work_id if name in plan.descs else None)
@@ -712,8 +722,11 @@ def advance(state) -> None:
             if row is None or not isinstance(row.work, (_fb.Compute, _fb.Draw)) or not _saved_request(state, row):
                 continue
             _finish(state, plan, row)
-        blocked = bool(conflicts(state, plan, unconfirmed=True))
-        _advance(state, plan, build=lambda step: not blocked or step.name.startswith("T:"))
+        clash = bool(conflicts(state, plan, unconfirmed=True))
+        # 見立ての依存の食い違いは、見立てを読む歩 (文脈 o から先) を止める。候補の宣言 CG は見立てを読まない
+        stale = _belief_blocked(state, plan, bad)
+        _advance(state, plan, build=lambda step: step.name.startswith("T:")
+                 or not (clash or stale and step.name != "cg"))
 
 
 def blocked(state, row) -> bool:
@@ -725,7 +738,10 @@ def blocked(state, row) -> bool:
     for plan in state.thinking.values():
         if wid == plan.wg or any(desc.work_id == wid for desc in plan.descs.values()):
             # 印でなく保存済みの報告から (FB2-R01-R2)。確認待ち・未保存の受け付けた報告も止める側に (FB2-R01-R3)
-            return bool(conflicts(state, plan, unconfirmed=True))
+            # 評価の仕事 (EQ・D・Ee) は、読む見立ての依存の食い違いでも止める。候補を作る Wg は見立てを読まない
+            from ._fb_bind import clashed_reports
+            return bool(conflicts(state, plan, unconfirmed=True)) \
+                or wid != plan.wg and _belief_blocked(state, plan, clashed_reports(state))
     return False
 
 

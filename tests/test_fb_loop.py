@@ -4042,3 +4042,949 @@ def test_rowU_model_zero_law_still_adopts_a_normal_claim_outside_the_forced_inte
         assert not rig.workers.errors and not rig.launcher.errors
     finally:
         rig.close()
+
+
+class RowILateConflictRig(Row1IntervalRig):
+    """Literal CE1 Boot with test-owned launch scheduling and actual C/E records.
+
+    A round uses keep_running once. Predicates are checked before invoking newly
+    captured OS bodies, so a saved adoption can be observed before continuation
+    entry. No source internals, numerical output or FStatus supplies expectations.
+    """
+
+    def __init__(self):
+        super().__init__("update", 1, "report", "binding", None)
+        self.post_errors, self.body_errors = [], []
+        self.held_ready, self.held_release = Event(), Event()
+        self.held_thread, self.held_work = None, None
+
+    def round(self):
+        assert self.host.keep_running(lambda _status: True, timeout=0) is True
+        assert self.host.halted is None
+
+    def pending_bodies(self):
+        return [(key, body) for key, body in self.launcher.attempts if key not in self.executed]
+
+    def invoke(self, body):
+        try:
+            body()
+        except BaseException as error:
+            self.body_errors.append(error)
+
+    def run_body(self, key, body):
+        assert sum(k == key for k, _ in self.launcher.attempts) == 1, "duplicate launch"
+        self.executed.add(key)
+        request = next(q for stage in (*ORDER, "measure_segment", "belief_update")
+                       for q in self.requests(stage) if q.value["desc"]["work_id"] == key)
+        purpose = request.value["desc"]["purpose"]
+        if purpose == "measure_segment":
+            self.thread = Thread(target=self.invoke, args=(body,), daemon=True)
+            self.thread.start()
+            assert self.workers.measurement_started_posted.wait(30), "measurement did not Post Started"
+        elif purpose == "belief_update" and self.workers.overrides.get(purpose) is not None:
+            self.held_thread = Thread(target=self.invoke, args=(body,), daemon=True)
+            self.held_thread.start()
+            assert self.held_ready.wait(30), "held update did not enter and finish its calculation"
+        else:
+            self.invoke(body)
+        assert not self.body_errors and not self.workers.errors, "public worker body failed"
+
+    def advance_until(self, predicate, *, run_bodies=True):
+        for _ in range(128):
+            if predicate():
+                return
+            self.round()
+            if predicate():
+                return
+            if run_bodies:
+                for key, body in self.pending_bodies():
+                    self.run_body(key, body)
+        pytest.fail("incomplete observation: required public successor did not appear")
+
+    def drain(self):
+        # A safety observation after successful reception, with every offered
+        # body attempted. The finite bound is a harness watchdog, not an SLA.
+        for _ in range(32):
+            self.round()
+            for key, body in self.pending_bodies():
+                self.run_body(key, body)
+
+    def start_publicly(self):
+        self.advance_until(lambda: len(self.facts(c.SELECTION)) == 1
+                           and self.workers.measurement_started_posted.is_set())
+
+    def deliver(self, event):
+        """Use the already-entered measuring port, preserving the posted payload."""
+        done, envelopes = Event(), []
+        def emit(work, ctx):
+            self.clock.set(self.clock.mono_ns() + 10)
+            before = {r.envelope for r in execution_for(ctx, work.desc.work_id).reports}
+            self.workers.post(ctx, event)
+            observed, = (r for r in execution_for(ctx, work.desc.work_id).reports
+                         if r.envelope not in before)
+            envelopes.append(fb.Envelope(number=observed.envelope, event=event,
+                                         received_ns=observed.received_ns))
+        self.workers.commands.put((emit, done, self.post_errors))
+        assert done.wait(30) and not self.post_errors, "measurement did not Post the delivery"
+        return envelopes[0]
+
+    def adoption(self, number):
+        self.advance_until(lambda: len(self.facts(c.BELIEF_ADOPTED)) == number)
+        adopted = self.facts(c.BELIEF_ADOPTED)[number - 1]
+        work = next(w for w in self.workers.entries if w.request == adopted.value["request"])
+        return work, adopted
+
+    def hold_update(self):
+        def hold(work, ctx):
+            event, issued = self.workers.normal(work, ctx)
+            self.held_work = work
+            self.held_ready.set()
+            assert self.held_release.wait(60), "test did not release the computed update"
+            self.workers.post(ctx, event, issued)
+        self.workers.overrides["belief_update"] = hold
+
+    def finish_held(self):
+        self.held_release.set()
+        self.held_thread.join(30)
+        assert not self.held_thread.is_alive() and not self.body_errors and not self.workers.errors
+
+    def saved(self):
+        return {cid: self.read_stored(cid) for cid, _ in self.cut.raw_load()}
+
+    def assert_preserved(self, before):
+        after = self.saved()
+        assert before.keys() <= after.keys(), "late conflict deleted historical records"
+        assert all(after[cid] == content for cid, content in before.items()), "late conflict rewrote history"
+
+    def report(self, envelope):
+        ctx = self.workers.contexts["measure_segment"]
+        work = next(w for w in self.workers.entries if w.desc.purpose == "measure_segment")
+        observed, = (r for r in execution_for(ctx, work.desc.work_id).reports
+                     if r.envelope == envelope.number)
+        assert observed.received_ns == envelope.received_ns and observed.point is not None
+        raw = self.one(c.SEGMENT_REPORT, cid=observed.point)
+        assert raw.value == wire(envelope.event)
+        return raw
+
+    def assert_identity_conflict(self, *envelopes):
+        # B9 fixes per-delivery target and reason; expectations come from the
+        # two posted Claim bodies and their logical key, not from status itself.
+        pending = self.host.window.status().pending
+        for envelope in envelopes:
+            raw = self.report(envelope)
+            assert any(p.kind == "conflict" and p.reason == "report:identity" and p.target == raw.cid
+                       for p in pending), "missing targetful CL-SAME diagnostic"
+
+    def assert_no_new_uses(self, prepared_before, acquisitions_before):
+        forbidden = {c.CANDIDATE_REQUEST, c.EVALUATION_REQUESTED, c.DRAW_REQUESTED, c.WORK_REQUESTED,
+                     c.UPDATE_RESULT, c.BELIEF_ADOPTED, c.PREPARED, c.EVALUATED, c.SELECTION,
+                     ACQUIRED, MATH, contract("sui.f.draw_fact")}
+        made = [p for p in self.ledger.preparations if p.cid not in prepared_before
+                and p.record.body.contract in forbidden]
+        assert not made, "late CL-SAME permitted a new dependent record: " + str(
+            [p.record.body.contract for p in made])
+        ctx = self.workers.contexts["measure_segment"]
+        assert ctx.evidence().acquisitions == acquisitions_before, "late CL-SAME permitted a new acquisition"
+
+    def close(self):
+        self.held_release.set()
+        if self.held_thread is not None:
+            self.held_thread.join(30)
+            assert not self.held_thread.is_alive()
+        super().close()
+
+
+@pytest.mark.parametrize("adopted_count", (1, 2), ids=("direct-h", "descendant-of-h"))
+def test_rowI_late_conflict_after_adoption_blocks_new_update_evaluation_and_selection(adopted_count):
+    """F-b :349,363,2860,2870,3539 and Z3/Z4 :3644-3645 govern current use of h.
+
+    Only blocking new bindings fails the absence of new Q*, R*, A*, evaluation and selection after h's clash.
+    Checking only the newest Claim fails the descendant-of-h case, whose head still uses H through previous.
+    Deleting/rewriting h, H, B or an earlier evaluation fails the byte-for-byte historical snapshot.
+    H=(0,2] gives FIRST by CE1 :2917; the changed interval (0,3] shares H's key and is CL-SAME.
+    Already prepared records may still save (:3539); their CIDs are captured before the clash.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        original = scene17_post_claim(rig, "rowI-H", 0, 2)
+        work, head = rig.adoption(1)
+        assert_update(rig, work, head, FIRST)
+        if adopted_count == 2:
+            scene17_post_claim(rig, "rowI-before-clash-A", 1, 3)
+            previous = head
+            work, head = rig.adoption(2)
+            assert_update(rig, work, head, SECOND, previous.cid)
+        adopted_before = [a.cid for a in rig.facts(c.BELIEF_ADOPTED)]
+        before = rig.saved()
+        prepared_before = {p.cid for p in rig.ledger.preparations}
+        acquisitions = rig.workers.contexts["measure_segment"].evidence().acquisitions
+        changed = replace(original.event, item=replace(original.event.item,
+            interval=replace(original.event.item.interval, end_ns=3)))
+        clash = rig.deliver(changed)
+        rig.host.window.accept(clash)
+        following = scene17_post_claim(rig, "rowI-A", 1, 3)
+        probe = fb.Received(route_epoch="route-A", media_type="application/octet-stream",
+                            data=b"rowI-reception-continues", claims={})
+        rig.host.post(probe)
+        rig.drain()
+        rig.report(following)
+        assert len([r for r in rig.facts(c.RECEIVED) if r.value == wire(probe)]) == 1
+        rig.assert_preserved(before)
+        rig.assert_identity_conflict(original, clash)
+        rig.assert_no_new_uses(prepared_before, acquisitions)
+        assert [a.cid for a in rig.facts(c.BELIEF_ADOPTED)] == adopted_before
+        assert any(p.kind == "conflict" and p.reason == "update:conflict" and p.target == head.cid
+                   for p in rig.host.window.status().pending), "adopted h lacks update:conflict"
+        assert rig.host.halted is None
+    finally:
+        rig.close()
+
+
+def test_rowI_late_conflict_after_wu_entry_blocks_result_acquisition_and_adoption():
+    """F-b :2860,3089,3539 checks Xuse again after Q* and before R*/G/A*.
+
+    Checking only after adoption fails this entered-Wu interval and the absence of R*, G and A*.
+    A normal issued FIRST is held before its terminal Post; the prior never changes, so Stale is inapplicable (:3091).
+    Diagnostic terminal T may save (:3644), while no new numerical successor may be prepared.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        rig.hold_update()
+        original = scene17_post_claim(rig, "rowI-inflight-H", 0, 2)
+        rig.advance_until(rig.held_ready.is_set)
+        work = rig.held_work
+        assert work.desc.args.prior is None
+        assert plain(rig.workers.updates[work.request].result) == FIRST
+        assert not rig.facts(c.UPDATE_RESULT) and not rig.facts(c.BELIEF_ADOPTED)
+        before = rig.saved()
+        prepared_before = {p.cid for p in rig.ledger.preparations}
+        acquisitions = rig.workers.contexts["measure_segment"].evidence().acquisitions
+        clash = rig.deliver(replace(original.event, item=replace(original.event.item,
+            interval=replace(original.event.item.interval, end_ns=3))))
+        rig.host.window.accept(clash)
+        rig.finish_held()
+        rig.drain()
+        rig.assert_preserved(before)
+        rig.assert_identity_conflict(original, clash)
+        terminal, = [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == work.request]
+        assert terminal.value["terminal_kind"] == "outputs"
+        assert terminal.value["returned"]["kind"] == "output"
+        assert not rig.facts(c.STALE), "unchanged prior was incorrectly called Stale"
+        rig.assert_no_new_uses(prepared_before, acquisitions)
+        assert not rig.facts(c.BELIEF_ADOPTED)
+        assert any(p.kind == "conflict" and p.reason == "update:conflict" and p.target is not None
+                   for p in rig.host.window.status().pending), "blocked update lacks a target and reason"
+        assert rig.host.halted is None
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("changed", (True, False), ids=("clash", "identical-redelivery"))
+def test_rowI_late_conflict_before_conflict_save_controls_continuation_entry(changed):
+    """F-b :2860,3539 and :3645 apply even before the accepted report or Xc saves.
+
+    Waiting for persisted Conflict fails the continuation's enter=False immediately after accept, before settle.
+    Calling identical redelivery a conflict fails the matching enter=True control at the same boundary.
+    The callback was really offered by the launcher for an h-triggered saved EQ, and has never run.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        original = scene17_post_claim(rig, "rowI-entry-H", 0, 2)
+        work, head = rig.adoption(1)
+        assert_update(rig, work, head, FIRST)
+        def continuation_body_ready():
+            requests = [q for q in rig.requests("evaluation_prepare")
+                        if any(t["point"] == head.cid for t in q.value["desc"]["trigger"])]
+            return any(key == q.value["desc"]["work_id"]
+                       for q in requests for key, _ in rig.pending_bodies())
+        rig.advance_until(continuation_body_ready, run_bodies=False)
+        request, = [q for q in rig.requests("evaluation_prepare")
+                    if any(t["point"] == head.cid for t in q.value["desc"]["trigger"])]
+        key = request.value["desc"]["work_id"]
+        body, = [body for work_id, body in rig.pending_bodies() if work_id == key]
+        event = original.event
+        if changed:
+            event = replace(event, item=replace(event.item, interval=replace(event.item.interval, end_ns=3)))
+        envelope = rig.deliver(event)
+        before = rig.saved()
+        rig.host.window.accept(envelope)
+        ctx = rig.workers.contexts["measure_segment"]
+        measurement = next(w for w in rig.workers.entries if w.desc.purpose == "measure_segment")
+        observed, = (r for r in execution_for(ctx, measurement.desc.work_id).reports
+                     if r.envelope == envelope.number)
+        assert observed.point is None and not rig.facts(c.CONFLICT), "fixture crossed the pre-Xc boundary"
+        assert not [ok for work_id, ok in rig.workers.entry_attempts if work_id == key]
+        rig.executed.add(key)
+        rig.invoke(body)  # No settle/keep_running between accept and this public entry attempt.
+        assert [ok for work_id, ok in rig.workers.entry_attempts if work_id == key] == [not changed], \
+            "continuation used h before the accepted CL-SAME was saved"
+        assert not rig.body_errors and not rig.workers.errors
+        rig.assert_preserved(before)
+    finally:
+        rig.close()
+
+
+def test_rowI_late_conflict_identical_redelivery_keeps_the_adoption_chain():
+    """F-b :3539 redelivery control and CE1 :2917-2923 require FIRST then SECOND.
+
+    Treating identical H redelivery as conflict fails A's mandatory adoption with prior=h.
+    Counting that delivery twice fails (8/9,1/9;9/128); old records must retain their bytes.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        original = scene17_post_claim(rig, "rowI-redelivery-H", 0, 2)
+        work, head = rig.adoption(1)
+        assert_update(rig, work, head, FIRST)
+        before = rig.saved()
+        duplicate = rig.deliver(original.event)
+        rig.host.window.accept(duplicate)
+        following = scene17_post_claim(rig, "rowI-redelivery-A", 1, 3)
+        work, adopted = rig.adoption(2)
+        assert_update(rig, work, adopted, SECOND, head.cid)
+        rig.advance_until(lambda: len(rig.facts(c.SELECTION)) == 3)
+        assert [a.value["previous"] for a in rig.facts(c.BELIEF_ADOPTED)] == [None, head.cid]
+        assert len(rig.requests("belief_update")) == 2
+        assert rig.report(original).cid != rig.report(duplicate).cid
+        assert row5_report_for_work(rig, work).cid == rig.report(following).cid
+        assert not [p for p in rig.host.window.status().pending if p.kind == "conflict"]
+        rig.assert_preserved(before)
+    finally:
+        rig.close()
+
+
+def test_rowI_late_conflict_unused_report_key_does_not_block_the_adopted_series():
+    """F-b :2870 minimal UseDeps closure, :3429 B9 and CE1 :2917-2923.
+
+    Globally stopping on any conflict fails the independent h->A adoption and continuation selection.
+    Using the clashed unused key fails the absence of its binding/Q* and the literal SECOND result.
+    Both unused deliveries are accepted before any settle, so neither has contributed to an adoption.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        original = scene17_post_claim(rig, "rowI-independent-H", 0, 2)
+        work, head = rig.adoption(1)
+        assert_update(rig, work, head, FIRST)
+        before = rig.saved()
+        unused = scene17_post_claim(rig, "rowI-unused", 0, 1)
+        changed = rig.deliver(replace(unused.event, item=replace(unused.event.item,
+            interval=replace(unused.event.item.interval, end_ns=2))))
+        rig.host.window.accept(unused)
+        rig.host.window.accept(changed)
+        following = scene17_post_claim(rig, "rowI-independent-A", 1, 3)
+        work, adopted = rig.adoption(2)
+        assert_update(rig, work, adopted, SECOND, head.cid)
+        rig.advance_until(lambda: len(rig.facts(c.SELECTION)) == 3)
+        rig.assert_identity_conflict(unused, changed)
+        unused_points = {rig.report(e).cid for e in (unused, changed)}
+        assert not [b for b in rig.facts(c.SEGMENT_BINDING) if b.value["report"] in unused_points]
+        assert row5_report_for_work(rig, work).cid == rig.report(following).cid
+        assert len(rig.requests("belief_update")) == 2
+        assert [a.value["previous"] for a in rig.facts(c.BELIEF_ADOPTED)] == [None, head.cid]
+        rig.assert_preserved(before)
+        assert rig.host.halted is None
+    finally:
+        rig.close()
+
+
+def rowI_accept_changed_interval(rig, original, end):
+    """CL-SAME at accept, with the measurement port's real envelope and r."""
+    event = replace(original.event, item=replace(original.event.item,
+        interval=replace(original.event.item.interval, end_ns=end)))
+    envelope = rig.deliver(event)
+    rig.host.window.accept(envelope)
+    return envelope
+
+
+def rowI_assert_blocked_update_visible(rig):
+    # F-b :1935-1938, :3525 and :3645 require a targetful conflict display.
+    # CG-ROWI-BLOCKED-TARGET: no wire rule fixes this target to Q*, raw or obligation.
+    assert any(p.kind == "conflict" and p.reason == "update:conflict" and p.target is not None
+               for p in rig.host.window.status().pending), "stopped update lacks a targetful update:conflict"
+
+
+@pytest.mark.parametrize("changed", (True, False), ids=("clash", "identical-redelivery"))
+def test_rowI_late_conflict_before_wu_entry_controls_the_offered_update_body(changed):
+    """Scene 3: F-b :3540 requires the current Xuse check at Wu entry (:3601).
+
+    Ignoring conflict at Wu entry fails the enter=False witness before any new report or Xc saves.
+    Treating identical redelivery as conflict fails mandatory entry and FIRST adoption in the control.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        original = scene17_post_claim(rig, "rowI-before-Wu-H", 0, 2)
+        def update_body_ready():
+            return any(key == q.value["desc"]["work_id"]
+                       for q in rig.requests("belief_update") for key, _ in rig.pending_bodies())
+        rig.advance_until(update_body_ready, run_bodies=False)
+        request, = rig.requests("belief_update")
+        key = request.value["desc"]["work_id"]
+        body, = [body for work_id, body in rig.pending_bodies() if work_id == key]
+        assert not [ok for work_id, ok in rig.workers.entry_attempts if work_id == key]
+        before = rig.saved()
+        prepared_before = {p.cid for p in rig.ledger.preparations}
+        ctx = rig.workers.contexts["measure_segment"]
+        acquisitions = ctx.evidence().acquisitions
+        envelope = (rowI_accept_changed_interval(rig, original, 3) if changed
+                    else rig.deliver(original.event))
+        if not changed:
+            rig.host.window.accept(envelope)
+        measurement = next(w for w in rig.workers.entries if w.desc.purpose == "measure_segment")
+        observed, = (r for r in execution_for(ctx, measurement.desc.work_id).reports
+                     if r.envelope == envelope.number)
+        assert observed.point is None and not rig.facts(c.CONFLICT), "fixture crossed the pre-save boundary"
+        rig.run_body(key, body)  # No settle between accept and the actual offered OS body.
+        assert [ok for work_id, ok in rig.workers.entry_attempts if work_id == key] == [not changed], \
+            "Wu entered using a Claim with an accepted CL-SAME"
+        if changed:
+            rig.drain()
+            rig.assert_identity_conflict(original, envelope)
+            rig.assert_no_new_uses(prepared_before, acquisitions)
+            assert not rig.facts(c.UPDATE_RESULT) and not rig.facts(c.BELIEF_ADOPTED)
+            assert not [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == request.cid]
+            rowI_assert_blocked_update_visible(rig)
+        else:
+            work, adopted = rig.adoption(1)
+            assert_update(rig, work, adopted, FIRST)
+            assert rig.report(original).cid != rig.report(envelope).cid
+            assert len(rig.requests("belief_update")) == 1
+            assert not [p for p in rig.host.window.status().pending if p.kind == "conflict"]
+        observed = execution_for(ctx, key)
+        assert observed.launches == ("launched",) and observed.entered == int(not changed)
+        rig.assert_preserved(before)
+    finally:
+        rig.close()
+
+
+def test_rowI_late_conflict_pending_unrequested_claim_does_not_hold_independent_updates():
+    """Scene 4: F-b :710-714, :2870 and K13/K14 :3513-3514 limit the blocked dependencies.
+
+    Letting the clashed, unrequested H hold later independent reports fails mandatory G then A adoption.
+    Adopting H anyway fails the exact Q* sources and single g->a chain, even though G already entails H.
+    CE1 :2917-2923 gives G=(0,2] FIRST, G and A=(1,3] SECOND; H's identity clash is separate.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        rig.hold_update()
+        first = scene17_post_claim(rig, "rowI-active-G", 0, 2)
+        rig.advance_until(rig.held_ready.is_set)
+        first_work = rig.held_work
+        waiting = scene17_post_claim(rig, "rowI-waiting-H", 0, 1)
+        rig.advance_until(lambda: any(r.value == wire(waiting.event) for r in rig.facts(c.SEGMENT_REPORT)))
+        waiting_raw = rig.report(waiting)
+        rig.advance_until(lambda: any(b.value["report"] == waiting_raw.cid for b in rig.facts(c.SEGMENT_BINDING)))
+        waiting_binding, = [b for b in rig.facts(c.SEGMENT_BINDING) if b.value["report"] == waiting_raw.cid]
+        assert len(rig.requests("belief_update")) == 1 and not rig.facts(c.BELIEF_ADOPTED)
+        before = rig.saved()
+        clash = rowI_accept_changed_interval(rig, waiting, 2)
+        rig.finish_held()
+        rig.workers.overrides.pop("belief_update")
+        work, head = rig.adoption(1)
+        assert work == first_work and row5_report_for_work(rig, work).cid == rig.report(first).cid
+        assert_update(rig, work, head, FIRST)
+        following = scene17_post_claim(rig, "rowI-after-waiting-A", 1, 3)
+        work, adopted = rig.adoption(2)
+        assert_update(rig, work, adopted, SECOND, head.cid)
+        rig.advance_until(lambda: len(rig.facts(c.SELECTION)) == 3)
+        assert row5_report_for_work(rig, work).cid == rig.report(following).cid
+        assert [q.cid for q in rig.requests("belief_update")] == [first_work.request, work.request]
+        assert [a.value["previous"] for a in rig.facts(c.BELIEF_ADOPTED)] == [None, head.cid]
+        rig.assert_identity_conflict(waiting, clash)
+        assert [b.cid for b in rig.facts(c.SEGMENT_BINDING) if b.value["report"] == waiting_raw.cid] == [waiting_binding.cid]
+        assert not [b for b in rig.facts(c.SEGMENT_BINDING) if b.value["report"] == rig.report(clash).cid]
+        rowI_assert_blocked_update_visible(rig)
+        rig.assert_preserved(before)
+        assert rig.host.halted is None
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("with_prior", (False, True), ids=("no-prior", "saved-prior"))
+def test_rowI_late_conflict_before_adoption_does_not_leave_the_next_independent_update_waiting(with_prior):
+    """Scenes 5/6: F-b :2870, :3513, :3540 and :3645 preserve each independent obligation.
+
+    Counting the conflict-blocked H as permanently active fails A's mandatory Q*, adoption and continuation.
+    Showing conflicts only for adopted beliefs fails the targetful update:conflict while H has no adoption.
+    CE1 :2904-2917 gives A=(2,3] alone (2/3,1/3;3/8), or with G=(0,1] FIRST.
+    Mixing H=(0,2] into A gives SECOND; the asserted values and prior exclude that contamination.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        one_point = {"joint": [[2, 3], [1, 3]], "evidence_mass": [3, 8]}
+        previous = None
+        if with_prior:
+            scene17_post_claim(rig, "rowI-saved-prior-G", 0, 1)
+            work, adopted = rig.adoption(1)
+            assert_update(rig, work, adopted, one_point)
+            previous = adopted.cid
+        rig.hold_update()
+        original = scene17_post_claim(rig, "rowI-blocked-H", 0, 2)
+        rig.advance_until(rig.held_ready.is_set)
+        blocked_work = rig.held_work
+        assert blocked_work.desc.args.prior == previous
+        assert plain(rig.workers.updates[blocked_work.request].result) == FIRST
+        before = rig.saved()
+        clash = rowI_accept_changed_interval(rig, original, 3)
+        rig.finish_held()
+        rig.workers.overrides.pop("belief_update")
+        rig.drain()
+        assert not [r for r in rig.facts(c.UPDATE_RESULT) if r.value["request"] == blocked_work.request]
+        assert not [a for a in rig.facts(c.BELIEF_ADOPTED) if a.value["request"] == blocked_work.request]
+        rowI_assert_blocked_update_visible(rig)
+        following = scene17_post_claim(rig, "rowI-after-blocked-A", 2, 3)
+        work, adopted = rig.adoption(int(with_prior) + 1)
+        assert_update(rig, work, adopted, FIRST if with_prior else one_point, previous)
+        rig.advance_until(lambda: len(rig.facts(c.SELECTION)) == int(with_prior) + 2)
+        assert work.request != blocked_work.request
+        assert row5_report_for_work(rig, work).cid == rig.report(following).cid
+        assert len(rig.requests("belief_update")) == int(with_prior) + 2
+        assert [a.value["previous"] for a in rig.facts(c.BELIEF_ADOPTED)] == ([None, previous] if with_prior else [None])
+        assert not rig.facts(c.STALE)
+        rig.assert_identity_conflict(original, clash)
+        rowI_assert_blocked_update_visible(rig)
+        rig.assert_preserved(before)
+        assert rig.host.halted is None
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("boundary", ("after_body_commit", "after_entry_commit"))
+def test_rowI_late_conflict_pending_prepared_adoption_still_saves_but_has_no_new_uses(boundary):
+    """Scene 7: F-b :708, :3540(3), :3608 and Z3 :3645 keep prepared A* saving.
+
+    Abandoning the prepared, unconfirmed A* on conflict fails required readback confirmation of its exact CID/bytes.
+    Treating a saved A* as safe despite conflict fails the absence of new updates, evaluation and selection.
+    timeout=0 bounds each keep_running call to one round, including the failed store round (K16(5)).
+    The adapter fails once after real commit, then the test accepts CL-SAME before the next runner call.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        original = scene17_post_claim(rig, "rowI-prepared-H", 0, 2)
+        loss = Row2AckLoss(rig, "adoption", boundary)
+        for _ in range(128):
+            assert rig.host.keep_running(lambda _status: False, timeout=0) is False
+            if loss.failed:
+                break
+            for key, body in rig.pending_bodies():
+                rig.run_body(key, body)
+        assert loss.failed and not loss.confirmed, "fixture missed the prepared, unconfirmed A* boundary"
+        assert rig.faults.observed == [boundary]
+        loss.assert_commit_at_loss()
+        prepared = loss.prepared
+        before = rig.saved()
+        prepared_before = {p.cid for p in rig.ledger.preparations}
+        acquisitions = rig.workers.contexts["measure_segment"].evidence().acquisitions
+        clash = rowI_accept_changed_interval(rig, original, 3)
+        rig.advance_until(lambda: loss.confirmed)
+        following = scene17_post_claim(rig, "rowI-after-prepared-A", 1, 3)
+        rig.drain()
+        adopted, = rig.facts(c.BELIEF_ADOPTED)
+        work, = [w for w in rig.workers.entries if w.desc.purpose == "belief_update"]
+        assert adopted.cid == prepared.cid
+        assert_update(rig, work, adopted, FIRST)
+        assert rig.read_stored(adopted.cid) == (prepared.header, prepared.salt, prepared.record)
+        assert loss.attempts and all(p == prepared for p in loss.attempts)
+        same_name = [p for p in rig.ledger.preparations if p.record.id == prepared.record.id]
+        assert same_name and all(p == prepared for p in same_name)
+        assert len(rig.requests("belief_update")) == 1 and len(rig.facts(c.SELECTION)) == 1
+        rig.report(following)
+        rig.assert_identity_conflict(original, clash)
+        rig.assert_no_new_uses(prepared_before, acquisitions)
+        assert any(p.kind == "conflict" and p.reason == "update:conflict" and p.target == adopted.cid
+                   for p in rig.host.window.status().pending), "saved A* lacks its conflict diagnostic"
+        rig.assert_preserved(before)
+        assert rig.host.halted is None
+        assert [i.kind for i in rig.host.interruptions()] == ["store"]
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("boundary", ("after_body_commit", "after_entry_commit"))
+def test_rowI_late_conflict_after_actual_result_acquisition_preserves_both_fact_records(boundary):
+    """Scene 8: K5 :3505 records an actual acquisition as a then G, even if G saves later.
+
+    Blocking the already observed acquisition's a/G on conflict fails the required saved clock and content_acquired.
+    Reacquiring or counting the result twice fails equality with the pre-conflict EA and its single R* observation.
+    F-b :3540/3608 preserves prepared facts, and the sheet :23/87 forbids silently losing a fact record.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        original = scene17_post_claim(rig, "rowI-acquired-H", 0, 2)
+        loss = Row2AckLoss(rig, "acquisition_clock", boundary)
+        for _ in range(128):
+            assert rig.host.keep_running(lambda _status: False, timeout=0) is False
+            if loss.failed:
+                break
+            for key, body in rig.pending_bodies():
+                rig.run_body(key, body)
+        assert loss.failed and not loss.confirmed, "fixture missed the unconfirmed acquisition clock"
+        assert rig.faults.observed == [boundary]
+        loss.assert_commit_at_loss()
+        work, = [w for w in rig.workers.entries if w.desc.purpose == "belief_update"]
+        result, = rig.facts(c.UPDATE_RESULT)
+        assert result.value["request"] == work.request and result.value["result"] == FIRST
+        ctx = rig.workers.contexts["measure_segment"]
+        acquisitions = ctx.evidence().acquisitions
+        actual, = [a for a in acquisitions if result.cid in a.contents]
+        assert actual.origin == work.desc.reader
+        clock_prepared = loss.prepared
+        clock_value = clock_prepared.record.body.content.as_json()
+        assert clock_value["reading"]["time_ns"] == actual.acquired_ns
+        assert not [g for g in rig.facts(ACQUIRED) if result.cid in g.value["contents"]]
+        before = rig.saved()
+        clash = rowI_accept_changed_interval(rig, original, 3)
+        rig.advance_until(lambda: loss.confirmed)
+        # The positive wait has the same harness bound as advance_until. A
+        # permanently missing fact cannot pass merely because no adoption occurs.
+        for _ in range(128):
+            if any(result.cid in g.value["contents"] for g in rig.facts(ACQUIRED)):
+                break
+            rig.round()
+            for key, body in rig.pending_bodies():
+                rig.run_body(key, body)
+        rig.drain()
+        rig.assert_preserved(before)
+        rig.assert_identity_conflict(original, clash)
+        assert ctx.evidence().acquisitions == acquisitions, "result was acquired again after CL-SAME"
+        assert len([a for a in ctx.evidence().acquisitions if result.cid in a.contents]) == 1
+        clock = rig.one(CLOCK, cid=clock_prepared.cid)
+        assert clock.value == clock_value
+        assert rig.read_stored(clock.cid) == (clock_prepared.header, clock_prepared.salt, clock_prepared.record)
+        assert loss.attempts and all(p == clock_prepared for p in loss.attempts)
+        assert not rig.facts(c.BELIEF_ADOPTED) and not rig.facts(c.STALE)
+        assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == 1
+        assert len(rig.facts(c.SELECTION)) == 1
+        rowI_assert_blocked_update_visible(rig)
+        assert rig.host.halted is None
+        stored = [g for g in rig.facts(ACQUIRED) if result.cid in g.value["contents"]]
+        assert len(stored) == 1, "already observed result acquisition has no single saved content_acquired"
+        assert stored[0].value == {"origin": work.desc.reader, "contents": [result.cid], "clock": clock.cid}
+    finally:
+        rig.close()
+
+
+class RowIInitialEvaluationRig(RowILateConflictRig):
+    """Public Boot with three seats and a two-seat thinking allocation; no continuation.
+
+    DeclaredNeed in test_fb_skeleton :124-134 declares one seat per job. Thus the
+    measuring job, initial Wg and Wu fit concurrently (F-b :893,2143). A test-owned
+    gate holds the entered Wg, and deferred OS callbacks hold an unentered EQ.
+    """
+
+    def __init__(self):
+        RealRig.__init__(self, connect=False)
+        self.clock.set(0)
+        self.registry, self.launcher = registry(), LaunchCut()
+        self.workers, self.thread, self.executed = Workers(self), None, set()
+        self.post_errors, self.body_errors = [], []
+        self.held_ready, self.held_release = Event(), Event()
+        self.held_thread, self.held_work = None, None
+        self.candidate_ready, self.candidate_release = Event(), Event()
+        self.candidate_thread, self.deferred = None, set()
+        self.document, _ = finite_world("FA01")
+        model = self.record(Prediction(target="model.11", about=(), basis=(),
+            content=Payload.json({"document": self.document}), contract=contract("sui.f.model_source")),
+            RefKind.PREDICTION, Role.MODEL)
+        self.model_point = self.ledger.append(model, ()).cid
+        event = boot(True)
+        old = event.declaration.initial.value
+        allocation = replace(old.allocation, value=replace(old.allocation.value,
+            amount=fb.QuantityValue(contract=c.SEATS, value=2)))
+        initial = replace(old, model=self.model_point, allocation=allocation,
+            generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}),
+            method=fb.MethodCall(contract=contract("sui.f.finite_evaluation"), args={}),
+            draw=fb.MethodCall(contract=contract("stage2.scripted_draw"), args={}),
+            prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET,
+            derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
+                contract=c.SAVED_SEGMENT_UPDATE, args=delta_args())), continuation=None)
+        self.boot_input = replace(event, declaration=replace(event.declaration,
+            capacity=fb.QuantityValue(contract=c.SEATS, value=3),
+            initial=replace(event.declaration.initial, value=initial),
+            routes=tuple(replace(route, value=replace(route.value, config=replace(route.value.config,
+                sampling_contract=contract("sui.f.finite_measurement"),
+                clock_contract=contract("sui.f.simulated_clock")))) for route in event.declaration.routes)))
+        def hold_candidate(work, ctx):
+            self.candidate_ready.set()
+            assert self.candidate_release.wait(60), "test did not release the initial candidate worker"
+            event, issued = self.workers.normal(work, ctx)
+            self.workers.post(ctx, event, issued)
+        self.workers.overrides["candidate_generation"] = hold_candidate
+        self.cut = Row1IntervalCut(self, "update", 1, "report", "binding", None)
+        self.host = fb.FThreadHost(ledger=self.ledger, clock=self.clock, workers=self.workers,
+            registry=self.registry, launcher=self.launcher)
+        self.host.post(fb.ClockDeclared(declaration=replace(source(), run=self.clock.run,
+            measurement=contract("sui.f.simulated_clock"))))
+        self.host.post(self.boot_input)
+
+    def pending_bodies(self):
+        return [(key, body) for key, body in super().pending_bodies() if key not in self.deferred]
+
+    def run_body(self, key, body):
+        if any(q.value["desc"]["work_id"] == key for q in self.requests("candidate_generation")):
+            assert sum(k == key for k, _ in self.launcher.attempts) == 1
+            self.executed.add(key)
+            self.candidate_thread = Thread(target=self.invoke, args=(body,), daemon=True)
+            self.candidate_thread.start()
+            assert self.candidate_ready.wait(30), "candidate worker did not enter"
+            assert not self.body_errors and not self.workers.errors
+            return
+        super().run_body(key, body)
+
+    def finish_candidate(self):
+        self.candidate_release.set()
+        self.candidate_thread.join(30)
+        assert not self.candidate_thread.is_alive() and not self.body_errors and not self.workers.errors
+
+    def initial_evaluation_body(self):
+        def ready():
+            return any(key == q.value["desc"]["work_id"]
+                       for q in self.requests("evaluation_prepare") for key, _ in self.pending_bodies())
+        self.advance_until(ready, run_bodies=False)
+        request, = self.requests("evaluation_prepare")
+        key = request.value["desc"]["work_id"]
+        body, = [body for work_id, body in self.pending_bodies() if work_id == key]
+        assert {t["point"] for t in request.value["desc"]["trigger"]} == {self.one(CG).cid}
+        assert not [ok for work_id, ok in self.workers.entry_attempts if work_id == key]
+        return request, key, body
+
+    def close(self):
+        self.candidate_release.set()
+        if self.candidate_thread is not None:
+            self.candidate_thread.join(30)
+            assert not self.candidate_thread.is_alive()
+        super().close()
+
+
+@pytest.mark.parametrize(("visible", "changed"), ((True, True), (True, False), (False, True)),
+                         ids=("adoption-in-roots-clash", "adoption-in-roots-redelivery", "adoption-outside-roots-clash"))
+def test_rowI_late_conflict_initial_evaluation_checks_the_adoption_in_its_frozen_roots(visible, changed):
+    """Scene 9: J7/K12 :3490,3512 and G6 :3606 cover belief use by the initial EQ too.
+
+    Blocking only adoption-triggered continuation fails enter=False for the CG-triggered EQ that reads h.
+    Blocking an evaluation whose fixed roots cannot see h fails mandatory entry/selection with K.belief=None.
+    Identical redelivery must enter/select using h's R* and CE1 H(4/5), even though the trigger is CG.
+    """
+    rig = RowIInitialEvaluationRig()
+    try:
+        rig.advance_until(lambda: rig.candidate_ready.is_set()
+                          and rig.workers.measurement_started_posted.is_set())
+        if not visible:
+            rig.finish_candidate()
+            request, key, body = rig.initial_evaluation_body()
+            assert not rig.facts(c.BELIEF_ADOPTED)
+            rig.deferred.add(key)
+        original = scene17_post_claim(rig, "rowI-initial-EQ-H", 0, 2)
+        work, head = rig.adoption(1)
+        assert_update(rig, work, head, FIRST)
+        if visible:
+            candidate = next(w for w in rig.workers.entries if w.desc.purpose == "candidate_generation")
+            observed = execution_for(rig.workers.contexts["measure_segment"], candidate.desc.work_id)
+            assert observed.entered == 1 and not observed.stopped and rig.candidate_thread.is_alive()
+            rig.finish_candidate()
+            request, key, body = rig.initial_evaluation_body()
+        fixed = request.value["desc"]["args"]["input"]["fixed_parents"]
+        frozen = closure(rig, fixed)
+        assert (head.cid in frozen) == visible, "SCENE_NOT_REACHED: fixed roots do not have the declared h visibility"
+        assert (head.cid in closure(rig, request.value["desc"]["numerical_view"]["boundary"])) == visible
+        before = rig.saved()
+        prepared_before = {p.cid for p in rig.ledger.preparations}
+        acquisitions = rig.workers.contexts["measure_segment"].evidence().acquisitions
+        envelope = (rowI_accept_changed_interval(rig, original, 3) if changed
+                    else rig.deliver(original.event))
+        if not changed:
+            rig.host.window.accept(envelope)
+        measurement = next(w for w in rig.workers.entries if w.desc.purpose == "measure_segment")
+        observed, = (r for r in execution_for(rig.workers.contexts["measure_segment"], measurement.desc.work_id).reports
+                     if r.envelope == envelope.number)
+        assert observed.point is None and not rig.facts(c.CONFLICT), "fixture crossed the pre-save boundary"
+        rig.deferred.discard(key)
+        rig.executed.add(key)
+        rig.invoke(body)  # The real initial EQ body, with no settle since accept.
+        should_enter = not (visible and changed)
+        assert [ok for work_id, ok in rig.workers.entry_attempts if work_id == key] == [should_enter], \
+            "initial evaluation entry ignored the conflict of its frozen adopted belief"
+        assert not rig.body_errors and not rig.workers.errors
+        if should_enter:
+            rig.advance_until(lambda: len(rig.facts(c.SELECTION)) == 1)
+            prepared = rig.workers.prepared_by_request[request.cid]
+            expected_belief = rig.read_stored(head.value["result"])[2].id if visible else None
+            assert isinstance(prepared.value, f.FProblem) and prepared.value.K.belief == expected_belief
+            selected, = rig.workers.evaluated_by_request.values()
+            assert isinstance(selected.value, f.Selected) and selected.value.root.K.belief == expected_belief
+            with localcontext() as context:
+                context.prec = 60
+                information = Decimal(2).ln()
+                if visible:
+                    p = Decimal(4) / 5
+                    information = -(p * p.ln() + (1 - p) * (1 - p).ln())
+                assert_quantity(selected.value.evaluation.information[1].additional, information)
+            assert len(rig.requests("selection_draw")) == len(rig.requests("evaluation")) == 1
+        else:
+            rig.drain()
+            rig.assert_no_new_uses(prepared_before, acquisitions)
+            assert request.cid not in rig.workers.prepared_by_request
+            assert not rig.facts(c.PREPARED) and not rig.facts(c.DRAW_REQUESTED)
+            assert not rig.facts(c.EVALUATED) and not rig.facts(c.SELECTION)
+        if changed:
+            rig.assert_identity_conflict(original, envelope)
+        else:
+            assert not [p for p in rig.host.window.status().pending if p.kind == "conflict"]
+        rig.assert_preserved(before)
+        assert rig.host.halted is None
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("boundary", ("after_body_commit", "after_entry_commit"))
+def test_rowI_late_conflict_pending_result_still_saves_without_starting_result_acquisition(boundary):
+    """Scene 10: F-b :3540(2)(3), :3603/3608 and K5 :3505 separate R* save from new use.
+
+    Starting the still-unperformed result acquisition after CL-SAME fails unchanged EA and absent a/G preparations.
+    Abandoning prepared R* fails mandatory confirmation and the exact saved CID/header/salt/body comparison.
+    Scene 8 already has EA before conflict; here EA has no observation of R* at the fault boundary.
+    """
+    rig = RowILateConflictRig()
+    try:
+        rig.start_publicly()
+        original = scene17_post_claim(rig, "rowI-unacquired-result-H", 0, 2)
+        loss = Row2AckLoss(rig, "result", boundary)
+        for _ in range(128):
+            assert rig.host.keep_running(lambda _status: False, timeout=0) is False
+            if loss.failed:
+                break
+            for key, body in rig.pending_bodies():
+                rig.run_body(key, body)
+        assert loss.failed and not loss.confirmed, "fixture missed prepared R* before confirmation"
+        assert rig.faults.observed == [boundary]
+        loss.assert_commit_at_loss()
+        prepared = loss.prepared
+        work, = [w for w in rig.workers.entries if w.desc.purpose == "belief_update"]
+        assert prepared.record.body.content.as_json()["request"] == work.request
+        assert prepared.record.body.content.as_json()["result"] == FIRST
+        ctx = rig.workers.contexts["measure_segment"]
+        acquisitions = ctx.evidence().acquisitions
+        assert not [a for a in acquisitions if prepared.cid in a.contents], "fixture crossed actual acquisition"
+        assert not [g for g in rig.facts(ACQUIRED) if prepared.cid in g.value["contents"]]
+        before = rig.saved()
+        prepared_before = {p.cid for p in rig.ledger.preparations}
+        clash = rowI_accept_changed_interval(rig, original, 3)
+        rig.advance_until(lambda: loss.confirmed)
+        rig.drain()
+        result, = rig.facts(c.UPDATE_RESULT)
+        assert result.cid == prepared.cid
+        assert rig.read_stored(result.cid) == (prepared.header, prepared.salt, prepared.record)
+        assert loss.attempts and all(p == prepared for p in loss.attempts)
+        same_name = [p for p in rig.ledger.preparations if p.record.id == prepared.record.id]
+        assert same_name and all(p == prepared for p in same_name)
+        assert ctx.evidence().acquisitions == acquisitions, "CL-SAME allowed a new actual acquisition of R*"
+        assert not [a for a in ctx.evidence().acquisitions if result.cid in a.contents]
+        assert not [g for g in rig.facts(ACQUIRED) if result.cid in g.value["contents"]]
+        assert not [p for p in rig.ledger.preparations if p.cid not in prepared_before
+                    and p.record.body.contract == CLOCK], "unperformed result acquisition acquired a clock record"
+        rig.assert_no_new_uses(prepared_before, acquisitions)
+        assert not rig.facts(c.BELIEF_ADOPTED) and not rig.facts(c.STALE)
+        assert len(rig.requests("belief_update")) == len(rig.facts(c.UPDATE_RESULT)) == 1
+        assert len(rig.facts(c.SELECTION)) == 1
+        rig.assert_identity_conflict(original, clash)
+        rowI_assert_blocked_update_visible(rig)
+        rig.assert_preserved(before)
+        assert rig.host.halted is None
+        assert [i.kind for i in rig.host.interruptions()] == ["store"]
+    finally:
+        rig.close()
+
+
+@pytest.mark.parametrize("changed", (True, False), ids=("clash", "identical-redelivery"))
+def test_rowI_late_conflict_independent_unentered_candidate_runs_but_its_adopted_belief_evaluation_is_gated(changed):
+    """Scene 11: H9 :3445 reads fixed model operations; :2870 propagates only UseDeps.
+
+    Blocking the independent Wg or CG on h's conflict fails mandatory entry and saved CG for the same Qgen.
+    Starting an h-dependent evaluation after CG fails absence of new EQ/PR/draw/evaluation/selection preparations.
+    Same-payload redelivery supplies the control: the later EQ sees h and must select using its R*.
+    """
+    rig = RowIInitialEvaluationRig()
+    try:
+        def candidate_body_offered():
+            return any(key == q.value["desc"]["work_id"]
+                       for q in rig.requests("candidate_generation") for key, _ in rig.pending_bodies())
+        rig.advance_until(candidate_body_offered, run_bodies=False)
+        candidate_request, = rig.requests("candidate_generation")
+        key = candidate_request.value["desc"]["work_id"]
+        body, = [body for work_id, body in rig.pending_bodies() if work_id == key]
+        rig.deferred.add(key)
+        rig.advance_until(rig.workers.measurement_started_posted.is_set)
+        original = scene17_post_claim(rig, "rowI-unentered-candidate-H", 0, 2)
+        work, head = rig.adoption(1)
+        assert_update(rig, work, head, FIRST)
+        ctx = rig.workers.contexts["measure_segment"]
+        candidate_observed = execution_for(ctx, key)
+        assert candidate_observed.launches == ("launched",) and candidate_observed.entered == 0
+        assert not [ok for work_id, ok in rig.workers.entry_attempts if work_id == key]
+        desc = candidate_request.value["desc"]
+        assert desc["method"] == plain(c.MODEL_OPERATIONS) and desc["args"]["model"] == rig.model_point
+        assert head.cid not in closure(rig, desc["input_points"]), "fixture candidate uses the adopted belief"
+        before = rig.saved()
+        prepared_before = {p.cid for p in rig.ledger.preparations}
+        acquisitions = ctx.evidence().acquisitions
+        envelope = (rowI_accept_changed_interval(rig, original, 3) if changed
+                    else rig.deliver(original.event))
+        if not changed:
+            rig.host.window.accept(envelope)
+        measurement = next(w for w in rig.workers.entries if w.desc.purpose == "measure_segment")
+        observed, = (r for r in execution_for(ctx, measurement.desc.work_id).reports
+                     if r.envelope == envelope.number)
+        assert observed.point is None and not rig.facts(c.CONFLICT), "fixture crossed the pre-save boundary"
+        rig.deferred.remove(key)
+        rig.candidate_release.set()
+        rig.executed.add(key)
+        rig.invoke(body)  # First invocation of the offered Wg, with no settle since accept.
+        assert [ok for work_id, ok in rig.workers.entry_attempts if work_id == key] == [True], \
+            "independent model_operations candidate worker was blocked by h's conflict"
+        assert not rig.body_errors and not rig.workers.errors
+        rig.advance_until(lambda: bool(rig.facts(CG)))
+        candidate, = [w for w in rig.workers.entries if w.desc.purpose == "candidate_generation"]
+        assert candidate.request == candidate_request.cid
+        saved_cg, = rig.facts(CG)
+        model_operations = rig.read_stored(rig.model_point)[2].body.content.as_json()["document"]["operations"]
+        assert saved_cg.value["input_order"] == [op["id"] for op in model_operations]
+        assert saved_cg.value["model"] == rig.model_point
+        rig.advance_until(lambda: any(t.value["request"] == candidate.request for t in rig.facts(c.WORK_TERMINAL)),
+                          run_bodies=False)
+        terminal, = [t for t in rig.facts(c.WORK_TERMINAL) if t.value["request"] == candidate.request]
+        assert terminal.value["terminal_kind"] == "outputs"
+        if changed:
+            rig.drain()
+            rig.assert_no_new_uses(prepared_before, acquisitions)
+            assert not rig.requests("evaluation_prepare") and not rig.facts(c.PREPARED)
+            assert not rig.requests("selection_draw") and not rig.requests("evaluation")
+            assert not rig.facts(c.EVALUATED) and not rig.facts(c.SELECTION)
+            rig.assert_identity_conflict(original, envelope)
+            assert any(p.kind == "conflict" and p.reason == "update:conflict" and p.target == head.cid
+                       for p in rig.host.window.status().pending)
+        else:
+            evaluation_request, evaluation_key, evaluation_body = rig.initial_evaluation_body()
+            fixed = evaluation_request.value["desc"]["args"]["input"]["fixed_parents"]
+            assert head.cid in closure(rig, fixed), "control EQ does not see the preceding adoption"
+            rig.run_body(evaluation_key, evaluation_body)
+            rig.advance_until(lambda: len(rig.facts(c.SELECTION)) == 1)
+            prepared = rig.workers.prepared_by_request[evaluation_request.cid]
+            expected_belief = rig.read_stored(head.value["result"])[2].id
+            assert isinstance(prepared.value, f.FProblem) and prepared.value.K.belief == expected_belief
+            selected, = rig.workers.evaluated_by_request.values()
+            assert isinstance(selected.value, f.Selected) and selected.value.root.K.belief == expected_belief
+            assert not [p for p in rig.host.window.status().pending if p.kind == "conflict"]
+        assert len(rig.requests("candidate_generation")) == len(rig.facts(CG)) == 1
+        assert len(rig.facts(c.BELIEF_ADOPTED)) == len(rig.requests("belief_update")) == 1
+        rig.assert_preserved(before)
+        assert rig.host.halted is None
+    finally:
+        rig.close()

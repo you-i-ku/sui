@@ -62,8 +62,9 @@ def _resolve(state, refs) -> frozenset:
     return frozenset(out)
 
 
-def _reports(state, row):
+def _reports(state, row, *, unconfirmed=False):
     """同じ仕事の口から来て保存済みの、この k を名指す報告を論理の報告ごとにまとめる (§6-8 B2、紙 329〜340)。
+    unconfirmed=True は、受け付けた (P.receipts にある) 配送を保存の段に関わらず数える (Point は None)。
     鍵は Frame が MeasurementId、境界 (started・ended・route_applied) が種類、名前の無い枝が item_slot
     (CMP-04〜08)。同じ鍵で中身が違えば食い違い、
     同じ中身は再配送で、受付の順の最初を代表にする (CID の順で選ばない)。受信 r の条件は代表でなく
@@ -71,7 +72,7 @@ def _reports(state, row):
     groups = {}
     for number, r in row.reports:
         receipt = state.receipts.get(number)
-        if receipt is None or receipt.slots[0].entry is None:
+        if receipt is None or (receipt.slots[0].entry is None and not unconfirmed):
             continue
         event = receipt.envelope.event
         if not (isinstance(event, _fb.SegmentReport) and event.segment == row.work.request):
@@ -85,7 +86,8 @@ def _reports(state, row):
             key = ("boundary", "route_applied")
         else:
             key = ("slot", event.item_slot)
-        groups.setdefault(key, []).append((receipt.index, receipt.slots[0].entry.cid, r, event))
+        entry = receipt.slots[0].entry
+        groups.setdefault(key, []).append((receipt.index, entry.cid if entry is not None else None, r, event))
     # 代表は受付の順の最初 (Post の順ではない、R18)
     return {key: [entry[1:] for entry in sorted(group, key=lambda e: e[0])] for key, group in groups.items()}
 
@@ -115,13 +117,25 @@ def _clashes(reports) -> dict:
     return out
 
 
+def clashed_reports(state, *, unconfirmed=True) -> frozenset:
+    """食い違った鍵の原報告 (保存済みの Point) の全部。使用の門 (新しい更新・続きの評価・仕事の入場) が、使う記録の
+    依存と突き合わせる (紙 §2-5-19-6「使用禁止は当該使用直前の Xuse の依存で検査する。Xc の保存完了を待って食い違いを
+    知ったことにしない」)。印も控えも持たず、その都度、受け付けた配送から導く (§2-4-3)。許可の判定は、保存の確認待ち・
+    未保存の配送も数える (unconfirmed=True。受け付けた報告はいずれ保存されるので、止める判定が後で外れることは無い)。"""
+    rows = [(row.work.request, _reports(state, row, unconfirmed=unconfirmed)) for row in state.works.values()
+            if isinstance(row.work, _fb.MeasureSegment)]
+    clashes = _clashes(rows)
+    return frozenset(cid for k, groups in rows for key, group in groups.items() if (k, key) in clashes
+                     for cid, _r, _event in group if cid is not None)
+
+
 def _first_r(group) -> int:
     """論理の報告の受信 r の条件に使う読み: 配送のうち最も早い r (全配送で条件を満たすのと同じ)。"""
     return min(r for _cid, r, _event in group)
 
 
 def _same(group) -> bool:
-    return len({_dumps(_encode(event.item)) for _cid, _r, event in group}) == 1
+    return len(group) == 1 or len({_dumps(_encode(event.item)) for _cid, _r, event in group}) == 1
 
 
 def _started(state, row, groups, source):

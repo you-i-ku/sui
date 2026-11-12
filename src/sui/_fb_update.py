@@ -6,8 +6,12 @@
 1 点ずつ保存する。同じ系列では、前の義務の採用の判断の保存が確認されるまで次の Q* を作らない (K13)。
 本体が終わりの知らせを出さずに止まった義務は、それを結末として次へ進む (K15。記録は足さない)。
 
-最初の輪の 1 周目は正常な道だけ。★ 1 周の後: ホストの監視の記録と入力の取得 (K4・K5)、新しい使用の門
-(食い違いの照合、G6)、失敗の後の目的の表示 (J9-c)。
+使用の門 (紙 §2-5-19-6・§2-5-19-10・FB3-R01-R2、段 3 の残り (イ)): 義務が結論として頼る記録 (自分の原報告と、前の採用の
+系列をさかのぼった全部の原報告) に食い違った鍵の原報告があれば、まだ作っていない記録 (Q*・R*・結果の取得・採用) を
+作らない。作った記録は消さず、準備済みの記録の保存と診断の T は続ける。判定は毎回の settle で受け付けた配送から導く。
+止めるまでで、戻し方は S5、本人が選ぶ口は S10。
+
+最初の輪の 1 周目は正常な道だけ。★ 1 周の後: ホストの監視の記録と入力の取得 (K4・K5)、失敗の後の目的の表示 (J9-c)。
 """
 
 import hashlib as _hashlib
@@ -17,6 +21,7 @@ from . import f as _f
 from . import fb as _fb
 from . import fb_contracts as _c
 from . import f_contracts as _fc
+from ._fb_bind import clashed_reports as _clashed_reports
 from ._fb_boot import Step as _Step, _clock_source, _front, _record, advance as _advance, \
     fixed_view as _fixed_view
 from ._fb_wire import dumps as _dumps, encode as _encode
@@ -34,7 +39,7 @@ class Obligation:
     points: dict = _field(default_factory=dict)
     desc: object = None          # Wu の Desc (Q* の Publish で固定)
     done: bool = False           # Wu の終わりを処理した
-    final: str | None = None     # adopted / stale / rejected / insufficient / failure / unknown / stopped / issued:*
+    final: str | None = None     # adopted / stale / rejected / insufficient / failure / unknown / stopped / conflicted / issued:*
     acquired_ns: int | None = None   # 結果 R* を実際に取得した時の M の読み (最初の 1 回で固定、入り直しで取り直さない)
 
 
@@ -220,8 +225,8 @@ def _silent_stop(state, row) -> bool:
 
 def _next(state, plan):
     """次に Q* を作る義務: まだ要求の無い義務のうち、ホストが原報告を受け取った順で最初の 1 つ。
-    受け取った順の分からない義務があれば選ばない。"""
-    waiting = [ob for ob in plan.obligations.values() if ob.desc is None]
+    受け取った順の分からない義務があれば選ばない。食い違いで止まった義務 (結末 conflicted) は、後ろを待たせない。"""
+    waiting = [ob for ob in plan.obligations.values() if ob.desc is None and ob.final is None]
     orders = [(_receipt_order(state, ob.report), ob) for ob in waiting]
     if not orders:
         return None
@@ -229,6 +234,68 @@ def _next(state, plan):
         _hold(plan, "delta:receipt_order")
         return None
     return min(orders, key=lambda pair: pair[0])[1]
+
+
+# --- 使用の門: 依存の食い違い (紙 §2-5-19-6・§2-5-19-10、FB3-R01-R2) ---
+
+def uses_of(state, adopted) -> frozenset:
+    """採用 A* が結論として頼る記録: その更新要求 Q* が読む全部 (原報告を含む、系列をさかのぼった閉包)。A* を作った
+    義務が無ければ上げる (無いことを「頼っていない」にしない)。"""
+    for plan in state.updates.values():
+        for ob in plan.obligations.values():
+            if ob.points.get("A") == adopted:
+                return ob.desc.input_points
+    raise KeyError(adopted)
+
+
+def _conflicted(state, plan, ob, bad) -> bool:
+    """依存の食い違い: その義務が結論として頼る記録に、食い違った鍵の原報告 bad がある。頼る記録は Q* が読む全部
+    (`_inputs`)。Q* を作る前は、自分の原報告と、今の系列の頭が頼る記録で数える (頭が進めば頼る記録は増えるだけ)。"""
+    if not bad:
+        return False
+    if ob.desc is not None:
+        return not bad.isdisjoint(ob.desc.input_points)
+    return ob.report in bad or bool(plan.chain) and not bad.isdisjoint(uses_of(state, plan.chain[-1]))
+
+
+def belief_conflicted(state, boot, boundary, bad) -> bool:
+    """boundary (保存済みの点の集合) に見える、その Boot の採用 A* のどれかが、食い違った鍵の原報告 bad に頼っている。
+    評価は boundary に見える採用の頭を読み、頭が頼る記録は前の採用のそれを含むので、どれか 1 つで足りる。採用の記録は、
+    保存の確認待ちでも置き場にあれば見える (準備した CID で数える)。"""
+    seen = None
+    for plan in state.updates.values():
+        if plan.boot is not boot:
+            continue
+        for ob in plan.obligations.values():
+            step = next((s for s in ob.steps if s.name == "decide"), None)
+            if ob.points.get("decision") != "A" or step is None or step.slot is None \
+                    or bad.isdisjoint(ob.desc.input_points):
+                continue
+            if seen is None:
+                seen = state.ledger.ancestors(boundary)
+            if step.slot.prepared.cid in seen:
+                return True
+    return False
+
+
+def blocked(state, row) -> bool:
+    """row がまだ本体に入っていない更新の仕事 Wu で、その要求 Q* の依存に食い違いが見えている (開始・入場の判定も
+    同じ関数。保存の前の受け付けた配送も数える)。"""
+    if row.ticket_used or row.work.desc.purpose != "belief_update":
+        return False
+    for plan in state.updates.values():
+        for ob in plan.obligations.values():
+            if ob.desc is not None and ob.desc.work_id == row.work.desc.work_id:
+                return _conflicted(state, plan, ob, _clashed_reports(state))
+    return False
+
+
+def conflicts(state, plan, *, unconfirmed=False) -> list:
+    """食い違いに頼る更新の対象 (表示用、その都度導く): 採用済みなら A*、止まった義務は Q* (まだ無ければ原報告)。
+    別の結末 (stale・rejected・failure など) が出た義務は、その結末のまま。"""
+    bad = _clashed_reports(state, unconfirmed=unconfirmed)
+    return [ob.points.get("A") or ob.points.get("Q") or ob.report for ob in plan.obligations.values()
+            if ob.final in (None, "conflicted", "adopted") and _conflicted(state, plan, ob, bad)]
 
 
 # --- 更新要求 Q* (K6) ---
@@ -470,6 +537,7 @@ def _finish(state, plan, ob, row) -> None:
 def advance(state) -> None:
     """更新の計画を進める (settle のロックの中)。"""
     from ._fb_core import _saved
+    bad = _clashed_reports(state)
     for number, boot in state.plans.items():
         if boot.declaration.initial is not None and boot.points.get("origin") is not None \
                 and number not in state.updates:
@@ -490,7 +558,14 @@ def advance(state) -> None:
                     _finish(state, plan, ob, row)
                     if not ob.done:
                         ob.final = "stopped" if _silent_stop(state, row) else None
-            _advance(state, _Pair(plan, ob))
+            # 使用の門: 依存に食い違いがあれば、まだ作っていない記録を作らない (T だけは診断の保存で通す)。採用の判断を
+            # もう公開していれば、その保存と確認は続ける。止まった義務は結末の 1 つで、頼っていない次の義務を待たせない
+            held = _conflicted(state, plan, ob, bad)
+            if held and ob.final in (None, "stopped") and not _undecided(ob):
+                ob.final = "conflicted"
+            # もう起きた取得 (acquired_ns を固定済み) の記録 a・G は、起きた事実の記録なので最後まで作る (K5)
+            _advance(state, _Pair(plan, ob), build=lambda step: not held or step.name.startswith("T:")
+                     or step.name in ("a", "G") and ob.acquired_ns is not None)
             decision = ob.points.get("decision")
             if decision is not None and ob.final is None and ob.points.get("decide") is not None:
                 ob.final = "adopted" if decision == "A" else "stale"

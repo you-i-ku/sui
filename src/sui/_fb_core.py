@@ -362,6 +362,15 @@ def pending_statuses(state) -> tuple:
         out.append(item(hold.kind, report, _c.SEGMENT_BINDING, hold.reason))
     for work in state.work_conflicts:
         out.append(item("conflict", work.request, None, f"work_id:{work.desc.work_id}"))
+    from . import _fb_update
+    for plan in state.updates.values():
+        # 食い違った原報告に頼る採用 A* と、それで止まった更新 (紙 Z3)。保存の確認待ちの配送を含む食い違いは未確認
+        confirmed = _fb_update.conflicts(state, plan)
+        for target in confirmed:
+            out.append(item("conflict", target, None, "update:conflict"))
+        for target in _fb_update.conflicts(state, plan, unconfirmed=True):
+            if target not in confirmed:
+                out.append(item("unchecked", target, None, "update:conflict:unconfirmed"))
     from ._fb_think import conflicts
     for plan in state.thinking.values():
         # 食い違いは印でなく、その都度、保存済みの報告から導く (FB2-R01-R2)。保存の確認待ちを含む食い違いは
@@ -464,12 +473,18 @@ def _saved(state, cid) -> bool:
 
 def startable(state, row) -> bool:
     """開始は要求の保存の後 (FB5-01)。占有と容量が合う時だけ。上の段の食い違いが見えている考える過程の
-    仕事は開始しない (紙 :864)。"""
-    from ._fb_think import blocked
+    仕事は開始しない (紙 :864)。食い違った原報告に頼る更新の仕事も開始しない。"""
     if isinstance(row.work, PlannedWork):
         return False   # 要求が未解決の行は開始できない
     return row.phase == "pending" and _saved(state, row.work.request) and _fits(state, row) \
-        and not blocked(state, row)
+        and not _blocked(state, row)
+
+
+def _blocked(state, row) -> bool:
+    """開始・入場の門: 考える過程の仕事 (上の段の食い違い・きっかけの採用の依存の食い違い) と、更新の仕事 (依存の
+    食い違い)。"""
+    from . import _fb_think, _fb_update
+    return _fb_think.blocked(state, row) or _fb_update.blocked(state, row)
 
 
 def drain(state) -> tuple:
@@ -685,8 +700,7 @@ class WorkContext:
             row = self._row
             # 開始の札を取れるのは、今の占有を確保した起動の口だけ (R20)。起動の後・入場の前に上の段の
             # 食い違いが見えたら入場させない (紙 :864、review FB2-R01)。入場していないので開始待ちに戻る
-            from ._fb_think import blocked
-            if row.ticket_used or row.claim is not self or blocked(self._state, row):
+            if row.ticket_used or row.claim is not self or _blocked(self._state, row):
                 return False
             row.ticket_used = self.entered = True
             row.entered += 1
