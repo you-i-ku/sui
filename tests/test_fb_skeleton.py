@@ -426,8 +426,11 @@ def test_six_status_shape_representatives(meaning):
 
 
 def test_public_entry_signatures():
-    assert set(signature(fb.FThreadHost).parameters) == {"ledger", "clock", "workers", "registry", "launcher"}
+    # K23(2)(a): an optional route_epoch -> FSource mapping is supplied by the caller.
+    assert set(signature(fb.FThreadHost).parameters) == {"ledger", "clock", "workers", "registry", "launcher", "sources"}
     assert signature(fb.FThreadHost).parameters["launcher"].default is None
+    assert signature(fb.FThreadHost).parameters["sources"].default is None
+    assert get_type_hints(fb.FThreadHost.__init__)["sources"] == Mapping[str, fb.FSource] | None
     assert set(get_args(get_type_hints(fb.FThreadHost.__init__)["launcher"])) == {fb.FLauncher, type(None)}
     assert set(signature(fb.FLauncher.launch).parameters) == {"self", "work_id", "body"}
     assert get_type_hints(fb.FLauncher.launch)["work_id"] is str
@@ -443,6 +446,10 @@ def test_public_entry_signatures():
     assert set(signature(fb.FThreadHost.post).parameters) == {"self", "event"}
     assert set(signature(fb.FWorkers.run).parameters) == {"self", "work", "ctx"}
     assert set(signature(fb.FWorkContext.enter).parameters) == {"self"}
+    assert set(signature(fb.FWorkContext.now).parameters) == {"self"}
+    assert get_type_hints(fb.FWorkContext.now) == {"return": fb.ReadingClock}
+    assert set(signature(fb.FWorkContext.acquire).parameters) == {"self"}
+    assert get_type_hints(fb.FWorkContext.acquire) == {"return": fb.Acquisition}
     assert set(signature(fb.FWorkContext.post).parameters) == {"self", "event", "issued"}
     assert set(signature(fb.FWorkContext.evidence).parameters) == {"self"}
     assert set(signature(fb.FWorkContext.read).parameters) == {"self", "point"}
@@ -462,6 +469,25 @@ def test_public_entry_signatures():
     assert set(signature(Ledger.prepare).parameters) == {"self", "record", "parents"}
     assert set(signature(Ledger.write).parameters) == {"self", "prepared"}
     assert tuple(x.name for x in fields(PreparedEntry)) == ("record", "parents", "salt", "header", "cid")
+
+
+def test_measure1_source_public_entry_signatures():
+    """K23(2)(a)(f), K23-a(a): public source and worker signatures, fixed from the paper."""
+    assert set(signature(fb.FSource.read).parameters) == {"self", "cursor"}
+    assert get_type_hints(fb.FSource.read) == {"cursor": int, "return": fb.SourceItem | None}
+    assert not signature(fb.SourceMeasurer).parameters
+    assert set(signature(fb.SourceMeasurer.stop).parameters) == {"self"}
+    assert get_type_hints(fb.SourceMeasurer.stop) == {"return": type(None)}
+    assert set(signature(fb.SourceMeasurer.run).parameters) == {"self", "work", "ctx"}
+    assert get_type_hints(fb.SourceMeasurer.run) == {
+        "work": fb.FWork, "ctx": fb.FWorkContext, "return": type(None)}
+
+
+def test_measure1_source_sampling_registry_declaration():
+    """K23(2)(e): source_sampling/1 is a measurement capability in fb_registry_v1."""
+    assert c.SOURCE_SAMPLING == contract("sui.fb.source_sampling")
+    declared = [d for d in u2.fb_registry_v1().declarations if d.ref == c.SOURCE_SAMPLING]
+    assert len(declared) == 1 and declared[0].kind == "measurement"
 
 
 def issued_kwargs():
@@ -623,6 +649,9 @@ FB_FIELD_SPEC = {
     "SegmentStatus": "segment:Held;cells:tuple[CellStatus,...];ended:bool;evidence:StatusBasis",
     "PurposeStatus": "obligation:Held;o_id:str;condition:Literal['issue','save','run','handle','stop'];role:str;process:BootSlot|None;reader:Point|None;target:Held|None;part:MeasurementInterval|None;handled:bool;handed_to:Held|None;unmet:bool;evidence:StatusBasis",
     "FStatus": "receipts:tuple[ReceiptStatus,...];works:tuple[WorkStatus,...];readings:tuple[ReadingStatus,...];pending:tuple[PendingStatus,...];segments:tuple[SegmentStatus,...];purposes:tuple[PurposeStatus,...]",
+    # K23(2)(a)(c), handwritten from the new paper declarations.
+    "SourceItem": "media_type:str;data:bytes;claims:ImmutableJSON",
+    "Acquisition": "route_epoch:str;cursor:int;before:ReadingClock;after:ReadingClock;outcome:Literal['taken','empty','unavailable'];reason:str;item:SourceItem|None",
     # F-b v0.62 K16 (4): an interruption that reached the keep_running driver (host observation, in-process only).
     "Interruption": "kind:Literal['store','halted','rejected'];operation:str;error_type:str;message:str;first_ns:int|None;last_ns:int|None;count:int",
 }
@@ -658,7 +687,8 @@ UPDATE_FIELD_SPEC = {
     "UseObservation": "work_id:str;point:Point;used_ns:int",
     "IntervalObservation": "work_id:str;interval:MeasurementInterval",
     "AcquisitionObservation": "origin:Point;contents:frozenset[Point];acquired_ns:int",
-    "TargetEvidence": "executions:tuple[ExecutionObservation,...];uses:tuple[UseObservation,...];intervals:tuple[IntervalObservation,...];acquisitions:tuple[AcquisitionObservation,...]",
+    "SourceObservation": "work_id:str;route_epoch:str;cursor:int;before_ns:int;after_ns:int;outcome:Literal['taken','empty','unavailable'];envelope:int|None;received:Point|None",
+    "TargetEvidence": "executions:tuple[ExecutionObservation,...];uses:tuple[UseObservation,...];intervals:tuple[IntervalObservation,...];acquisitions:tuple[AcquisitionObservation,...];sources:tuple[SourceObservation,...]",
 }
 
 FB_ALIAS_SPEC = {
@@ -688,7 +718,8 @@ FA_ALIAS_SPEC = {
 
 def test_public_export_names_are_exact():
     assert set(fb.__all__) == set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
-        "FbInputError", "FbHostFault", "FHalted", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost"}
+        "FbInputError", "FbHostFault", "FHalted", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost",
+        "FSource", "SourceMeasurer"}
     assert set(u2.__all__) == set(UPDATE_FIELD_SPEC) | set(UPDATE_ALIAS_SPEC) | {
         "fb_registry_v1", "compute_finite_update", "update_response"}
 

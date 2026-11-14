@@ -7,7 +7,7 @@
 は意味を変えずに使い回す。
 """
 
-from collections.abc import Callable as _Callable
+from collections.abc import Callable as _Callable, Mapping as _Mapping
 from dataclasses import dataclass as _dataclass
 from typing import Literal as _Literal, Protocol as _Protocol, TypeAlias as _TypeAlias
 
@@ -17,7 +17,7 @@ from .contracts import ContractRef
 from .f import (
     ClockReading, ContractValue, CoverageClaim, CoverageUnproved, DrawRequest,
     FFactsRequest, FMathArtifact, FReader, FRegistry, Gap, ImmutableJSON, MeasurementFrame,
-    MeasurementInterval, MeasurementUnavailable, Point, RouteConfig,
+    MeasurementId, MeasurementInterval, MeasurementUnavailable, Point, RouteConfig,
     Unavailable,
 )
 from .f_update2 import IssuedUpdate, LaunchResult, TargetEvidence
@@ -40,7 +40,7 @@ __all__ = [
     "Unsaved", "Held", "StatusBasis", "SlotStatus", "ReceiptStatus", "WorkStatus",
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
     "PurposeStatus", "FStatus", "FWorkContext", "FWorkers", "LaunchResult", "FLauncher", "FWindow",
-    "FThreadHost", "Envelope",
+    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer",
 ]
 
 
@@ -627,6 +627,38 @@ class FStatus:
     purposes: tuple[PurposeStatus, ...]
 
 
+# --- 口の源と、そこからの取り出し (§6-10 K23) ---
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class SourceItem:
+    """源が返す 1 件。中身の意味は決めない (W-02)。claims は送り手の主張。"""
+    media_type: str
+    data: bytes
+    claims: ImmutableJSON
+
+
+class FSource(_Protocol):
+    """口の向こうの源 (差し替えの口)。届いたものを順番つきで持っている相手。read(cursor) は cursor 番目の
+    1 件を返す (同じ cursor は同じ 1 件)。まだ無ければ None、読めなければ例外。本物の接続 (ネット・ファイル) の
+    源は S7。ホストへは FThreadHost の sources (route_epoch → 源) で渡す。"""
+
+    def read(self, cursor: int) -> SourceItem | None: ...
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class Acquisition:
+    """FWorkContext.acquire() の返値。before・after は取り出しの操作の直前と、1 件が手に渡った (または無いと
+    分かった) 境目のホストの読み。outcome: taken (item に 1 件。ホストが原文を受信の列へ入れ、cursor を進めた) /
+    empty (源にその番号がまだ無い) / unavailable (源が差されていない・読みが例外。理由は reason)。"""
+    route_epoch: str
+    cursor: int
+    before: ReadingClock
+    after: ReadingClock
+    outcome: _Literal["taken", "empty", "unavailable"]
+    reason: str
+    item: SourceItem | None
+
+
 # --- 窓口・仕事の係・ホスト (§2-4-1・§2-4-2・§2-4-7・M2) ---
 
 class FWorkContext(_Protocol):
@@ -648,9 +680,16 @@ class FWorkContext(_Protocol):
     reader() はその仕事の Desc の numerical_view の境界と input_points の閉包だけを読む不変の読み手
     (像の外を読ませない、§6-9 H5)。numerical_view も input_points も無い仕事では None。
     prepared() は評価 Ee の args.prepared (PR) と全照合した、評価の準備 Ep の生きた
-    FMathArtifact[FProblem]。ほかの仕事・照合できない時は None。P の辞書や任意の発行物を取る口ではない。"""
+    FMathArtifact[FProblem]。ほかの仕事・照合できない時は None。P の辞書や任意の発行物を取る口ではない。
+    now() はホストが今の M を読み、発行済みの時計の出どころの Point とまとめて返す (K23)。acquire() は測る仕事の口だけが
+    呼べ、ホストがその口の源から次の番号の 1 件を取り出す (K23)。取り出した原文はホストが受信の列へ入れ、
+    その操作の観測は evidence() の sources に残る。どちらも開始の札を取っていない口では RuntimeError。"""
 
     def enter(self) -> bool: ...
+
+    def now(self) -> ReadingClock: ...
+
+    def acquire(self) -> Acquisition: ...
 
     def read(self, point: Point) -> bytes: ...
 
@@ -731,12 +770,15 @@ class FThreadHost:
     (起動は Boot の出来事を post する)。容量は Boot の宣言から読み、既定値を置かない。"""
 
     def __init__(self, *, ledger: _Ledger, clock: _Clock, workers: FWorkers,
-                 registry: FRegistry, launcher: FLauncher | None = None) -> None:
+                 registry: FRegistry, launcher: FLauncher | None = None,
+                 sources: _Mapping[str, FSource] | None = None) -> None:
         """launcher=None は OS のスレッドで起動する本番の起動係 (threading.Thread.start の成否で
-        launched / not_started、start が戻らず分からない時は unknown)。"""
+        launched / not_started、start が戻らず分からない時は unknown)。sources は口の源 (route_epoch → FSource、K23)。
+        None や、口の route_epoch が無い時、その口の acquire() は unavailable を返す。"""
         from . import _fb_core
         self._state = _fb_core.State(ledger=ledger, clock=clock, workers=workers, registry=registry,
-                                     launcher=launcher if launcher is not None else _fb_core.ThreadLauncher())
+                                     launcher=launcher if launcher is not None else _fb_core.ThreadLauncher(),
+                                     sources=sources)
         self._window = FWindow(self)
 
     @property
@@ -784,3 +826,58 @@ class FThreadHost:
             self._window = FWindow(self)
             return self._window
 
+
+class SourceMeasurer:
+    """本体の測る係 (§6-10 K23)。測る仕事の本体で、口の源から 1 件を実際に取り出して報告する。
+    入場 → Started → acquire() を 1 回 → 取れたら Frame、無ければ・取れなければ MeasurementUnavailable →
+    stop() が呼ばれるまで在る (この版は続けて取りに行かない) → 取り出しの後から止まるまでの区間は
+    CoverageUnproved (見張っていない間を「来なかった」にしない) → Ended。測る仕事以外は TypeError
+    (ほかの仕事の係と束ねるのは使う側)。Frame の値は取り出した原文の同一性 (media_type・長さ・sha256) で、
+    中身の意味は読まない。原文の bytes はホストが入れた受信の記録だけに在る。"""
+
+    def __init__(self) -> None:
+        from threading import Event
+        self._stop = Event()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def run(self, work: "FWork", ctx: FWorkContext) -> None:
+        from hashlib import sha256
+        from . import fb_contracts as c
+        if not isinstance(work, MeasureSegment):
+            raise TypeError("SourceMeasurer runs measuring works only")
+        if not ctx.enter():
+            return
+
+        def report(slot: str, item: "SegmentItem") -> None:
+            ctx.post(SegmentReport(segment=work.request, item_slot=slot, item=item))
+
+        work_id = work.desc.work_id
+        report("started", SegmentBoundary(kind="started", work=work_id, reading=ctx.now(), reason="entered",
+                                          evidence=()))
+        taken = ctx.acquire()
+        run, n, epoch = taken.after.reading.run, taken.cursor, taken.route_epoch
+        span = MeasurementInterval(clock=run, start_ns=taken.before.reading.time_ns,
+                                   end_ns=taken.after.reading.time_ns, closure="[start,end]")
+        if taken.outcome == "taken":
+            data = taken.item.data
+            report(f"frame:{n}", MeasurementFrame(
+                route_epoch=epoch, sample_seq=n,
+                measurement_id=MeasurementId(origin=run, route_epoch=epoch, sample_seq=n, component="raw_payload"),
+                measurement_interval=span, actual_time=taken.after.reading,
+                value={"media_type": taken.item.media_type, "length": len(data), "sha256": sha256(data).hexdigest()},
+                quality=ContractValue(contract=ContractRef("sui.f.measured_quality", "1"), value="measured"),
+                gap=None, source_cursor=ContractValue(contract=ContractRef("sui.f.sequence_cursor", "1"), value=n)))
+        else:
+            reason = "source_empty" if taken.outcome == "empty" else "source_unavailable:" + taken.reason
+            report(f"unavailable:{n}", MeasurementUnavailable(route_epoch=epoch, requested_interval=span,
+                                                              reason=reason, evidence=()))
+        self._stop.wait()
+        ended = ctx.now()
+        report("unproved", CoverageUnproved(
+            route_epoch=epoch,
+            interval=MeasurementInterval(clock=run, start_ns=taken.after.reading.time_ns,
+                                         end_ns=ended.reading.time_ns, closure="(start,end]"),
+            missing_contracts=(c.NO_ARRIVAL,), evidence=()))
+        report("ended", SegmentBoundary(kind="ended", work=work_id, reading=ended, reason="stopped", evidence=()))

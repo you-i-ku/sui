@@ -73,8 +73,11 @@ class _WatchedStore:
 class State:
     """H と P。ホストが持ち、窓口を作り直しても残る。"""
 
-    def __init__(self, *, ledger, clock, workers, registry, launcher):
+    def __init__(self, *, ledger, clock, workers, registry, launcher, sources=None):
         self.lock = _RLock()
+        self.sources = dict(sources or {})   # 口の源: route_epoch → FSource (K23。外から差す部品)
+        self.cursors: dict = {}        # route_epoch → 次に取り出す番号 (この run の中、0 から)
+        self.source_lock = _RLock()    # 源の読みを 1 つずつにする (受付の鍵とは別。源を読む間も受付は止まらない)
         self.ledger = _WatchedStore(ledger, self)
         # 置き場の操作の失敗の観測 (操作の名前, 例外)。呼び出したスレッドごとに持つ: 回す役が見るのは自分の呼び出しの
         # 所で観測した失敗だけで、仕事の口 (別のスレッド) の失敗では変わらない (K16 (3)(a))
@@ -685,6 +688,7 @@ class WorkRow:
     issued: list = _field(default_factory=list)    # 生きた発行物 (保存しない)
     uses: list = _field(default_factory=list)      # (Point, M の読み)
     intervals: list = _field(default_factory=list)  # 実際に見張った区間
+    takes: list = _field(default_factory=list)      # 源からの取り出しの観測 (K23): (epoch, cursor, before, after, outcome, 封筒の番号)
 
 
 class WorkContext:
@@ -741,6 +745,77 @@ class WorkContext:
     def evidence(self):
         return evidence(self._state)
 
+    def _reading(self, source=None):
+        """今の M の読みと、発行済みの時計の出どころの Point (K23)。ロックの中で呼ぶ。
+        source を渡した時は選び直さず、その Point のまま M だけ読む (取り出しの後の読み: 源を読んでいる間に
+        時計の宣言が食い違っても、もう起きた取り出しの記録を落とさない。食い違いで保留するのは結びつきの門)。"""
+        from . import f as _f
+        from ._fb_boot import _clock_source
+        state = self._state
+        if source is None:
+            source = _clock_source(state)
+        if source is None:
+            raise RuntimeError("no clock source has been issued for this run")
+        return _fb.ReadingClock(source=source, reading=_f.ClockReading(run=state.clock.run, time_ns=mono_ns(state.clock)))
+
+    def now(self):
+        with self._state.lock:
+            self._require_entered()
+            return self._reading()
+
+    def acquire(self):
+        """この測る仕事の口の源から、次の番号の 1 件を取り出す (K23)。源を読むのは受付の鍵の外。"""
+        from ._fb_bind import _route
+        state, row = self._state, self._row
+        with state.lock:
+            self._require_entered()
+            if not isinstance(row.work, _fb.MeasureSegment):
+                raise RuntimeError("only a measuring work port can acquire from its source")
+            route, _applied = _route(state, row.work.desc.args.route)
+            if route is None:
+                raise RuntimeError("the route of this measuring work is not applied")
+            epoch = route.config.route_epoch
+        with state.source_lock:
+            with state.lock:
+                cursor = state.cursors.get(epoch, 0)
+                source = state.sources.get(epoch)
+                before = self._reading()
+            item, raw, outcome, reason = None, None, "unavailable", "no source is attached to this route"
+            if source is not None:
+                try:
+                    item = source.read(cursor)
+                except Exception as exc:   # 源の故障を「空」に丸めない。理由を残して返す
+                    item, reason = None, f"{type(exc).__name__}: {exc}"
+                else:
+                    if item is None:
+                        outcome, reason = "empty", ""
+                    else:
+                        # 「取れた」は、原文を受信の記録として保存できる時だけ。形の判定は受付と同じ 1 つの検査で
+                        try:
+                            if type(item) is not _fb.SourceItem:
+                                raise TypeError("not a SourceItem")
+                            raw = _fb.Received(route_epoch=epoch, media_type=item.media_type, data=item.data,
+                                               claims=item.claims)
+                            _check_event(raw)
+                        except Exception as exc:
+                            item, raw = None, None
+                            reason = f"the source returned a value that cannot be saved as received: {type(exc).__name__}"
+                        else:
+                            outcome, reason = "taken", ""
+            with state.lock:
+                after = self._reading(before.source)
+                number = None
+                if outcome == "taken":
+                    # 原文の保存はホストの責務: この仕事の口からの封筒として受信の列へ入れる
+                    post(state, raw)
+                    envelope = state.queue[-1]
+                    number = envelope.number
+                    row.reports.append((number, envelope.received_ns))
+                    state.cursors[epoch] = cursor + 1
+                row.takes.append((epoch, cursor, before.reading.time_ns, after.reading.time_ns, outcome, number))
+        return _fb.Acquisition(route_epoch=epoch, cursor=cursor, before=before, after=after, outcome=outcome,
+                               reason=reason, item=item)
+
     def reader(self):
         """その仕事の Desc の numerical_view の境界と input_points の閉包だけの読み手 (§6-9 H5)。
         信念の更新 Wu では、その閉包に要求 Q* 自身を足す (入口 U は Q* を読む。Q* を固定根 Xnum には
@@ -764,7 +839,7 @@ class WorkContext:
 def evidence(state):
     from . import f_update2 as _u
     with state.lock:
-        executions, uses, intervals = [], [], []
+        executions, uses, intervals, sources = [], [], [], []
         for row in state.works.values():
             wid = row.work.desc.work_id
             reports = []
@@ -776,5 +851,11 @@ def evidence(state):
                 entered=row.entered, stopped=row.stopped, reports=tuple(reports)))
             uses += [_u.UseObservation(work_id=wid, point=p, used_ns=ns) for p, ns in row.uses]
             intervals += [_u.IntervalObservation(work_id=wid, interval=i) for i in row.intervals]
+            for epoch, cursor, before_ns, after_ns, outcome, number in row.takes:
+                receipt = state.receipts.get(number) if number is not None else None
+                point = receipt.slots[0].entry.cid if receipt and receipt.slots and receipt.slots[0].entry else None
+                sources.append(_u.SourceObservation(work_id=wid, route_epoch=epoch, cursor=cursor, before_ns=before_ns,
+                                                    after_ns=after_ns, outcome=outcome, envelope=number, received=point))
         return _u.TargetEvidence(executions=tuple(executions), uses=tuple(uses),
-                                 intervals=tuple(intervals), acquisitions=tuple(state.acquisitions))
+                                 intervals=tuple(intervals), acquisitions=tuple(state.acquisitions),
+                                 sources=tuple(sources))

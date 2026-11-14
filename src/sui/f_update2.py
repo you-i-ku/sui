@@ -17,7 +17,7 @@ __all__ = [
     "fb_registry_v1", "FixedViewValue", "VerificationNeed", "RejectedIssue",
     "InsufficientIssue", "IssuedUpdate", "Rejected", "Insufficient", "UpdateReturn",
     "LaunchResult", "ReportObservation", "ExecutionObservation", "UseObservation", "IntervalObservation",
-    "AcquisitionObservation", "TargetEvidence",
+    "AcquisitionObservation", "SourceObservation", "TargetEvidence",
     "compute_finite_update", "update_response",
 ]
 
@@ -48,6 +48,8 @@ def fb_registry_v1() -> FRegistry:
         ("generation", c.BOOTSTRAP_GENERATION, ContractRef("sui.fb.args.bootstrap_generation", "1"),
          c.SEGMENT_BINDING, c.SEGMENT_BINDING),
         ("clock", c.SEGMENT_VALUE_ONLY, empty, c.SEGMENT_REPORT, c.SEGMENT_REPORT),
+        # K23: 源の cursor n の 1 件の取得を 1 標本とする測り方。本体は fb.SourceMeasurer (能力の呼出しの規約からは呼ばない)
+        ("measurement", c.SOURCE_SAMPLING, empty, c.SEGMENT_REQUESTED, c.SEGMENT_REPORT),
     )
     declarations = tuple(CapabilityDeclaration(kind=kind, ref=ref, args_contract=args, input_contract=inp,
                                                output_contract=out, dependencies=(), conditions=())
@@ -200,13 +202,30 @@ class AcquisitionObservation:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
+class SourceObservation:
+    """ES: 測る仕事の口 (FWorkContext.acquire) で、ホストがその口の源から 1 件を取り出した操作の観測
+    (F-b §6-10 K23)。before_ns・after_ns は操作の直前と、1 件が手に渡った (または無いと分かった) 境目の
+    ホストの run の M の読み。outcome は taken / empty / unavailable。envelope は taken の時にホストが
+    原文を入れた封筒の番号、received はその保存を照合できた時だけ実在の Point。係の申告・報告の写しから作らない。"""
+    work_id: str
+    route_epoch: str
+    cursor: int
+    before_ns: int
+    after_ns: int
+    outcome: _Literal["taken", "empty", "unavailable"]
+    envelope: int | None
+    received: Point | None
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
 class TargetEvidence:
-    """入口 U に渡す同じプロセスの中の独立の証拠 (F-b §2-5-2 の EW・EH・EI・EA、§6-3)。ホストが
+    """入口 U に渡す同じプロセスの中の独立の証拠 (F-b §2-5-2 の EW・EH・EI・EA、§6-3、K23 の ES)。ホストが
     自分で行った操作の時に自分で読んだもので、台帳の自己申告や窓口の印・原報告の写しから作らない。同じプロセスの中の窓口の作り直しまでで、再起動をまたがない (★S5)。"""
     executions: tuple[ExecutionObservation, ...]
     uses: tuple[UseObservation, ...]
     intervals: tuple[IntervalObservation, ...]
     acquisitions: tuple[AcquisitionObservation, ...]
+    sources: tuple[SourceObservation, ...] = ()
 
 
 def compute_finite_update(
