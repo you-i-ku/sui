@@ -70,8 +70,9 @@ FINITE_SEGMENT_PROJECTION = _ContractRef("sui.fb.finite_segment_projection", "1"
 FINITE_JOINT_COUNT_LAW = _ContractRef("sui.fb.finite_joint_count_law", "1")
 NO_ARRIVAL = _ContractRef("sui.fb.no_arrival", "1")
 COUNT_EXACTLY_ONE = _ContractRef("sui.fb.count_exactly_one", "1")
-# 測り方の契約 (§6-10 K23): 1 標本 = 口の源の cursor n の 1 件の取得。本体は fb.SourceMeasurer
-SOURCE_SAMPLING = _ContractRef("sui.fb.source_sampling", "1")
+# 測り方の契約 (§6-10 K25): 1 標本 = ホストが仲立ちした 1 回の取得の結果 (taken・empty・unavailable)。
+# Frame はホストが acquire の中で出す。件数や区切りそのものを Frame の値とは呼ばない
+ACQUISITION_RESULT_SAMPLING = _ContractRef("sui.fb.acquisition_result_sampling", "1")
 BOOTSTRAP_GENERATION = _ContractRef("sui.fb.bootstrap_generation", "1")
 SEGMENT_VALUE_ONLY = _ContractRef("sui.fb.segment_value_only", "1")
 # 入口 U (§6-3): 一次事実から計算して IssuedUpdate を発行する。結果 R* は既存の

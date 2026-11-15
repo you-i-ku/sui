@@ -647,9 +647,10 @@ class FSource(_Protocol):
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class Acquisition:
-    """FWorkContext.acquire() の返値。before・after は取り出しの操作の直前と、1 件が手に渡った (または無いと
-    分かった) 境目のホストの読み。outcome: taken (item に 1 件。ホストが原文を受信の列へ入れ、cursor を進めた) /
-    empty (源にその番号がまだ無い) / unavailable (源が差されていない・読みが例外。理由は reason)。"""
+    """FWorkContext.acquire() の返値。before・after は取りに行く操作の直前と、取得の終端のホストの読み (after は
+    原文と取得の Frame の受信の時刻と同じ 1 つの読み)。outcome: taken (item に 1 件。ホストが原文を受信の列へ入れ、
+    cursor を進めた) / empty (源にその番号がまだ無い) / unavailable (源が差されていない・読みが例外・形の合わない
+    戻り値。理由は reason)。どの結果でも、ホストが取得の結果の Frame を同じ操作の中で受信の列へ入れている (K25)。"""
     route_epoch: str
     cursor: int
     before: ReadingClock
@@ -682,8 +683,9 @@ class FWorkContext(_Protocol):
     prepared() は評価 Ee の args.prepared (PR) と全照合した、評価の準備 Ep の生きた
     FMathArtifact[FProblem]。ほかの仕事・照合できない時は None。P の辞書や任意の発行物を取る口ではない。
     now() はホストが今の M を読み、発行済みの時計の出どころの Point とまとめて返す (K23)。acquire() は測る仕事の口だけが
-    呼べ、ホストがその口の源から次の番号の 1 件を取り出す (K23)。取り出した原文はホストが受信の列へ入れ、
-    その操作の観測は evidence() の sources に残る。どちらも開始の札を取っていない口では RuntimeError。"""
+    呼べ、ホストがその口の源へ次の番号の 1 件を取りに行く (K23)。取得の結果の Frame (taken・empty・unavailable の
+    どれでも 1 つ、測り方 acquisition_result_sampling/1) と、取れた時の原文を、ホストが同じ操作の中で受信の列へ入れ、
+    その操作の観測は evidence() の sources に残る (K25)。どちらも開始の札を取っていない口では RuntimeError。"""
 
     def enter(self) -> bool: ...
 
@@ -828,12 +830,11 @@ class FThreadHost:
 
 
 class SourceMeasurer:
-    """本体の測る係 (§6-10 K23)。測る仕事の本体で、口の源から 1 件を実際に取り出して報告する。
-    入場 → Started → acquire() を 1 回 → 取れたら Frame、無ければ・取れなければ MeasurementUnavailable →
-    stop() が呼ばれるまで在る (この版は続けて取りに行かない) → 取り出しの後から止まるまでの区間は
-    CoverageUnproved (見張っていない間を「来なかった」にしない) → Ended。測る仕事以外は TypeError
-    (ほかの仕事の係と束ねるのは使う側)。Frame の値は取り出した原文の同一性 (media_type・長さ・sha256) で、
-    中身の意味は読まない。原文の bytes はホストが入れた受信の記録だけに在る。"""
+    """本体の測る係 (§6-10 K23・K25)。測る仕事の本体で、口の源へ 1 回取りに行く。
+    入場 → Started → acquire() を 1 回 (取得の結果の Frame と原文は、仲立ちしたホストが acquire の中で預ける。
+    係は Frame を出さない) → stop() が呼ばれるまで在る (この版は続けて取りに行かない) → 取得の後から止まるまでの
+    区間は CoverageUnproved (見張っていない間を「来なかった」にしない) → Ended。測る仕事以外は TypeError
+    (ほかの仕事の係と束ねるのは使う側)。"""
 
     def __init__(self) -> None:
         from threading import Event
@@ -843,7 +844,6 @@ class SourceMeasurer:
         self._stop.set()
 
     def run(self, work: "FWork", ctx: FWorkContext) -> None:
-        from hashlib import sha256
         from . import fb_contracts as c
         if not isinstance(work, MeasureSegment):
             raise TypeError("SourceMeasurer runs measuring works only")
@@ -857,22 +857,7 @@ class SourceMeasurer:
         report("started", SegmentBoundary(kind="started", work=work_id, reading=ctx.now(), reason="entered",
                                           evidence=()))
         taken = ctx.acquire()
-        run, n, epoch = taken.after.reading.run, taken.cursor, taken.route_epoch
-        span = MeasurementInterval(clock=run, start_ns=taken.before.reading.time_ns,
-                                   end_ns=taken.after.reading.time_ns, closure="[start,end]")
-        if taken.outcome == "taken":
-            data = taken.item.data
-            report(f"frame:{n}", MeasurementFrame(
-                route_epoch=epoch, sample_seq=n,
-                measurement_id=MeasurementId(origin=run, route_epoch=epoch, sample_seq=n, component="raw_payload"),
-                measurement_interval=span, actual_time=taken.after.reading,
-                value={"media_type": taken.item.media_type, "length": len(data), "sha256": sha256(data).hexdigest()},
-                quality=ContractValue(contract=ContractRef("sui.f.measured_quality", "1"), value="measured"),
-                gap=None, source_cursor=ContractValue(contract=ContractRef("sui.f.sequence_cursor", "1"), value=n)))
-        else:
-            reason = "source_empty" if taken.outcome == "empty" else "source_unavailable:" + taken.reason
-            report(f"unavailable:{n}", MeasurementUnavailable(route_epoch=epoch, requested_interval=span,
-                                                              reason=reason, evidence=()))
+        run, epoch = taken.after.reading.run, taken.route_epoch
         self._stop.wait()
         ended = ctx.now()
         report("unproved", CoverageUnproved(

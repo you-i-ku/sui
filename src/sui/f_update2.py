@@ -11,6 +11,7 @@ VerifiedFiniteUpdate・TargetVerificationReturn) をやめ、U が一次事実�
 from dataclasses import dataclass as _dataclass
 from typing import Literal as _Literal, TypeAlias as _TypeAlias
 
+from .ids import Ref
 from .f import ContractValue, FReader, FRegistry, ImmutableJSON, MeasurementInterval, Point, _FactoryHandle
 
 __all__ = [
@@ -48,8 +49,9 @@ def fb_registry_v1() -> FRegistry:
         ("generation", c.BOOTSTRAP_GENERATION, ContractRef("sui.fb.args.bootstrap_generation", "1"),
          c.SEGMENT_BINDING, c.SEGMENT_BINDING),
         ("clock", c.SEGMENT_VALUE_ONLY, empty, c.SEGMENT_REPORT, c.SEGMENT_REPORT),
-        # K23: 源の cursor n の 1 件の取得を 1 標本とする測り方。本体は fb.SourceMeasurer (能力の呼出しの規約からは呼ばない)
-        ("measurement", c.SOURCE_SAMPLING, empty, c.SEGMENT_REQUESTED, c.SEGMENT_REPORT),
+        # K25: ホストが仲立ちした 1 回の取得の結果を 1 標本とする測り方。Frame はホストが acquire の中で出す
+        # (能力の呼出しの規約からは呼ばない)
+        ("measurement", c.ACQUISITION_RESULT_SAMPLING, empty, c.SEGMENT_REQUESTED, c.SEGMENT_REPORT),
     )
     declarations = tuple(CapabilityDeclaration(kind=kind, ref=ref, args_contract=args, input_contract=inp,
                                                output_contract=out, dependencies=(), conditions=())
@@ -203,10 +205,15 @@ class AcquisitionObservation:
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class SourceObservation:
-    """ES: 測る仕事の口 (FWorkContext.acquire) で、ホストがその口の源から 1 件を取り出した操作の観測
-    (F-b §6-10 K23)。before_ns・after_ns は操作の直前と、1 件が手に渡った (または無いと分かった) 境目の
-    ホストの run の M の読み。outcome は taken / empty / unavailable。envelope は taken の時にホストが
-    原文を入れた封筒の番号、received はその保存を照合できた時だけ実在の Point。係の申告・報告の写しから作らない。"""
+    """ES: 測る仕事の口 (FWorkContext.acquire) で、ホストがその口の源から取りに行った 1 回の操作の観測
+    (F-b §6-10 K23・K25)。before_ns・after_ns は操作の直前と、取得の終端のホストの run の M の読み (after は
+    原文と Frame の受信の時刻と同じ 1 つの読み)。cursor は源の番号 (taken の時だけ進む)、sample_seq は取得の
+    操作の番号 ((run, route_epoch) ごと、empty・unavailable でも進む)。outcome は taken / empty / unavailable、
+    source_called は源を実際に読んだか (源が差されていない時 False)、clock_source はその回で握った時計の
+    出どころ。envelope は taken の時にホストが原文を入れた封筒の番号、received はその保存を照合できた時だけ
+    実在の Point、received_id は原文に使った名札 (Record.id)。frame_envelope はホストが出した取得の Frame の
+    封筒の番号、frame はその保存を照合できた時だけ実在の Point。実際の取得の時にホストが作る (係の申告・
+    保存された Frame の写しから作らない)。"""
     work_id: str
     route_epoch: str
     cursor: int
@@ -215,6 +222,12 @@ class SourceObservation:
     outcome: _Literal["taken", "empty", "unavailable"]
     envelope: int | None
     received: Point | None
+    sample_seq: int
+    source_called: bool
+    clock_source: Point
+    frame_envelope: int
+    frame: Point | None
+    received_id: Ref | None
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)

@@ -76,7 +76,9 @@ class State:
     def __init__(self, *, ledger, clock, workers, registry, launcher, sources=None):
         self.lock = _RLock()
         self.sources = dict(sources or {})   # 口の源: route_epoch → FSource (K23。外から差す部品)
-        self.cursors: dict = {}        # route_epoch → 次に取り出す番号 (この run の中、0 から)
+        self.cursors: dict = {}        # route_epoch → 源の次に取り出す番号 (この run の中、0 から。taken の時だけ進む)
+        self.samples: dict = {}        # route_epoch → 次の取得の操作の番号 (この run の中、0 から。公開まで進んだ取得の数、K25)
+        self.raw_ids: dict = {}        # 封筒の番号 → 取得の前に用意した原文の名札 (Record.id、K25 (d))。受付で使って外す
         self.source_lock = _RLock()    # 源の読みを 1 つずつにする (受付の鍵とは別。源を読む間も受付は止まらない)
         self.ledger = _WatchedStore(ledger, self)
         # 置き場の操作の失敗の観測 (操作の名前, 例外)。呼び出したスレッドごとに持つ: 回す役が見るのは自分の呼び出しの
@@ -119,15 +121,16 @@ def mono_ns(clock) -> int:
 _EXISTING_ROUTE = {_S4_BOOT: "membrane"}
 
 
-def _observed(state, contract, content, received_ns, at):
+def _observed(state, contract, content, received_ns, at, record_id=None):
     body = _Observed(route=_EXISTING_ROUTE.get(contract, "fb"), content=_Payload.json(content), contract=contract,
                      caused_by=None, source_id=None, source_time_ns=None, received_ns=received_ns)
-    return _Record(id=state.ids.new(_RefKind.OBSERVATION), at=at, writer=_Role.MEMBRANE,
-                   producer=PRODUCER, body=body, schema=3)
+    return _Record(id=record_id if record_id is not None else state.ids.new(_RefKind.OBSERVATION), at=at,
+                   writer=_Role.MEMBRANE, producer=PRODUCER, body=body, schema=3)
 
 
-def _raw_slots(state, event, r, at) -> list:
-    """封筒が作る原報告の slot (§2-5-9・§2-5-10)。親はどれも空。"""
+def _raw_slots(state, event, r, at, record_id=None) -> list:
+    """封筒が作る原報告の slot (§2-5-9・§2-5-10)。親はどれも空。record_id は取得の前にホストが用意した
+    原文の名札 (K25 (d)。取得の原文 = Received の 1 slot だけに渡る)。"""
     if isinstance(event, _fb.Boot):
         pairs = ((_S4_BOOT, {}), (_c.BOOT_DECLARATION, _encode(event.declaration)))
     elif isinstance(event, _fb.ClockDeclared):
@@ -140,7 +143,7 @@ def _raw_slots(state, event, r, at) -> list:
         pairs = ((_c.WORK_REPORT, _encode(event)),)
     else:
         pairs = ((_c.DRAW_REPORT, _encode(event)),)
-    return [Slot(contract=contract, record=_observed(state, contract, content, r, at), parents=frozenset())
+    return [Slot(contract=contract, record=_observed(state, contract, content, r, at, record_id), parents=frozenset())
             for contract, content in pairs]
 
 
@@ -185,10 +188,10 @@ def accept(state, envelope) -> None:
     if not isinstance(envelope, _fb.Envelope) or type(envelope.number) is not int \
             or type(envelope.received_ns) is not int:
         raise _fb.FbInputError(reason="shape", field="/envelope")
-    _check_event(envelope.event)
-    # 呼出し元が持つ可変の JSON (claims・args など) を受付の時点の値で写す。後から変えられても
-    # 保存・計画・同じ番号の照合は受け付けた中身で行う (R02)
+    # 呼出し元が持つ可変の JSON (claims・args など) を受付の時点の値で写し、その写しを確かめる。後から変えられても
+    # 形の検査・保存・計画・同じ番号の照合は受け付けた同じ中身で行う (R02、K25-b ★ ④ = review K25-R4)
     envelope = freeze(envelope)
+    _check_event(envelope.event)
     with state.lock:
         known = state.receipts.get(envelope.number)
         if known is not None:
@@ -206,10 +209,12 @@ def accept(state, envelope) -> None:
             raise _fb.FbHostFault("host clock run changed")
         if envelope.received_ns > at.mono_ns:
             raise _fb.FbHostFault(f"envelope {envelope.number}: r={envelope.received_ns} after s={at.mono_ns}")
-        receipt = Receipt(envelope=envelope, slots=_raw_slots(state, envelope.event, envelope.received_ns, at),
+        receipt = Receipt(envelope=envelope, slots=_raw_slots(state, envelope.event, envelope.received_ns, at,
+                                                              state.raw_ids.get(envelope.number)),
                           index=len(state.order))
         state.receipts[envelope.number] = receipt
         state.order.append(envelope.number)
+        state.raw_ids.pop(envelope.number, None)
         state.queue = [queued for queued in state.queue if queued.number != envelope.number]
 
 
@@ -443,12 +448,22 @@ def _encode_key(value) -> bytes:
     return dumps(_encode(value))
 
 
+def _envelopes(state, events, r) -> list:
+    """続きの番号と受信の r で封筒を組み立てる (共有の状態は変えない)。ロックの中で呼ぶ。
+    Post の時点で凍らせる: Accept の前に呼出し元が中身を変えても、受信の r と中身が対応する (R13)。"""
+    used = max([state.number, *state.receipts, *(e.number for e in state.queue)], default=0)
+    return [_fb.Envelope(number=used + i, event=freeze(event), received_ns=r) for i, event in enumerate(events, 1)]
+
+
+def _publish(state, envelopes) -> None:
+    """組み上がった封筒を受信の列へ入れ、番号の管理の値を公開した最後の番号へ進める。ロックの中で呼ぶ。"""
+    state.queue.extend(envelopes)
+    state.number = envelopes[-1].number
+
+
 def post(state, event) -> None:
     with state.lock:
-        used = max([state.number, *state.receipts, *(e.number for e in state.queue)], default=0)
-        state.number = used + 1
-        # Post の時点で凍らせる: Accept の前に呼出し元が中身を変えても、受信の r と中身が対応する (R13)
-        state.queue.append(_fb.Envelope(number=state.number, event=freeze(event), received_ns=mono_ns(state.clock)))
+        _publish(state, _envelopes(state, (event,), mono_ns(state.clock)))
 
 
 def _fits(state, row) -> bool:
@@ -688,7 +703,23 @@ class WorkRow:
     issued: list = _field(default_factory=list)    # 生きた発行物 (保存しない)
     uses: list = _field(default_factory=list)      # (Point, M の読み)
     intervals: list = _field(default_factory=list)  # 実際に見張った区間
-    takes: list = _field(default_factory=list)      # 源からの取り出しの観測 (K23): (epoch, cursor, before, after, outcome, 封筒の番号)
+    takes: list = _field(default_factory=list)      # 源へ取りに行った操作の控え (K25 の Take。公開まで進んだ回だけ)
+
+
+@_dataclass(frozen=True)
+class Take:
+    """ホストが源へ取りに行った 1 回の操作の控え (K25 (e))。実際の取得の時に作る (保存された Frame から作らない)。"""
+    route_epoch: str
+    cursor: int
+    before_ns: int
+    after_ns: int
+    outcome: str
+    envelope: int | None      # taken の原文の封筒の番号
+    sample_seq: int
+    source_called: bool
+    clock_source: object      # その回で握った時計の出どころの Point
+    frame_envelope: int
+    received_id: object       # taken の原文に使った名札 (Ref)
 
 
 class WorkContext:
@@ -764,7 +795,11 @@ class WorkContext:
             return self._reading()
 
     def acquire(self):
-        """この測る仕事の口の源から、次の番号の 1 件を取り出す (K23)。源を読むのは受付の鍵の外。"""
+        """この測る仕事の口の源から次の番号の 1 件を取りに行き、その結果をホスト自身が預ける (K23・K25)。
+        準備 (時計の出どころを握る → before → 原文の名札を用意。共有の状態は変えない) → 源を読む (受付の鍵の外) →
+        確定 (受付の鍵の下で 1 回: M を 1 回読む = after = 原文と取得の Frame の受信の時刻 → 封筒と控えを組み立て
+        終える → 公開)。源の読みの鍵は準備の頭から確定の終わりまで持つ。源を読んだ後・公開の前の例外では何も
+        公開しない (片方だけ預けない・番号だけ進めない)。その回の結果と時刻は残らない (損失、★S5・紙 Z49)。"""
         from ._fb_bind import _route
         state, row = self._state, self._row
         with state.lock:
@@ -776,43 +811,72 @@ class WorkContext:
                 raise RuntimeError("the route of this measuring work is not applied")
             epoch = route.config.route_epoch
         with state.source_lock:
-            with state.lock:
+            with state.lock:   # 準備: ここで例外なら、まだ源を読んでいない (何も起きていない)
                 cursor = state.cursors.get(epoch, 0)
                 source = state.sources.get(epoch)
                 before = self._reading()
+                raw_id = state.ids.new(_RefKind.OBSERVATION)   # 原文の名札 (空・取れなかった時は使わないまま)
             item, raw, outcome, reason = None, None, "unavailable", "no source is attached to this route"
             if source is not None:
                 try:
                     item = source.read(cursor)
-                except Exception as exc:   # 源の故障を「空」に丸めない。理由を残して返す
+                except Exception as exc:   # 源の故障を「空」に丸めない。理由を残して返す (ふつうの結果)
                     item, reason = None, f"{type(exc).__name__}: {exc}"
                 else:
                     if item is None:
                         outcome, reason = "empty", ""
+                    elif type(item) is not _fb.SourceItem:   # 形の合わない戻り値 = ふつうの結果 (K23-a (オ))
+                        item, reason = None, "the source returned a value that cannot be saved as received: not a SourceItem"
                     else:
-                        # 「取れた」は、原文を受信の記録として保存できる時だけ。形の判定は受付と同じ 1 つの検査で
+                        # 組み立て (K25 (d2) ②): 凍らせた値を、受付と同じ 1 つの検査で確かめ、その値を預ける (源の持つ
+                        # 可変の claims が後から変わっても、確かめた中身と預ける中身がずれない)。「取れなかった」に
+                        # するのは、形が合わないと確かめた時 (FbInputError) だけ。凍らせる・確かめるを終えられなかった
+                        # 例外 (資源の不足・想定外の例外) は源の結果ではないので、何も公開せずに上げる (その回は損失、
+                        # K25 (d2)・Z42 (c)・Z49。ふつうの Post・回す役 K17 と同じ線)
+                        raw = freeze(_fb.Received(route_epoch=epoch, media_type=item.media_type, data=item.data,
+                                                  claims=item.claims))
                         try:
-                            if type(item) is not _fb.SourceItem:
-                                raise TypeError("not a SourceItem")
-                            raw = _fb.Received(route_epoch=epoch, media_type=item.media_type, data=item.data,
-                                               claims=item.claims)
                             _check_event(raw)
-                        except Exception as exc:
+                        except _fb.FbInputError as exc:
                             item, raw = None, None
-                            reason = f"the source returned a value that cannot be saved as received: {type(exc).__name__}"
+                            reason = f"the source returned a value that cannot be saved as received: {exc}"
                         else:
                             outcome, reason = "taken", ""
             with state.lock:
+                # 確定 ①: この 1 つの読みが after であり、原文と Frame の受信の時刻 (鍵を放さずに公開まで)
                 after = self._reading(before.source)
-                number = None
+                r, seq, called = after.reading.time_ns, state.samples.get(epoch, 0), source is not None
+                # ② 組み立て終える (共有の状態はまだ変えない)
+                result: dict = {"kind": outcome}
                 if outcome == "taken":
-                    # 原文の保存はホストの責務: この仕事の口からの封筒として受信の列へ入れる
-                    post(state, raw)
-                    envelope = state.queue[-1]
-                    number = envelope.number
-                    row.reports.append((number, envelope.received_ns))
+                    result["received"] = str(raw_id)
+                elif outcome == "unavailable":
+                    result["reason"] = reason
+                frame = _fb.SegmentReport(segment=row.work.request, item_slot=f"frame:{seq}", item=_fb.MeasurementFrame(
+                    route_epoch=epoch, sample_seq=seq,
+                    measurement_id=_fb.MeasurementId(origin=after.reading.run, route_epoch=epoch, sample_seq=seq,
+                                                     component="source_acquisition"),
+                    measurement_interval=_fb.MeasurementInterval(clock=after.reading.run, start_ns=before.reading.time_ns,
+                                                                 end_ns=r, closure="[start,end]"),
+                    actual_time=after.reading,
+                    value={"cursor": cursor, "source_called": called, "clock_source": before.source, "result": result},
+                    quality=_fb.ContractValue(contract=_ContractRef("sui.f.measured_quality", "1"), value="measured"),
+                    gap=None,
+                    source_cursor=_fb.ContractValue(contract=_ContractRef("sui.f.sequence_cursor", "1"), value=seq)))
+                _check_event(frame)
+                envelopes = _envelopes(state, (raw, frame) if outcome == "taken" else (frame,), r)
+                take = Take(route_epoch=epoch, cursor=cursor, before_ns=before.reading.time_ns, after_ns=r,
+                            outcome=outcome, envelope=envelopes[0].number if outcome == "taken" else None,
+                            sample_seq=seq, source_called=called, clock_source=before.source,
+                            frame_envelope=envelopes[-1].number, received_id=raw_id if outcome == "taken" else None)
+                # ③ 公開: 組み上がった値を入れるだけ。原文の保存もホストの責務 (この仕事の口からの封筒)
+                if outcome == "taken":
+                    state.raw_ids[envelopes[0].number] = raw_id
                     state.cursors[epoch] = cursor + 1
-                row.takes.append((epoch, cursor, before.reading.time_ns, after.reading.time_ns, outcome, number))
+                _publish(state, envelopes)
+                row.reports.extend((e.number, e.received_ns) for e in envelopes)
+                state.samples[epoch] = seq + 1
+                row.takes.append(take)
         return _fb.Acquisition(route_epoch=epoch, cursor=cursor, before=before, after=after, outcome=outcome,
                                reason=reason, item=item)
 
@@ -836,6 +900,12 @@ class WorkContext:
             return _fb_think.prepared_for(self._state, self._row)
 
 
+def _saved_point(state, number):
+    """その封筒の原報告の保存を照合できた時だけ実在の Point (まだ・断った時は None)。ロックの中で呼ぶ。"""
+    receipt = state.receipts.get(number) if number is not None else None
+    return receipt.slots[0].entry.cid if receipt and receipt.slots and receipt.slots[0].entry else None
+
+
 def evidence(state):
     from . import f_update2 as _u
     with state.lock:
@@ -844,18 +914,19 @@ def evidence(state):
             wid = row.work.desc.work_id
             reports = []
             for number, r in row.reports:
-                receipt = state.receipts.get(number)
-                point = receipt.slots[0].entry.cid if receipt and receipt.slots and receipt.slots[0].entry else None
-                reports.append(_u.ReportObservation(envelope=number, received_ns=r, point=point))
+                reports.append(_u.ReportObservation(envelope=number, received_ns=r, point=_saved_point(state, number)))
             executions.append(_u.ExecutionObservation(work_id=wid, launches=tuple(row.launches),
                 entered=row.entered, stopped=row.stopped, reports=tuple(reports)))
             uses += [_u.UseObservation(work_id=wid, point=p, used_ns=ns) for p, ns in row.uses]
             intervals += [_u.IntervalObservation(work_id=wid, interval=i) for i in row.intervals]
-            for epoch, cursor, before_ns, after_ns, outcome, number in row.takes:
-                receipt = state.receipts.get(number) if number is not None else None
-                point = receipt.slots[0].entry.cid if receipt and receipt.slots and receipt.slots[0].entry else None
-                sources.append(_u.SourceObservation(work_id=wid, route_epoch=epoch, cursor=cursor, before_ns=before_ns,
-                                                    after_ns=after_ns, outcome=outcome, envelope=number, received=point))
+            for take in row.takes:
+                sources.append(_u.SourceObservation(
+                    work_id=wid, route_epoch=take.route_epoch, cursor=take.cursor, before_ns=take.before_ns,
+                    after_ns=take.after_ns, outcome=take.outcome, envelope=take.envelope,
+                    received=_saved_point(state, take.envelope), sample_seq=take.sample_seq,
+                    source_called=take.source_called, clock_source=take.clock_source,
+                    frame_envelope=take.frame_envelope, frame=_saved_point(state, take.frame_envelope),
+                    received_id=take.received_id))
         return _u.TargetEvidence(executions=tuple(executions), uses=tuple(uses),
                                  intervals=tuple(intervals), acquisitions=tuple(state.acquisitions),
                                  sources=tuple(sources))

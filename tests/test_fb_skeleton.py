@@ -471,8 +471,8 @@ def test_public_entry_signatures():
     assert tuple(x.name for x in fields(PreparedEntry)) == ("record", "parents", "salt", "header", "cid")
 
 
-def test_measure1_source_public_entry_signatures():
-    """K23(2)(a)(f), K23-a(a): public source and worker signatures, fixed from the paper."""
+def test_acquire1_source_public_entry_signatures():
+    """K25 retains the K23 source/Acquisition/worker public signatures."""
     assert set(signature(fb.FSource.read).parameters) == {"self", "cursor"}
     assert get_type_hints(fb.FSource.read) == {"cursor": int, "return": fb.SourceItem | None}
     assert not signature(fb.SourceMeasurer).parameters
@@ -483,11 +483,15 @@ def test_measure1_source_public_entry_signatures():
         "work": fb.FWork, "ctx": fb.FWorkContext, "return": type(None)}
 
 
-def test_measure1_source_sampling_registry_declaration():
-    """K23(2)(e): source_sampling/1 is a measurement capability in fb_registry_v1."""
-    assert c.SOURCE_SAMPLING == contract("sui.fb.source_sampling")
-    declared = [d for d in u2.fb_registry_v1().declarations if d.ref == c.SOURCE_SAMPLING]
+def test_acquire1_acquisition_result_sampling_registry_replaces_source_sampling():
+    """K25(2)(b)/(5), :3912/:3952: old declaration/name is removed, not kept as compatibility."""
+    assert hasattr(c, "ACQUISITION_RESULT_SAMPLING"), "K25 public API missing: ACQUISITION_RESULT_SAMPLING"
+    assert c.ACQUISITION_RESULT_SAMPLING == contract("sui.fb.acquisition_result_sampling")
+    assert not hasattr(c, "SOURCE_SAMPLING")
+    registry = u2.fb_registry_v1()
+    declared = [d for d in registry.declarations if d.ref == c.ACQUISITION_RESULT_SAMPLING]
     assert len(declared) == 1 and declared[0].kind == "measurement"
+    assert not any(d.ref == contract("sui.fb.source_sampling") for d in registry.declarations)
 
 
 def test_updater1_public_entry_signatures():
@@ -701,7 +705,8 @@ UPDATE_FIELD_SPEC = {
     "UseObservation": "work_id:str;point:Point;used_ns:int",
     "IntervalObservation": "work_id:str;interval:MeasurementInterval",
     "AcquisitionObservation": "origin:Point;contents:frozenset[Point];acquired_ns:int",
-    "SourceObservation": "work_id:str;route_epoch:str;cursor:int;before_ns:int;after_ns:int;outcome:Literal['taken','empty','unavailable'];envelope:int|None;received:Point|None",
+    # K25-a(a), v0.81 :3528: retain eight columns, add exactly the six named columns.
+    "SourceObservation": "work_id:str;route_epoch:str;cursor:int;before_ns:int;after_ns:int;outcome:Literal['taken','empty','unavailable'];envelope:int|None;received:Point|None;sample_seq:int;source_called:bool;clock_source:Point;frame_envelope:int;frame:Point|None;received_id:Ref|None",
     "TargetEvidence": "executions:tuple[ExecutionObservation,...];uses:tuple[UseObservation,...];intervals:tuple[IntervalObservation,...];acquisitions:tuple[AcquisitionObservation,...];sources:tuple[SourceObservation,...]",
 }
 
