@@ -490,6 +490,20 @@ def test_measure1_source_sampling_registry_declaration():
     assert len(declared) == 1 and declared[0].kind == "measurement"
 
 
+def test_updater1_public_entry_signatures():
+    """K24(2), F-b v0.77 :3525: explicit same-registry construction and FWorkers.run."""
+    assert hasattr(fb, "FiniteUpdater"), "K24 public API missing: fb.FiniteUpdater"
+    constructor = signature(fb.FiniteUpdater)
+    assert tuple(constructor.parameters) == ("registry",)
+    registry_parameter = constructor.parameters["registry"]
+    assert registry_parameter.kind is registry_parameter.KEYWORD_ONLY
+    assert registry_parameter.default is registry_parameter.empty
+    assert get_type_hints(fb.FiniteUpdater.__init__)["registry"] is f.FRegistry
+    assert tuple(signature(fb.FiniteUpdater.run).parameters) == ("self", "work", "ctx")
+    assert get_type_hints(fb.FiniteUpdater.run) == {
+        "work": fb.FWork, "ctx": fb.FWorkContext, "return": type(None)}
+
+
 def issued_kwargs():
     """IssuedUpdate の全欄 (v0.25 §6-3)。説明値から発行物を作れないことの確かめにだけ使う。"""
     fixed = u2.FixedViewValue(boundary=frozenset({point("boundary")}), reader_view_key="view", registry_key="registry")
@@ -719,7 +733,7 @@ FA_ALIAS_SPEC = {
 def test_public_export_names_are_exact():
     assert set(fb.__all__) == set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
         "FbInputError", "FbHostFault", "FHalted", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost",
-        "FSource", "SourceMeasurer"}
+        "FSource", "SourceMeasurer", "FiniteUpdater"}
     assert set(u2.__all__) == set(UPDATE_FIELD_SPEC) | set(UPDATE_ALIAS_SPEC) | {
         "fb_registry_v1", "compute_finite_update", "update_response"}
 

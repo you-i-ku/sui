@@ -40,7 +40,7 @@ __all__ = [
     "Unsaved", "Held", "StatusBasis", "SlotStatus", "ReceiptStatus", "WorkStatus",
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
     "PurposeStatus", "FStatus", "FWorkContext", "FWorkers", "LaunchResult", "FLauncher", "FWindow",
-    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer",
+    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater",
 ]
 
 
@@ -881,3 +881,54 @@ class SourceMeasurer:
                                          end_ns=ended.reading.time_ns, closure="(start,end]"),
             missing_contracts=(c.NO_ARRIVAL,), evidence=()))
         report("ended", SegmentBoundary(kind="ended", work=work_id, reading=ended, reason="stopped", evidence=()))
+
+
+class FiniteUpdater:
+    """`FWorkers` の「見立てを直す」仕事の本体 (紙 F-b §6-10 K24、ゆうの決定 Z48)。
+
+    ホストが出した信念の更新の仕事 (`Compute`、`desc.purpose == "belief_update"`) を受け、その口の固定の
+    範囲を読み手にして入口 U (`f_update2.compute_finite_update`) を呼び、返答をその仕事の口から
+    `WorkFinished` で返す。発行 (issued) の時だけ、発行物を口へ添える。不適合 (rejected)・不足 (insufficient) は
+    U の返答のまま運ぶ。U の実行が例外で続けられなかった時は失敗 (`WorkFailure`、例外の型の名前だけ) として返し、
+    不適合・不足・発行と取り違えない。完成した joint を外から受け取らない。
+
+    `registry` は、組み立てる側がホストへ渡したものと同じ `FRegistry` を明示して渡す (係の中で作らない)。
+    見立てを直す仕事以外を渡されたら TypeError (束ねるのは使う側)。読める報告の種類はこの係では増えない。"""
+
+    def __init__(self, *, registry: FRegistry) -> None:
+        self._registry = registry
+
+    def run(self, work: "FWork", ctx: FWorkContext) -> None:
+        from . import f_update2 as _u
+        if not isinstance(work, Compute) or work.desc.purpose != "belief_update":
+            raise TypeError("FiniteUpdater runs belief_update works only")
+        if not ctx.enter():
+            return
+
+        def reading() -> ReadingEvidence:
+            try:
+                return ctx.now()
+            except RuntimeError:   # 時計の出どころを名指せない: 読みを作らず、理由を残して続ける
+                return Unavailable(reason="clock_source_unavailable", basis=())
+
+        started = reading()
+        issued, error = None, None
+        try:
+            reader = ctx.reader()
+            if reader is None:
+                raise RuntimeError("this work port has no fixed reader")
+            returned = _u.compute_finite_update(work.request, reader=reader, registry=self._registry,
+                                                evidence=ctx.evidence())
+            outputs = _u.update_response(returned)
+            issued = returned if isinstance(returned, IssuedUpdate) else None
+        except Exception as exc:   # 実行の障害。U が返した不適合・不足とは別の枝で返す
+            error = type(exc).__name__
+        finished = reading()
+        if error is None:
+            outcome: WorkOutcome = WorkOutputs(outputs=outputs)
+        else:
+            outcome = WorkFailure(failure=FailureInfo(
+                failure_kind="execution_error", content={"error_type": error},
+                readings=(started, finished), basis=()))
+        ctx.post(WorkFinished(work=work.desc.work_id, started=started, finished=finished, outcome=outcome),
+                 issued=issued)
