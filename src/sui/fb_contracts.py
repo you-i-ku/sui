@@ -30,7 +30,8 @@ QUANTITY_VALUE = _ContractRef("sui.fb.quantity_value", "1")
 RECEIVED = _ContractRef("sui.fb.received", "1")
 # I-7 の時計の知らせ (§6-9 K1)。窓口が同じ run の起動との対応を確かめて既存 sui.clock.source/1 を発行する
 CLOCK_NOTICE = _ContractRef("sui.fb.clock_notice", "1")
-BOOT_DECLARATION = _ContractRef("sui.fb.boot_declaration", "1")
+# /2 (§6-10 K26-a (ア)): 型のついた欄 observation_models を足した (旧 /1 は片付けた、Z37)
+BOOT_DECLARATION = _ContractRef("sui.fb.boot_declaration", "2")
 SEGMENT_REPORT = _ContractRef("sui.fb.segment_report", "1")
 WORK_REPORT = _ContractRef("sui.fb.work_report", "1")
 DRAW_REPORT = _ContractRef("sui.fb.draw_report", "1")
@@ -85,3 +86,9 @@ FINITE_UPDATE_COMPUTE = _ContractRef("sui.f.finite_update_compute", "1")
 UPDATE_RESPONSE = _ContractRef("sui.fb.update_response", "1")  # Wu の返答の三枝 {kind: issued / rejected / insufficient, value}
 UPDATE_RESULT = _ContractRef("sui.fb.update_result", "1")      # R*: 発行物の正準な説明 (J5)
 BELIEF_ADOPTED = _ContractRef("sui.fb.belief_adopted", "1")    # A*: 採用 (J5)
+
+# 取得の列を読む本 (§6-10 K26・K26-a)。読み口 `fb.read_acquisition_sequence` だけが使う (F-a の読み口には登録しない)
+ACQUISITION_OBSERVATION_MODEL = _ContractRef("sui.fb.acquisition_observation_model", "1")  # 観測モデルの記録 (Prediction / MODEL)
+ACQUISITION_RESULT_PROJECTION = _ContractRef("sui.fb.acquisition_result_projection", "1")  # 取得の Frame → {result, source_called}
+ACQUISITION_CONTROL_TABLE = _ContractRef("sui.fb.acquisition_control_table", "1")          # 記録された履歴 → 制御 u の候補
+STATE_INDEPENDENT_CONTROL_SELECTION = _ContractRef("sui.fb.state_independent_control_selection", "1")  # 選び方が状態に依存しない根拠

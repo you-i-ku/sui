@@ -1,7 +1,8 @@
 """Boot から起動の計画を作る (紙 F-b §2-4-0・§2-5-9・§2-5-10・§6-5 G1〜G5、段 1)。
 
-保存した boot_declaration d から、測る口の実適用 (route_config) → 続けて測る要求 k、
-initial があれば knowledge_origin → 最初の候補の生成の要求 Qgen を、1 点ずつ保存する。
+保存した boot_declaration d から、観測モデルの記録 (observation_models の各項、§6-10 K26-a (ア)) →
+測る口の実適用 (route_config) → 続けて測る要求 k、initial があれば knowledge_origin → 最初の候補の生成の要求
+Qgen を、1 点ずつ保存する。
 各記録は最初に作った時に固定し (保存の再試行・窓口の作り直しで作り直さない)、後の記録が
 前の記録の Point を要る時だけ、その保存の後に作る。前提が足りない枝は対象つきの未完として
 持ち、正常な枝の完了と分ける。仕事の行は要求の保存の後に置く (FWork.request は Point)。
@@ -20,7 +21,7 @@ from .contracts import ContractRef as _ContractRef
 from .f_contracts import KNOWLEDGE_ORIGIN as _KNOWLEDGE_ORIGIN, ROUTE_CONFIG as _ROUTE_CONFIG
 from .ids import RefKind as _RefKind
 from .records import Decided as _Decided, Observed as _Observed, Payload as _Payload, \
-    Record as _Record, Role as _Role
+    Prediction as _Prediction, Record as _Record, Role as _Role
 
 _EMPTY_ARGS = _ContractRef("sui.f.args.empty", "1")
 
@@ -75,7 +76,8 @@ def plan_boot(state, declaration, d) -> BootPlan:
                  *(name for r in declaration.routes
                    for name in (r.slot, r.value.allocation.slot, r.value.process_slot)),
                  *((initial.slot, initial.value.allocation.slot, initial.value.process_slot,
-                    initial.value.reader_slot, initial.value.derivation.slot) if initial is not None else ())]
+                    initial.value.reader_slot, initial.value.derivation.slot) if initial is not None else ()),
+                 *(m.slot for m in declaration.observation_models)]
     ambiguous = sorted({p for p in positions if positions.count(p) > 1})
     if ambiguous:
         plan.missing += [f"slot:ambiguous:{p}" for p in ambiguous]
@@ -89,6 +91,16 @@ def plan_boot(state, declaration, d) -> BootPlan:
         plan.missing.append("environment")
         return plan
     state.capacity[d] = declaration.capacity
+    # 観測モデルは宣言の保存だけ (中身の検査は読み口の側。正しいことの証明にしない)。initial の有無に結び付けない
+    route_slots = {r.slot for r in declaration.routes}
+    for model_slot in declaration.observation_models:
+        if not (model_slot.contract == _c.ACQUISITION_OBSERVATION_MODEL
+                and isinstance(model_slot.value, _fb.AcquisitionObservationModel)):
+            plan.missing.append(f"observation_model:{model_slot.slot}:contract")
+        elif model_slot.value.route_slot not in route_slots:
+            plan.missing.append(f"observation_model:{model_slot.slot}:route")
+        else:
+            plan.steps.append(_model_step(model_slot))
 
     def allocation_ok(slot_value):
         a = slot_value.value
@@ -202,6 +214,26 @@ def _record(state, body, kind, writer):
     from ._fb_core import PRODUCER
     return _Record(id=state.ids.new(kind), at=state.clock.now(), writer=writer,
                    producer=PRODUCER, body=body, schema=3)
+
+
+def _model_step(model_slot):
+    """観測モデルの記録 (§6-10 K26-a (ア)・K26-b (ア)): Boot の 1 項から独立した Prediction / MODEL を作る。出どころは
+    bootstrap の札と BootSlot (Boot の Point と slot)、about・basis は Boot。親は Boot だけ (Prediction を因果の親にしない)。"""
+    name = model_slot.slot
+
+    def build(state, plan):
+        from ._fb_core import Slot
+        ledger = state.ledger
+        boot = ledger.record(plan.d).id
+        content = {"origin": "bootstrap", "declared_at": _encode(_fb.BootSlot(declaration=plan.d, slot=name)),
+                   "value": _encode(model_slot.value)}
+        body = _Prediction(target="acquisition_observation_model", about=(boot,), basis=(boot,),
+                           content=_Payload.json(content), contract=_c.ACQUISITION_OBSERVATION_MODEL)
+        return Slot(contract=_c.ACQUISITION_OBSERVATION_MODEL,
+                    record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
+                    parents=_front(ledger, {plan.d}))
+
+    return Step(name="observation_model:" + name, build=build)
 
 
 def _route_steps(route_slot):

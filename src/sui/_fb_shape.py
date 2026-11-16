@@ -21,6 +21,7 @@ _SLOT_VALUE = {
     ("BootDeclaration", "routes"): _fb.BootstrapRoute,
     ("BootDeclaration", "initial"): _fb.InitialProcess,
     ("BootDeclaration", "environment"): _fb.Environment,
+    ("BootDeclaration", "observation_models"): _fb.AcquisitionObservationModel,   # §6-10 K26-a (ア)
     ("BootstrapRoute", "allocation"): _fb.Allocation,
     ("InitialProcess", "allocation"): _fb.Allocation,
 }

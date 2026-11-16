@@ -9,6 +9,7 @@
 
 from collections.abc import Callable as _Callable, Mapping as _Mapping
 from dataclasses import dataclass as _dataclass
+from fractions import Fraction as _Fraction
 from typing import Literal as _Literal, Protocol as _Protocol, TypeAlias as _TypeAlias
 
 from .clock import Clock as _Clock
@@ -16,12 +17,13 @@ from .clock_contracts import ClockSource
 from .contracts import ContractRef
 from .f import (
     ClockReading, ContractValue, CoverageClaim, CoverageUnproved, DrawRequest,
-    FFactsRequest, FMathArtifact, FReader, FRegistry, Gap, ImmutableJSON, MeasurementFrame,
-    MeasurementId, MeasurementInterval, MeasurementUnavailable, Point, RouteConfig,
+    FFactsRequest, FiniteKernel, FMathArtifact, FReader, FRegistry, Gap, ImmutableJSON, MeasurementFrame,
+    MeasurementId, MeasurementInterval, MeasurementUnavailable, ObservationCell, Point, RouteConfig,
     Unavailable,
 )
 from .f_update2 import IssuedUpdate, LaunchResult, TargetEvidence
 from .ids import Ref
+from .records import Record
 from .ledger import Ledger as _Ledger
 from .rate import RateBudget
 from .runtime import Envelope
@@ -41,6 +43,8 @@ __all__ = [
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
     "PurposeStatus", "FStatus", "FWorkContext", "FWorkers", "LaunchResult", "FLauncher", "FWindow",
     "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater",
+    "AcquisitionControl", "AcquisitionObservationModel", "AcquisitionReadItem", "AcquisitionReadResult",
+    "read_acquisition_sequence",
 ]
 
 
@@ -164,9 +168,8 @@ class BootstrapRoute:
 class InitialProcess:
     """`sui.fb.initial_process/1`: 最初の過程・読み手・モデル・生成方法・評価方法・割当・
     更新の導出方法 (δ)。δ は保存済みの事実 (受信・区間の報告・Claim など) をきっかけに更新要求 Q* を
-    導く差し替えられる方法 (紙 §6-4、TRACE-02)。契約の名前と入力の形は段 3 で決める (§2-5-4 の
-    `sui.fb.received_update/1` は受信だけを火種にしていた)。段 3 で契約を `sui.fb.saved_segment_update/1` に
-    (§6-10 J1・K2: 火種は保存した原報告、結びつき B は要求を作る前提)。
+    導く差し替えられる方法 (紙 §6-4、TRACE-02)。契約は `sui.fb.saved_segment_update/1` (§6-10 J1・K2: 火種は
+    保存した原報告、結びつき B は要求を作る前提。§2-5-4 の `sui.fb.received_update/1` は受信だけを火種にしていた)。
     draw は選択用のくじの生成器 (§6-9 H4、法則と args は F-a で既決の uniform_unit/1・{})。
     prepare_budget・evaluate_budget は評価の準備と、くじからの評価に実際に渡す計算の上限
     (§6-9 H3)。予算は好み・範囲・費用ではなく、コードの既定値で埋めない。信念の更新には固定の上限の
@@ -194,13 +197,18 @@ class Environment:
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class BootDeclaration:
-    """起動の宣言 (§2-5-3)。資源範囲 1 つ・量の契約 1 つ・bootstrap の口と測る過程 1 つが
-    この版の合法な縦の 1 本。capacity の実値は宣言で受け取り、既定値を置かない。"""
+    """起動の宣言 (§2-5-3、`sui.fb.boot_declaration/2`)。資源範囲 1 つ・量の契約 1 つ・bootstrap の口と測る過程 1 つが
+    この版の合法な縦の 1 本。capacity の実値は宣言で受け取り、既定値を置かない。observation_models は取得の列を読む
+    観測モデル (各 SlotValue の contract = `sui.fb.acquisition_observation_model/1`、value = AcquisitionObservationModel)。
+    起動の時にホストが各項から独立した Prediction / MODEL の記録を保存する (§6-10 K26-a (ア)・K26-b)。宣言しない時は
+    () を明示で渡す (既定値を置かない)。initial=None でも宣言できる。保存は「宣言を保存した」だけで、正しいことや
+    見立てへの採用の証明ではない (中身の検査は読み口 read_acquisition_sequence がする)。"""
     capacity: QuantityValue
     scope: SlotValue
     routes: tuple[SlotValue, ...]
     initial: SlotValue | None
     environment: SlotValue
+    observation_models: tuple[SlotValue, ...]
 
 
 # --- 原報告・返答・終わりの入れ子 (§2-5-6) ---
@@ -310,7 +318,7 @@ measurement_unavailable・claim・coverage_unproved。F-a の DTO はそのま�
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class Boot:
-    """I-6。知らせは `sui.s4.boot/1` と `sui.fb.boot_declaration/1` の 2 slot。"""
+    """I-6。知らせは `sui.s4.boot/1` と `sui.fb.boot_declaration/2` の 2 slot。"""
     declaration: BootDeclaration
 
 
@@ -658,6 +666,78 @@ class Acquisition:
     outcome: _Literal["taken", "empty", "unavailable"]
     reason: str
     item: SourceItem | None
+
+
+# --- 取得の列を読む本 (§6-10 K26・K26-a・K26-b) ---
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class AcquisitionControl:
+    """制御 u の 1 つ。kernel は観測と状態の変化の共同の確率 (F-a の値の型。行列は arrival 行 / departure 列、
+    出発の状態ごとに全 outcome の列の和が 1)。cells は観測値 (`{result, source_called}` の合法な 4 組) → outcome の
+    集合で、異なるセルの outcome は互いに素、和は核の全 outcome (:2660)。FiniteObservation のハンドルは作らない。"""
+    id: str
+    kernel: FiniteKernel
+    cells: tuple[ObservationCell, ...]
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class AcquisitionObservationModel:
+    """`sui.fb.acquisition_observation_model/1` の値 (Boot の observation_models の項、bootstrap の札は記録の出どころで示す)。
+    route_slot は同じ Boot の routes の slot。control_rule は記録された履歴 → u の候補 (`sui.fb.acquisition_control_table/1`)、
+    independence は選び方が状態に依存しない根拠 (`sui.fb.state_independent_control_selection/1`。その重みは L に掛けない)。
+    projection は `sui.fb.acquisition_result_projection/1`、time_projection は `sui.f.value_only/1` (同じセルの outcome が
+    時刻で違わないことを宣言のモデルの中で検査する)。人が置く札つきの見込みで、正しいことの証明ではない (K26 (4))。"""
+    route_slot: str
+    states: tuple[str, ...]
+    controls: tuple[AcquisitionControl, ...]
+    control_rule: MethodCall
+    independence: MethodCall
+    projection: ContractRef
+    time_projection: ContractRef
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class AcquisitionReadItem:
+    """取得の列の 1 項。result は taken / empty / unavailable、source_called は源を呼んだか (取れなかったの 2 種を分ける)。
+    before・after は保存した Frame の区間の始めと実測の時刻 (ホストの控えからは読まない)。received_id・received は taken の
+    時の原文の名札とその Point。reason の文・原文の bytes は観測に入れない。"""
+    sample_seq: int
+    cursor: int
+    result: _Literal["taken", "empty", "unavailable"]
+    source_called: bool
+    before: ReadingClock
+    after: ReadingClock
+    received_id: Ref | None
+    measurement_id: MeasurementId
+    frame: Point
+    received: Point | None
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class AcquisitionReadResult:
+    """読み口の答え。kind="read" は likelihood = 初期の隠れた状態ごとの L(d|u,s0) (事後でも、選択を含む確率でもない。
+    一部の状態の 0 は有効な 0)。"model_zero" は全部の初期状態で L=0 (likelihood は 0 の列)。"unreadable" は reason
+    (missing_record・missing_declaration・shape・conflict・control_ambiguous・control_independence_unproved・
+    time_projection_unproved) を持ち、likelihood は None (空・取れなかった・有効な確率で埋めない)。controls は決めた u の列、
+    used_records は使った観測モデルの記録・Boot・Frame・原文の Point、contracts は使った契約。"""
+    kind: _Literal["read", "unreadable", "model_zero"]
+    reason: str | None
+    observations: tuple[AcquisitionReadItem, ...]
+    initial_states: tuple[str, ...]
+    likelihood: tuple[_Fraction, ...] | None
+    controls: tuple[str, ...]
+    used_records: tuple[Point, ...]
+    contracts: tuple[ContractRef, ...]
+
+
+def read_acquisition_sequence(records: _Mapping[Point, Record], *, model: Point, run: Ref, route_epoch: str,
+                              through_seq: int) -> AcquisitionReadResult:
+    """取得の列を読む口 (§6-10 K26 (2)(c)・K26-a (イ))。records は読み手の範囲の Point → Record、model は保存した観測モデルの
+    記録の Point。run・route_epoch・sample_seq の 0 から through_seq までの取得の Frame (K25) を全部そろえて観測の列に読み、
+    初期の状態ごとの L(d|u,s0) を Fraction で厳密に返す。純粋な関数で、台帳に何も書かず、ホストの状態を読まない。
+    子の見立ては変えない (③ の仕事)。"""
+    from ._fb_read import read
+    return read(records, model=model, run=run, route_epoch=route_epoch, through_seq=through_seq)
 
 
 # --- 窓口・仕事の係・ホスト (§2-4-1・§2-4-2・§2-4-7・M2) ---

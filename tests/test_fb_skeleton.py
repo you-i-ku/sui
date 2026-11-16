@@ -7,7 +7,7 @@ Integration requires real saved Points. Historical gaps below are replaced by
 construction/signature tests; they are not claims of implemented computation.
 """
 
-from dataclasses import fields, make_dataclass, replace
+from dataclasses import dataclass, fields, make_dataclass, replace
 from collections.abc import Mapping
 from fractions import Fraction
 from inspect import get_annotations, signature
@@ -26,6 +26,7 @@ from sui.ids import Ref, RefKind
 from sui.ledger import Ledger, PreparedEntry, MemoryContents, SequentialSalts
 from sui.store import MemoryEntries
 from sui.rate import RateBudget
+from sui.records import Record
 
 
 PAPER = "specs/関所F_Fb_今の約束.md"
@@ -231,8 +232,33 @@ def budget():
     return RateBudget(Fraction(1, 1000), 1000, 1000, 10)
 
 
-def boot(initial=False):
-    """Structure example, with explicitly unresolved test methods (CG-METHOD)."""
+def require_boot_v2():
+    """K26-b: a missing prerequisite is a failed case, never a skip/xfail."""
+    missing = []
+    if "observation_models" not in {field.name for field in fields(fb.BootDeclaration)}:
+        missing.append("BootDeclaration.observation_models")
+    if c.BOOT_DECLARATION != ContractRef("sui.fb.boot_declaration", "2"):
+        missing.append("BOOT_DECLARATION/2")
+    assert not missing, "K26-b public names/fields/version missing: " + ", ".join(missing)
+
+
+# Parameter data must remain collectable before the required public field exists.
+# This test-only subtype is used ONLY by explicit _for_collection calls below
+# and in stage1's raw probes. Focused per-case checks prevent it reaching a host.
+# Once the public field exists, even collection uses the real public constructor.
+if "observation_models" not in {field.name for field in fields(fb.BootDeclaration)}:
+    @dataclass(frozen=True, slots=True, kw_only=True)
+    class _BootV2CollectionValue(fb.BootDeclaration):
+        observation_models: tuple[fb.SlotValue, ...]
+else:
+    _BootV2CollectionValue = fb.BootDeclaration
+
+
+def boot(initial=False, *, _for_collection=False):
+    """Boot /2 structure example; unspecified methods remain explicit (CG-METHOD)."""
+    if not _for_collection:
+        require_boot_v2()
+    declaration_type = _BootV2CollectionValue if _for_collection else fb.BootDeclaration
     def allocation(name):
         return slot(name, c.ALLOCATION, fb.Allocation(scope_slot="scope",
                     amount=fb.QuantityValue(contract=c.SEATS, value=1)))
@@ -252,7 +278,7 @@ def boot(initial=False):
             allocation=allocation("thinking-allocation"),
             derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
                 contract=c.SAVED_SEGMENT_UPDATE, args=delta_args)), continuation=None))
-    return fb.Boot(declaration=fb.BootDeclaration(
+    return fb.Boot(declaration=declaration_type(
         capacity=fb.QuantityValue(contract=c.SEATS, value=2),
         scope=slot("scope", c.RESOURCE_SCOPE, fb.ResourceScope(
             quantity_contract=c.SEATS, need=method("test.need"))),
@@ -261,7 +287,8 @@ def boot(initial=False):
             reading_contract=c.FINITE_SEGMENT_PROJECTION)),),
         initial=initial_value,
         environment=slot("environment", c.ENVIRONMENT,
-                         fb.Environment(data={"fixture": "shape-only"}))))
+                         fb.Environment(data={"fixture": "shape-only"})),
+        observation_models=()))
 
 
 def segment_items():
@@ -371,6 +398,7 @@ def test_boot_nested_shape(initial):
     assert (event.declaration.initial is not None) == initial
     assert event.declaration.routes[0].value.config.origin == "bootstrap"
     assert event.declaration.capacity.value == 2
+    assert event.declaration.observation_models == ()
 
 
 @pytest.mark.parametrize("branch", tuple(segment_items()))
@@ -393,12 +421,14 @@ def test_draw_outcome_branches(branch):
     assert isinstance(event.outcome, get_args(fb.DrawOutcome))
 
 
-@pytest.mark.parametrize("event", [boot(), fb.ClockDeclared(declaration=source()),
+@pytest.mark.parametrize("event", [boot(_for_collection=True), fb.ClockDeclared(declaration=source()),
     fb.Received(route_epoch="unknown", media_type="application/octet-stream", data=b"\x00\xff", claims={}),
     fb.SegmentReport(segment=point("unknown"), item_slot="x", item=segment_items()["gap"]),
     fb.WorkFinished(work="unknown", started=reading(), finished=reading(), outcome=work_outcomes()["unknown"]),
     fb.DrawReturned(work="unknown", outcome=draw_outcomes()["unknown"])], ids=lambda e: type(e).__name__)
 def test_six_events_and_envelope(event):
+    if isinstance(event, fb.Boot):
+        require_boot_v2()  # Collection-only data cannot certify the missing public declaration.
     envelope = fb.Envelope(number=7, event=event, received_ns=20)
     assert envelope.event is event
     assert isinstance(event, get_args(fb.FEvent))
@@ -426,6 +456,25 @@ def test_six_status_shape_representatives(meaning):
 
 
 def test_public_entry_signatures():
+    require_boot_v2()
+    # K26-a/b: the declaration is mandatory and the pure reader takes its saved Point.
+    constructor = signature(fb.BootDeclaration)
+    observation_models = constructor.parameters["observation_models"]
+    assert observation_models.default is observation_models.empty
+    assert get_type_hints(fb.BootDeclaration)["observation_models"] == tuple[fb.SlotValue, ...]
+    reader = signature(fb.read_acquisition_sequence)
+    assert tuple(reader.parameters) == ("records", "model", "run", "route_epoch", "through_seq")
+    assert reader.parameters["records"].kind is reader.parameters["records"].POSITIONAL_OR_KEYWORD
+    assert reader.parameters["records"].default is reader.parameters["records"].empty
+    assert all(reader.parameters[name].kind is reader.parameters[name].KEYWORD_ONLY
+               and reader.parameters[name].default is reader.parameters[name].empty
+               for name in ("model", "run", "route_epoch", "through_seq"))
+    assert get_type_hints(fb.read_acquisition_sequence) == {
+        "records": Mapping[str, Record], "model": str, "run": Ref, "route_epoch": str,
+        "through_seq": int, "return": fb.AcquisitionReadResult}
+    assert c.BOOT_DECLARATION == ContractRef("sui.fb.boot_declaration", "2")
+    assert c.ACQUISITION_OBSERVATION_MODEL == contract("sui.fb.acquisition_observation_model")
+    assert c.ACQUISITION_RESULT_PROJECTION == contract("sui.fb.acquisition_result_projection")
     # K23(2)(a): an optional route_epoch -> FSource mapping is supplied by the caller.
     assert set(signature(fb.FThreadHost).parameters) == {"ledger", "clock", "workers", "registry", "launcher", "sources"}
     assert signature(fb.FThreadHost).parameters["launcher"].default is None
@@ -624,7 +673,11 @@ FB_FIELD_SPEC = {
     "BootstrapRoute": "config:RouteConfig;process_slot:str;allocation:SlotValue;reading_contract:ContractRef|None",
     "InitialProcess": "process_slot:str;reader_slot:str;model:Point;generator:MethodCall;method:MethodCall;draw:MethodCall;prepare_budget:RateBudget;evaluate_budget:RateBudget;allocation:SlotValue;derivation:SlottedMethod;continuation:MethodCall|None",  # v0.26 §6-9 H3・H4、§6-10 J6・K1 (Z41: 更新の上限の欄は無い)
     "Environment": "data:ImmutableJSON",
-    "BootDeclaration": "capacity:QuantityValue;scope:SlotValue;routes:tuple[SlotValue,...];initial:SlotValue|None;environment:SlotValue",
+    "BootDeclaration": "capacity:QuantityValue;scope:SlotValue;routes:tuple[SlotValue,...];initial:SlotValue|None;environment:SlotValue;observation_models:tuple[SlotValue,...]",
+    "AcquisitionControl": "id:str;kernel:f.FiniteKernel;cells:tuple[f.ObservationCell,...]",
+    "AcquisitionObservationModel": "route_slot:str;states:tuple[str,...];controls:tuple[AcquisitionControl,...];control_rule:MethodCall;independence:MethodCall;projection:ContractRef;time_projection:ContractRef",
+    "AcquisitionReadItem": "sample_seq:int;cursor:int;result:Literal['taken','empty','unavailable'];source_called:bool;before:ReadingClock;after:ReadingClock;received_id:Ref|None;measurement_id:f.MeasurementId;frame:Point;received:Point|None",
+    "AcquisitionReadResult": "kind:Literal['read','unreadable','model_zero'];reason:str|None;observations:tuple[AcquisitionReadItem,...];initial_states:tuple[str,...];likelihood:tuple[Fraction,...]|None;controls:tuple[str,...];used_records:tuple[Point,...];contracts:tuple[ContractRef,...]",
     "ReadingClock": "source:Point;reading:ClockReading",
     "GenerationPair": "started:ReadingEvidence;finished:ReadingEvidence",
     "FailureInfo": "failure_kind:str;content:ImmutableJSON;readings:tuple[ReadingEvidence,...];basis:tuple[Ref,...]",
@@ -736,25 +789,63 @@ FA_ALIAS_SPEC = {
 
 
 def test_public_export_names_are_exact():
-    assert set(fb.__all__) == set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
+    expected = set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
         "FbInputError", "FbHostFault", "FHalted", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost",
-        "FSource", "SourceMeasurer", "FiniteUpdater"}
+        "FSource", "SourceMeasurer", "FiniteUpdater", "read_acquisition_sequence"}
+    missing = expected - set(fb.__all__)
+    assert not missing, "K26 public export names missing: " + ", ".join(sorted(missing))
+    assert set(fb.__all__) == expected
     assert set(u2.__all__) == set(UPDATE_FIELD_SPEC) | set(UPDATE_ALIAS_SPEC) | {
         "fb_registry_v1", "compute_finite_update", "update_response"}
 
 
-def declaration_names(surface=fb):
-    """Resolve public type identities only; expectations remain the tables above."""
+def declaration_names(surface=fb, *, group="fb"):
+    """Unqualified names belong to the checked module, never a merged namespace.
+
+    FB imports the listed public F-a values; the checked module's own names
+    take precedence. Other modules are also available under qualified names.
+    A same-named UPDATE type must not overwrite an FB type (K26-c).
+    """
     names = dict(Point=str, Ref=Ref, ContractRef=ContractRef, ImmutableJSON=f.ImmutableJSON,
                  ProofRef=f.ProofRef, FFactsRequest=f.FFactsRequest, DrawRequest=f.DrawRequest,
                  RateBudget=RateBudget, ClockSource=ClockSource, Literal=Literal,
-                 CapabilityCallable=f.CapabilityCallable, Mapping=Mapping)
-    for module, table in ((f, FA_FIELD_SPEC), (surface, FB_FIELD_SPEC), (u2, UPDATE_FIELD_SPEC)):
-        names.update({name: getattr(module, name) for name in table})
-    names.update({name: getattr(surface, name) for name in FB_ALIAS_SPEC})
-    names.update({name: getattr(u2, name) for name in UPDATE_ALIAS_SPEC})
-    names.update({name: getattr(f, name) for name in FA_ALIAS_SPEC})
+                 CapabilityCallable=f.CapabilityCallable, Mapping=Mapping, Fraction=Fraction,
+                 FiniteKernel=f.FiniteKernel, ObservationCell=f.ObservationCell)
+    names.update(f=f, fb=surface, u2=u2, update=u2,
+                 MeasurementInterval=f.MeasurementInterval)
+    if group == "fb":
+        names.update({name: getattr(f, name) for name in (*FA_FIELD_SPEC, *FA_ALIAS_SPEC)})
+    module, field_spec, alias_spec = {
+        "fb": (surface, FB_FIELD_SPEC, FB_ALIAS_SPEC),
+        "f": (f, FA_FIELD_SPEC, FA_ALIAS_SPEC),
+        "update": (u2, UPDATE_FIELD_SPEC, UPDATE_ALIAS_SPEC),
+    }[group]
+    names.update({name: getattr(module, name) for name in (*field_spec, *alias_spec)})
     return names
+
+
+@pytest.mark.parametrize("group", ["fb", "update"], ids=["fb-owner", "update-owner"])
+def test_declaration_names_preserve_owner_when_public_type_names_collide(monkeypatch, group):
+    """K26-c: catch either merge order clobbering a same-named foreign type.
+
+    Only in-memory test declarations/tables are changed. Missing unrelated K26
+    entries are inert None values in this copy, never public implementation
+    substitutes and never passed to a host. The real EA type stays untouched.
+    """
+    evidence_type = u2.AcquisitionObservation
+    read_type = make_dataclass("AcquisitionObservation", [("sample_seq", int)], frozen=True)
+    copy = SimpleNamespace(**{name: getattr(fb, name, None) for name in (*FB_FIELD_SPEC, *FB_ALIAS_SPEC)})
+    copy.AcquisitionObservation = read_type
+    with monkeypatch.context() as synthetic:
+        synthetic.setitem(FB_FIELD_SPEC, "AcquisitionObservation", "sample_seq:int")
+        names = declaration_names(copy, group=group)
+        expected = read_type if group == "fb" else evidence_type
+        assert names["AcquisitionObservation"] is expected
+        assert names["fb"].AcquisitionObservation is read_type
+        assert names["u2"].AcquisitionObservation is evidence_type
+        declaration = "sample_seq:int" if group == "fb" else UPDATE_FIELD_SPEC["AcquisitionObservation"]
+        assert_exact_fields(expected, declaration, names)
+    assert u2.AcquisitionObservation is evidence_type
 
 
 def assert_exact_fields(actual, declaration, names):
@@ -765,7 +856,8 @@ def assert_exact_fields(actual, declaration, names):
     # differently for runtime annotations and future annotations. That unfolding
     # depth is not a field contract. No product private alias value is inspected:
     # _Literal's spelling in the supplied public annotation means typing.Literal.
-    public_names = dict(names, _Literal=Literal, _Ref=Ref, _ContractRef=ContractRef)
+    public_names = dict(names, _Literal=Literal, _Ref=Ref, _ContractRef=ContractRef,
+                        _Fraction=Fraction, _f=f, f=f)
     actual_hints = {name: eval(value, public_names) if isinstance(value, str) else value
                     for name, value in get_annotations(actual, eval_str=False).items()}
     assert actual_hints == expected, (actual.__name__, {
@@ -779,14 +871,14 @@ def assert_exact_fields(actual, declaration, names):
 ])
 def test_public_fields_and_annotations_are_exact(group, name):
     module, table = {"fb": (fb, FB_FIELD_SPEC), "f": (f, FA_FIELD_SPEC), "update": (u2, UPDATE_FIELD_SPEC)}[group]
-    assert_exact_fields(getattr(module, name), table[name], declaration_names())
+    assert_exact_fields(getattr(module, name), table[name], declaration_names(group=group))
 
 
 @pytest.mark.parametrize("group,name", [(group, name) for group, table in
                          (("fb", FB_ALIAS_SPEC), ("update", UPDATE_ALIAS_SPEC), ("f", FA_ALIAS_SPEC)) for name in table])
 def test_public_union_branches_are_exact(group, name):
     module, table = {"fb": (fb, FB_ALIAS_SPEC), "update": (u2, UPDATE_ALIAS_SPEC), "f": (f, FA_ALIAS_SPEC)}[group]
-    assert getattr(module, name) == eval(table[name], declaration_names()), name
+    assert getattr(module, name) == eval(table[name], declaration_names(group=group)), name
 
 
 @pytest.mark.parametrize("mutation", ("nullable_data", "extra_event_branch"))

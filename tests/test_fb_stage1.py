@@ -31,7 +31,7 @@ from fb_stage_map import STAGE_MAP
 from fb_targets import TARGETS
 from test_fb_skeleton import (ContractGap, PAPER, boot, contract, gap, reading,
                               segment_items, point, source, work_outcomes, test_registry,
-                              WitnessLauncher)
+                              WitnessLauncher, require_boot_v2)
 
 
 def test_need_structural_contract_gap():
@@ -1041,7 +1041,8 @@ def test_old_measurement_contracts_keep_body_and_parent_correspondence(kind, cha
 
 def raw_examples():
     """Paper §2-5-3/6/7: all examples are test inputs, not status projections."""
-    examples = {"boot_none": boot(), "boot_initial": boot(True), "clock": fb.ClockDeclared(declaration=source()),
+    examples = {"boot_none": boot(_for_collection=True), "boot_initial": boot(True, _for_collection=True),
+                "clock": fb.ClockDeclared(declaration=source()),
                 "received": received()}
     unavailable = f.Unavailable(reason="test unavailable", basis=())
     for tag, item in segment_items().items():
@@ -1075,7 +1076,9 @@ def fixture_nodes(value, path=()):
 # particular, finding a nearby class does not discharge a relation, Support,
 # conflict, ownership, or branch obligation. Those remain explicit gaps below.
 RAW_SUBJECTS = {
-    "Boot": fb.Boot, "BootDeclaration": fb.BootDeclaration, "ClockDeclared": fb.ClockDeclared,
+    # Match collection data while /2 is absent. The raw-field/branch tests check
+    # the public prerequisite before any pending fixture reaches a window.
+    "Boot": fb.Boot, "BootDeclaration": type(RAW_EXAMPLES["boot_none"].declaration), "ClockDeclared": fb.ClockDeclared,
     "ClockSource": type(source()), "ExistingClockSource": type(source()), "Received": fb.Received,
     "QuantityValue": fb.QuantityValue, "ResourceScope": fb.ResourceScope, "Allocation": fb.Allocation,
     "BootstrapRoute": fb.BootstrapRoute, "InitialProcess": fb.InitialProcess, "Environment": fb.Environment,
@@ -1122,7 +1125,7 @@ def raw_branch_probe(target):
         foil = replace(event, item=segment_items()["gap" if tag != "gap" else "measurement_unavailable"])
     elif subject in ("BootDeclaration", "BootDeclaration.initial") and branch in ("initialあり", "initial=None", "value", "null"):
         has_initial = branch in ("initialあり", "value")
-        event, foil = boot(has_initial), boot(not has_initial)
+        event, foil = boot(has_initial, _for_collection=True), boot(not has_initial, _for_collection=True)
     elif subject == "ReadingEvidence" and branch in ("clock", "unavailable"):
         event = RAW_EXAMPLES["segment_started" if branch == "clock" else "started_unavailable"]
         foil = RAW_EXAMPLES["started_unavailable" if branch == "clock" else "segment_started"]
@@ -1308,6 +1311,8 @@ def test_stage1_raw_field(rid, rig):
     """An executable exact input-field contrast, not a case-name-only connection."""
     probe = RAW_FIELD_PROBES[rid]
     event = RAW_EXAMPLES[probe["example"]]
+    if isinstance(event, fb.Boot):
+        require_boot_v2()
     # object() is outside every declared outer type, including free JSON and nullable DTOs.
     bad = malformed_raw_example(probe)
     target = c.BOOT_DECLARATION if isinstance(event, fb.Boot) else c.CLOCK_NOTICE if isinstance(
@@ -1330,6 +1335,8 @@ def test_stage1_raw_branch(rid, rig):
     """Both branches legal as raw reports; retyping an already accepted envelope is not."""
     probe = RAW_BRANCH_PROBES[rid]
     event, foil = probe["event"], probe["foil"]
+    if isinstance(event, fb.Boot):
+        require_boot_v2()
     target = c.BOOT_DECLARATION if isinstance(event, fb.Boot) else c.SEGMENT_REPORT
     expected = wire(event.declaration if isinstance(event, fb.Boot) else event)
     other = wire(foil.declaration if isinstance(foil, fb.Boot) else foil)

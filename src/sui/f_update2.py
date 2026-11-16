@@ -393,7 +393,8 @@ def _content(reader, point, contract):
 
 def _meanings():
     """初回に意味を定めた Claim の契約 → (kind, lower, upper) (§19-1 の表)。最初の輪は到着なしだけ。
-    `count_exactly_one/1` ほかは ★ 段 3 の広げ (未知の kind をこれへ寄せない)。"""
+    `count_exactly_one/1` ほかは ★ 件数を返す測定の口をつなぐ時 (段は置かない = 紙 F-b Z45 の仕分け。仮の行き先は
+    外付けの行・S7)。未知の kind をこれへ寄せない。"""
     c = _c()
     return {(c.NO_ARRIVAL.name, c.NO_ARRIVAL.version): ("no_arrival", 0, 0)}
 
