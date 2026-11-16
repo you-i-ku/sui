@@ -52,6 +52,8 @@ def fb_registry_v1() -> FRegistry:
         # K25: ホストが仲立ちした 1 回の取得の結果を 1 標本とする測り方。Frame はホストが acquire の中で出す
         # (能力の呼出しの規約からは呼ばない)
         ("measurement", c.ACQUISITION_RESULT_SAMPLING, empty, c.SEGMENT_REQUESTED, c.SEGMENT_REPORT),
+        # K27: 取りに行き方「済んだら次」。実行は本体の SourceMeasurer (能力の呼出しの規約からは呼ばない)
+        ("measurement", c.ACQUISITION_REPEAT_WHEN_DONE, empty, c.SEGMENT_REQUESTED, c.SEGMENT_REPORT),
     )
     declarations = tuple(CapabilityDeclaration(kind=kind, ref=ref, args_contract=args, input_contract=inp,
                                                output_contract=out, dependencies=(), conditions=())

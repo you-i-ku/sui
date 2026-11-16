@@ -31,7 +31,7 @@ from fb_stage_map import STAGE_MAP
 from fb_targets import TARGETS
 from test_fb_skeleton import (ContractGap, PAPER, boot, contract, gap, reading,
                               segment_items, point, source, work_outcomes, test_registry,
-                              WitnessLauncher, require_boot_v2)
+                              WitnessLauncher, require_boot_v3)
 
 
 def test_need_structural_contract_gap():
@@ -1312,7 +1312,7 @@ def test_stage1_raw_field(rid, rig):
     probe = RAW_FIELD_PROBES[rid]
     event = RAW_EXAMPLES[probe["example"]]
     if isinstance(event, fb.Boot):
-        require_boot_v2()
+        require_boot_v3()
     # object() is outside every declared outer type, including free JSON and nullable DTOs.
     bad = malformed_raw_example(probe)
     target = c.BOOT_DECLARATION if isinstance(event, fb.Boot) else c.CLOCK_NOTICE if isinstance(
@@ -1336,7 +1336,7 @@ def test_stage1_raw_branch(rid, rig):
     probe = RAW_BRANCH_PROBES[rid]
     event, foil = probe["event"], probe["foil"]
     if isinstance(event, fb.Boot):
-        require_boot_v2()
+        require_boot_v3()
     target = c.BOOT_DECLARATION if isinstance(event, fb.Boot) else c.SEGMENT_REPORT
     expected = wire(event.declaration if isinstance(event, fb.Boot) else event)
     other = wire(foil.declaration if isinstance(foil, fb.Boot) else foil)
@@ -1444,3 +1444,29 @@ def test_stage1_catalogue_inventory(request):
             function = node.split("::")[1].split("[")[0]
             assert callable(globals().get(function)), node
             assert node in collected, node
+
+
+@pytest.mark.parametrize("assembly", ["stage1", "stage2"])
+def test_legal_boot_shared_repeat_registry_creates_measurement_request(assembly):
+    """K27-R1: missing repeat must not silently block a legal stage-1/stage-2 Boot.
+
+    Use public accept/settle/drain and actual saved Q, not a status-only proxy
+    for work creation. No measurement worker needs to be run for this boundary.
+    """
+    rig = RealRig(connect=False)
+    try:
+        if assembly == "stage2":
+            from test_fb_stage2 import registry
+            rig.registry = registry()
+        rig.host = fb.FThreadHost(ledger=rig.ledger, clock=rig.clock,
+                                 workers=rig.workers, registry=rig.registry)
+        rig.install_legal_boot(initial=False)
+        request, = rig.facts(c.SEGMENT_REQUESTED)
+        expected = {"contract": {"name": "sui.fb.acquisition_repeat_when_done", "version": "1"}, "args": {}}
+        assert request.value["desc"]["args"]["repeat"] == expected
+        work, = rig.host.window.drain()
+        assert work.request == request.cid and work.desc.purpose == "measure_segment"
+        assert wire(work.desc.args.repeat) == expected
+        assert not any(p.reason == "route:route:missing_contract" for p in rig.host.window.status().pending)
+    finally:
+        rig.close()

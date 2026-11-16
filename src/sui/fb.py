@@ -155,13 +155,15 @@ class Allocation:
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class BootstrapRoute:
-    """`sui.fb.bootstrap_route/1`: 設定全文・測る過程・初期割当。initial=None でも残る (Q2)。
+    """`sui.fb.bootstrap_route/2`: 設定全文・測る過程・初期割当。initial=None でも残る (Q2)。
     reading_contract は区間の報告の結びつき B が写す読み方の契約 (§6-8 B1)。None は読み方を
-    宣言しない口で、測定と原報告は続くが B は作らない。"""
+    宣言しない口で、測定と原報告は続くが B は作らない。repeat は次をいつ取りに行くかの取りに行き方
+    (§6-10 K27 新しい決定 2。1 標本が何かの sampling_contract とは別の意味。人が置く最初の方式で差し替えの口)。"""
     config: RouteConfig
     process_slot: str
     allocation: SlotValue
     reading_contract: ContractRef | None
+    repeat: MethodCall
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -197,7 +199,7 @@ class Environment:
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class BootDeclaration:
-    """起動の宣言 (§2-5-3、`sui.fb.boot_declaration/2`)。資源範囲 1 つ・量の契約 1 つ・bootstrap の口と測る過程 1 つが
+    """起動の宣言 (§2-5-3、`sui.fb.boot_declaration/3`)。資源範囲 1 つ・量の契約 1 つ・bootstrap の口と測る過程 1 つが
     この版の合法な縦の 1 本。capacity の実値は宣言で受け取り、既定値を置かない。observation_models は取得の列を読む
     観測モデル (各 SlotValue の contract = `sui.fb.acquisition_observation_model/1`、value = AcquisitionObservationModel)。
     起動の時にホストが各項から独立した Prediction / MODEL の記録を保存する (§6-10 K26-a (ア)・K26-b)。宣言しない時は
@@ -318,7 +320,7 @@ measurement_unavailable・claim・coverage_unproved。F-a の DTO はそのま�
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class Boot:
-    """I-6。知らせは `sui.s4.boot/1` と `sui.fb.boot_declaration/2` の 2 slot。"""
+    """I-6。知らせは `sui.s4.boot/1` と `sui.fb.boot_declaration/3` の 2 slot。"""
     declaration: BootDeclaration
 
 
@@ -395,10 +397,12 @@ class Ongoing:
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class SegmentArgs:
     """requested は有限の区間か、続けて測る要求 (v0.25 §6-5: 前の requested_interval は両端の
-    整数を要し、測り始める前に終わりを決めさせていた)。"""
+    整数を要し、測り始める前に終わりを決めさせていた)。repeat は起動の時に route から写した取りに行き方
+    (§6-10 K27 新しい決定 2、要求を自己完結に)。"""
     route: Point
     requested: MeasurementInterval | Ongoing
     start_reason: str
+    repeat: MethodCall
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -910,20 +914,31 @@ class FThreadHost:
 
 
 class SourceMeasurer:
-    """本体の測る係 (§6-10 K23・K25)。測る仕事の本体で、口の源へ 1 回取りに行く。
-    入場 → Started → acquire() を 1 回 (取得の結果の Frame と原文は、仲立ちしたホストが acquire の中で預ける。
-    係は Frame を出さない) → stop() が呼ばれるまで在る (この版は続けて取りに行かない) → 取得の後から止まるまでの
-    区間は CoverageUnproved (見張っていない間を「来なかった」にしない) → Ended。測る仕事以外は TypeError
+    """本体の測る係 (§6-10 K23・K25・K27)。測る仕事の本体で、要求の取りに行き方 (`SegmentArgs.repeat`) が
+    「済んだら次」(`sui.fb.acquisition_repeat_when_done/1`、args は {}) の時、止める合図まで口の源へ取りに行きを
+    くり返す。入場 → Started → [開始受付 → acquire()] をくり返す (取得の結果の Frame と原文は、仲立ちしたホストが
+    acquire の中で預ける。係は Frame を出さない。結果によらず同じ取りに行き方で、待ち・周期・回数の上限を置かない)
+    → 最後の回の after から止まるまでの区間は CoverageUnproved (見張っていない間を「来なかった」にしない) → Ended。
+
+    開始受付 (K27 新しい決定 5): 係の鍵の下で止める合図が無いことを確かめてこの回を始めると決め、acquire() を
+    呼ぶ前に鍵を放す (返らない read の間も stop() は合図を立てられる)。合図の後に開始受付される回は無い。始めた回は
+    決着まで待ち、その結果を残す。扱えない取りに行き方は、入場して取りに行かずに Ended (unsupported_repeat) で
+    終わる (断って pending へ戻すと起こし直しが続く、決定 4)。acquire() の例外 (止まったホスト・家の人の中の
+    失敗) は偽りの結果にせず上げて、係はそこで止まる (決定 6・7)。測る仕事以外は TypeError
     (ほかの仕事の係と束ねるのは使う側)。"""
 
     def __init__(self) -> None:
-        from threading import Event
-        self._stop = Event()
+        from threading import Lock
+        self._gate = Lock()       # 開始受付の境界 (止める合図と同じ鍵)
+        self._stopping = False
 
     def stop(self) -> None:
-        self._stop.set()
+        with self._gate:
+            self._stopping = True
 
     def run(self, work: "FWork", ctx: FWorkContext) -> None:
+        import json
+        from collections.abc import Mapping
         from . import fb_contracts as c
         if not isinstance(work, MeasureSegment):
             raise TypeError("SourceMeasurer runs measuring works only")
@@ -933,19 +948,32 @@ class SourceMeasurer:
         def report(slot: str, item: "SegmentItem") -> None:
             ctx.post(SegmentReport(segment=work.request, item_slot=slot, item=item))
 
+        def route_epoch() -> int:
+            # 公開の取得が無い時: 要求の route が指す保存済みの設定を公開の read で読む (決定 4)
+            return json.loads(ctx.read(work.desc.args.route))["config"]["route_epoch"]
+
         work_id = work.desc.work_id
-        report("started", SegmentBoundary(kind="started", work=work_id, reading=ctx.now(), reason="entered",
+        started = ctx.now()
+        report("started", SegmentBoundary(kind="started", work=work_id, reading=started, reason="entered",
                                           evidence=()))
-        taken = ctx.acquire()
-        run, epoch = taken.after.reading.run, taken.route_epoch
-        self._stop.wait()
+        repeat = work.desc.args.repeat
+        supported = (repeat.contract == c.ACQUISITION_REPEAT_WHEN_DONE
+                     and isinstance(repeat.args, Mapping) and not repeat.args)
+        last, epoch = started, None
+        while supported:
+            with self._gate:          # 開始受付
+                if self._stopping:
+                    break
+            taken = ctx.acquire()     # 鍵の外で (始めた回は決着まで)
+            last, epoch = taken.after, taken.route_epoch
         ended = ctx.now()
         report("unproved", CoverageUnproved(
-            route_epoch=epoch,
-            interval=MeasurementInterval(clock=run, start_ns=taken.after.reading.time_ns,
+            route_epoch=route_epoch() if epoch is None else epoch,
+            interval=MeasurementInterval(clock=last.reading.run, start_ns=last.reading.time_ns,
                                          end_ns=ended.reading.time_ns, closure="(start,end]"),
             missing_contracts=(c.NO_ARRIVAL,), evidence=()))
-        report("ended", SegmentBoundary(kind="ended", work=work_id, reading=ended, reason="stopped", evidence=()))
+        report("ended", SegmentBoundary(kind="ended", work=work_id, reading=ended,
+                                        reason="stopped" if supported else "unsupported_repeat", evidence=()))
 
 
 class FiniteUpdater:

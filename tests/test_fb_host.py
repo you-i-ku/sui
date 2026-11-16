@@ -10,7 +10,7 @@ import pytest
 from sui import f, fb
 from sui import fb_contracts as c
 from sui.contracts import ContractRef
-from test_fb_skeleton import DeclaredNeed, DeclaredWorkerMethod, WitnessLauncher, boot, contract, source
+from test_fb_skeleton import DeclaredNeed, DeclaredWorkerMethod, WitnessLauncher, boot, contract, source, repeat_registry_entries
 from test_fb_stage1 import RealRig, accept_and_save, make_rig, pump_window
 
 
@@ -158,7 +158,8 @@ class FlakyNeed(DeclaredNeed):
 
 
 def registry_with(need):
-    declarations, implementations = [], []
+    repeat_declarations, repeat_implementations = repeat_registry_entries()
+    declarations, implementations = list(repeat_declarations), list(repeat_implementations)
     for name, kind, callback, input_contract, output in (
         ("test.need", "method", need, c.NEED_INPUT, c.QUANTITY_VALUE),
         ("test.sampling", "measurement", DeclaredWorkerMethod(), contract("test.fixed_input"), c.SEGMENT_REPORT),

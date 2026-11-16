@@ -144,9 +144,22 @@ class DeclaredWorkerMethod:
         return {"args": args, "input": input}
 
 
+def repeat_registry_entries():
+    """K27/K27-a(b): copy only the public repeat pair, retaining code identities."""
+    repeat = ContractRef("sui.fb.acquisition_repeat_when_done", "1")
+    builtin = u2.fb_registry_v1()
+    declarations = tuple(d for d in builtin.declarations if d.ref == repeat)
+    assert len(declarations) == 1 and declarations[0].kind == "measurement", (
+        "K27 public registry declaration missing: acquisition_repeat_when_done/1 measurement")
+    implementations = tuple(i for i in builtin.implementations
+                            if i.kind == "measurement" and i.ref == repeat)
+    return declarations, implementations
+
+
 def test_registry():
     """Build an actual immutable registry using explicit test declarations."""
-    declarations, implementations = [], []
+    repeat_declarations, repeat_implementations = repeat_registry_entries()
+    declarations, implementations = list(repeat_declarations), list(repeat_implementations)
     for name, kind, callback, input_contract, output in (
         ("test.need", "method", DeclaredNeed(), c.NEED_INPUT, c.QUANTITY_VALUE),
         ("test.sampling", "measurement", DeclaredWorkerMethod(), contract("test.fixed_input"), c.SEGMENT_REPORT),
@@ -166,6 +179,31 @@ def test_registry():
 
 
 test_registry.__test__ = False
+
+
+@pytest.mark.parametrize("assembly", ["stage1", "stage2", "loop", "host-need"])
+def test_shared_registries_preserve_public_repeat_declaration_and_identity(assembly):
+    """K27-R1: omitting repeat in any shared assembly blocks its otherwise legal Boot.
+
+    Only the required name/kind comes from paper. Compare stable implementation
+    identity, not callback object equality across public factory invocations.
+    """
+    expected_declarations, expected_implementations = repeat_registry_entries()
+    if assembly == "stage1":
+        actual = test_registry()
+    elif assembly == "stage2":
+        from test_fb_stage2 import registry
+        actual = registry()
+    elif assembly == "loop":
+        from test_fb_loop import registry
+        actual = registry()
+    else:
+        from test_fb_host import registry_with
+        actual = registry_with(DeclaredNeed())
+    repeat = ContractRef("sui.fb.acquisition_repeat_when_done", "1")
+    assert tuple(d for d in actual.declarations if d.ref == repeat) == expected_declarations
+    assert {(i.kind, i.ref, i.identity) for i in actual.implementations if i.ref == repeat} == {
+        (i.kind, i.ref, i.identity) for i in expected_implementations}
 
 
 def real_components():
@@ -232,14 +270,20 @@ def budget():
     return RateBudget(Fraction(1, 1000), 1000, 1000, 10)
 
 
-def require_boot_v2():
-    """K26-b: a missing prerequisite is a failed case, never a skip/xfail."""
+def require_boot_v3():
+    """K27: missing public fields/versions fail each case, never collection."""
     missing = []
     if "observation_models" not in {field.name for field in fields(fb.BootDeclaration)}:
         missing.append("BootDeclaration.observation_models")
-    if c.BOOT_DECLARATION != ContractRef("sui.fb.boot_declaration", "2"):
-        missing.append("BOOT_DECLARATION/2")
-    assert not missing, "K26-b public names/fields/version missing: " + ", ".join(missing)
+    for cls in (fb.BootstrapRoute, fb.SegmentArgs):
+        if "repeat" not in {field.name for field in fields(cls)}:
+            missing.append(cls.__name__ + ".repeat")
+    for name, version in (("BOOT_DECLARATION", "3"), ("BOOTSTRAP_ROUTE", "2"), ("SEGMENT_REQUESTED", "2")):
+        if getattr(c, name).version != version:
+            missing.append(name + "/" + version)
+    if not hasattr(c, "ACQUISITION_REPEAT_WHEN_DONE"):
+        missing.append("ACQUISITION_REPEAT_WHEN_DONE")
+    assert not missing, "K27 public names/fields/version missing: " + ", ".join(missing)
 
 
 # Parameter data must remain collectable before the required public field exists.
@@ -248,17 +292,29 @@ def require_boot_v2():
 # Once the public field exists, even collection uses the real public constructor.
 if "observation_models" not in {field.name for field in fields(fb.BootDeclaration)}:
     @dataclass(frozen=True, slots=True, kw_only=True)
-    class _BootV2CollectionValue(fb.BootDeclaration):
+    class _BootV3CollectionValue(fb.BootDeclaration):
         observation_models: tuple[fb.SlotValue, ...]
 else:
-    _BootV2CollectionValue = fb.BootDeclaration
+    _BootV3CollectionValue = fb.BootDeclaration
+
+_RouteCollectionValue = (fb.BootstrapRoute if "repeat" in {f.name for f in fields(fb.BootstrapRoute)}
+    else make_dataclass("RouteCollectionValue", [("repeat", fb.MethodCall)],
+                       bases=(fb.BootstrapRoute,), frozen=True, slots=True, kw_only=True))
+_SegmentCollectionValue = (fb.SegmentArgs if "repeat" in {f.name for f in fields(fb.SegmentArgs)}
+    else make_dataclass("SegmentCollectionValue", [("repeat", fb.MethodCall)],
+                       bases=(fb.SegmentArgs,), frozen=True, slots=True, kw_only=True))
+
+
+def repeat_method():
+    return fb.MethodCall(contract=contract("sui.fb.acquisition_repeat_when_done"), args={})
 
 
 def boot(initial=False, *, _for_collection=False):
-    """Boot /2 structure example; unspecified methods remain explicit (CG-METHOD)."""
+    """Boot /3; collection-only subtypes never certify absent public fields."""
     if not _for_collection:
-        require_boot_v2()
-    declaration_type = _BootV2CollectionValue if _for_collection else fb.BootDeclaration
+        require_boot_v3()
+    declaration_type = _BootV3CollectionValue if _for_collection else fb.BootDeclaration
+    route_type = _RouteCollectionValue if _for_collection else fb.BootstrapRoute
     def allocation(name):
         return slot(name, c.ALLOCATION, fb.Allocation(scope_slot="scope",
                     amount=fb.QuantityValue(contract=c.SEATS, value=1)))
@@ -282,9 +338,9 @@ def boot(initial=False, *, _for_collection=False):
         capacity=fb.QuantityValue(contract=c.SEATS, value=2),
         scope=slot("scope", c.RESOURCE_SCOPE, fb.ResourceScope(
             quantity_contract=c.SEATS, need=method("test.need"))),
-        routes=(slot("route", c.BOOTSTRAP_ROUTE, fb.BootstrapRoute(
+        routes=(slot("route", ContractRef("sui.fb.bootstrap_route", "2"), route_type(
             config=route(), process_slot="sensing", allocation=allocation("sensing-allocation"),
-            reading_contract=c.FINITE_SEGMENT_PROJECTION)),),
+            reading_contract=c.FINITE_SEGMENT_PROJECTION, repeat=repeat_method())),),
         initial=initial_value,
         environment=slot("environment", c.ENVIRONMENT,
                          fb.Environment(data={"fixture": "shape-only"})),
@@ -340,9 +396,13 @@ def view():
                         reader_view_key="fixture-view", registry_key="fixture-registry")
 
 
-def args_by_stage():
+def args_by_stage(*, _for_collection=False):
+    if not _for_collection:
+        require_boot_v3()
+    segment_type = _SegmentCollectionValue if _for_collection else fb.SegmentArgs
     return {
-        "measure_segment": fb.SegmentArgs(route=point("route"), requested=interval(), start_reason="bootstrap"),
+        "measure_segment": segment_type(route=point("route"), requested=interval(), start_reason="bootstrap",
+                                        repeat=repeat_method()),
         "candidate_generation": fb.CandidateArgs(model=point("model"), generator_args={}, basis=()),
         "belief_update": fb.UpdateArgs(model=point("model"), prior=None,
             observations=(fb.ObservationUse(binding=point("segment-binding"), reading=point("reading")),)),
@@ -428,13 +488,13 @@ def test_draw_outcome_branches(branch):
     fb.DrawReturned(work="unknown", outcome=draw_outcomes()["unknown"])], ids=lambda e: type(e).__name__)
 def test_six_events_and_envelope(event):
     if isinstance(event, fb.Boot):
-        require_boot_v2()  # Collection-only data cannot certify the missing public declaration.
+        require_boot_v3()  # Collection-only data cannot certify the missing public declaration.
     envelope = fb.Envelope(number=7, event=event, received_ns=20)
     assert envelope.event is event
     assert isinstance(event, get_args(fb.FEvent))
 
 
-@pytest.mark.parametrize("stage", tuple(args_by_stage()))
+@pytest.mark.parametrize("stage", tuple(args_by_stage(_for_collection=True)))
 def test_six_work_uses(stage):  # v0.25 §6-6: belief_update 1 つ (前は 8 用途)
     assert set(get_args(fb.Stage)) == set(args_by_stage())
     assert set(get_args(fb.FWork)) == {fb.MeasureSegment, fb.Compute, fb.Draw}
@@ -456,7 +516,7 @@ def test_six_status_shape_representatives(meaning):
 
 
 def test_public_entry_signatures():
-    require_boot_v2()
+    require_boot_v3()
     # K26-a/b: the declaration is mandatory and the pure reader takes its saved Point.
     constructor = signature(fb.BootDeclaration)
     observation_models = constructor.parameters["observation_models"]
@@ -472,7 +532,13 @@ def test_public_entry_signatures():
     assert get_type_hints(fb.read_acquisition_sequence) == {
         "records": Mapping[str, Record], "model": str, "run": Ref, "route_epoch": str,
         "through_seq": int, "return": fb.AcquisitionReadResult}
-    assert c.BOOT_DECLARATION == ContractRef("sui.fb.boot_declaration", "2")
+    assert c.BOOT_DECLARATION == ContractRef("sui.fb.boot_declaration", "3")
+    assert c.BOOTSTRAP_ROUTE == ContractRef("sui.fb.bootstrap_route", "2")
+    assert c.SEGMENT_REQUESTED == ContractRef("sui.fb.segment_requested", "2")
+    assert c.ACQUISITION_REPEAT_WHEN_DONE == contract("sui.fb.acquisition_repeat_when_done")
+    for cls in (fb.BootstrapRoute, fb.SegmentArgs):
+        assert signature(cls).parameters["repeat"].default is signature(cls).parameters["repeat"].empty
+        assert get_type_hints(cls)["repeat"] == fb.MethodCall
     assert c.ACQUISITION_OBSERVATION_MODEL == contract("sui.fb.acquisition_observation_model")
     assert c.ACQUISITION_RESULT_PROJECTION == contract("sui.fb.acquisition_result_projection")
     # K23(2)(a): an optional route_epoch -> FSource mapping is supplied by the caller.
@@ -670,7 +736,7 @@ FB_FIELD_SPEC = {
     "FixedView": "boundary:frozenset[Point];reader_view_key:str;registry_key:str|None",
     "ResourceScope": "quantity_contract:ContractRef;need:MethodCall",
     "Allocation": "scope_slot:str;amount:QuantityValue",
-    "BootstrapRoute": "config:RouteConfig;process_slot:str;allocation:SlotValue;reading_contract:ContractRef|None",
+    "BootstrapRoute": "config:RouteConfig;process_slot:str;allocation:SlotValue;reading_contract:ContractRef|None;repeat:MethodCall",
     "InitialProcess": "process_slot:str;reader_slot:str;model:Point;generator:MethodCall;method:MethodCall;draw:MethodCall;prepare_budget:RateBudget;evaluate_budget:RateBudget;allocation:SlotValue;derivation:SlottedMethod;continuation:MethodCall|None",  # v0.26 §6-9 H3・H4、§6-10 J6・K1 (Z41: 更新の上限の欄は無い)
     "Environment": "data:ImmutableJSON",
     "BootDeclaration": "capacity:QuantityValue;scope:SlotValue;routes:tuple[SlotValue,...];initial:SlotValue|None;environment:SlotValue;observation_models:tuple[SlotValue,...]",
@@ -698,7 +764,7 @@ FB_FIELD_SPEC = {
     "DrawReturned": "work:str;outcome:DrawOutcome",
     "Trigger": "point:Point;slot:str",
     "Ongoing": "clock:Ref",
-    "SegmentArgs": "route:Point;requested:MeasurementInterval|Ongoing;start_reason:str",
+    "SegmentArgs": "route:Point;requested:MeasurementInterval|Ongoing;start_reason:str;repeat:MethodCall",
     "CandidateArgs": "model:Point;generator_args:ImmutableJSON;basis:tuple[Point,...]",
     "ObservationUse": "binding:Point;reading:Point",  # v0.27 §6-10 J2
     "UpdateArgs": "model:Point;prior:Point|None;observations:tuple[ObservationUse,...]",  # v0.27 §6-10 J2 (Z41: 上限の欄は無い)

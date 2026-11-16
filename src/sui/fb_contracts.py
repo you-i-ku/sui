@@ -11,7 +11,8 @@ from .contracts import ContractRef as _ContractRef
 SEATS = _ContractRef("sui.fb.seats", "1")
 RESOURCE_SCOPE = _ContractRef("sui.fb.resource_scope", "1")
 ALLOCATION = _ContractRef("sui.fb.allocation", "1")
-BOOTSTRAP_ROUTE = _ContractRef("sui.fb.bootstrap_route", "1")
+# /2 (§6-10 K27 新しい決定 2): 取りに行き方の欄 repeat を足した (旧 /1 は片付けた、Z37)
+BOOTSTRAP_ROUTE = _ContractRef("sui.fb.bootstrap_route", "2")
 INITIAL_PROCESS = _ContractRef("sui.fb.initial_process", "1")
 ENVIRONMENT = _ContractRef("sui.fb.environment", "1")
 # δ の契約 (§2-5-4)。v0.25 §6-4 で火種を受信だけから保存済みの事実へ広げ、段 3 で `received_update/1` から
@@ -30,14 +31,16 @@ QUANTITY_VALUE = _ContractRef("sui.fb.quantity_value", "1")
 RECEIVED = _ContractRef("sui.fb.received", "1")
 # I-7 の時計の知らせ (§6-9 K1)。窓口が同じ run の起動との対応を確かめて既存 sui.clock.source/1 を発行する
 CLOCK_NOTICE = _ContractRef("sui.fb.clock_notice", "1")
-# /2 (§6-10 K26-a (ア)): 型のついた欄 observation_models を足した (旧 /1 は片付けた、Z37)
-BOOT_DECLARATION = _ContractRef("sui.fb.boot_declaration", "2")
+# /2 (§6-10 K26-a (ア)): 型のついた欄 observation_models を足した。/3 (K27): 中の bootstrap_route が /2 に
+# なった (旧版は片付けた、Z37)
+BOOT_DECLARATION = _ContractRef("sui.fb.boot_declaration", "3")
 SEGMENT_REPORT = _ContractRef("sui.fb.segment_report", "1")
 WORK_REPORT = _ContractRef("sui.fb.work_report", "1")
 DRAW_REPORT = _ContractRef("sui.fb.draw_report", "1")
 
 # sui の要求・選択・採用の確定 (Decided / MODEL / FACT)
-SEGMENT_REQUESTED = _ContractRef("sui.fb.segment_requested", "1")
+# /2 (§6-10 K27): 測る仕事の要求の args に route から写した取りに行き方 repeat を足した (旧 /1 は片付けた)
+SEGMENT_REQUESTED = _ContractRef("sui.fb.segment_requested", "2")
 CANDIDATE_REQUEST = _ContractRef("sui.fb.candidate_request", "1")
 WORK_REQUESTED = _ContractRef("sui.fb.work_requested", "1")
 EVALUATION_REQUESTED = _ContractRef("sui.fb.evaluation_requested", "1")
@@ -74,6 +77,10 @@ COUNT_EXACTLY_ONE = _ContractRef("sui.fb.count_exactly_one", "1")
 # 測り方の契約 (§6-10 K25): 1 標本 = ホストが仲立ちした 1 回の取得の結果 (taken・empty・unavailable)。
 # Frame はホストが acquire の中で出す。件数や区切りそのものを Frame の値とは呼ばない
 ACQUISITION_RESULT_SAMPLING = _ContractRef("sui.fb.acquisition_result_sampling", "1")
+# 取りに行き方 (§6-10 K27): 前の取りに行きが決着したら (結果によらず) 止める合図を確かめて次を取りに行く。
+# 待ち・周期・回数の上限を置かない。args は {}。人が置く最初の方式 (差し替えの口、P9 ①)。実行は本体の
+# SourceMeasurer が担う (能力の呼出しの規約からは呼ばない)
+ACQUISITION_REPEAT_WHEN_DONE = _ContractRef("sui.fb.acquisition_repeat_when_done", "1")
 BOOTSTRAP_GENERATION = _ContractRef("sui.fb.bootstrap_generation", "1")
 SEGMENT_VALUE_ONLY = _ContractRef("sui.fb.segment_value_only", "1")
 # 入口 U (§6-3): 一次事実から計算して IssuedUpdate を発行する。結果 R* は既存の

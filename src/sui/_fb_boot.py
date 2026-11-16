@@ -119,7 +119,9 @@ def plan_boot(state, declaration, d) -> BootPlan:
             continue
         if not (_declared(state, "measurement", config.sampling_contract)
                 and _declared(state, "clock", config.clock_contract)
-                and _declared(state, "measurement", config.loss_contract)):
+                and _declared(state, "measurement", config.loss_contract)
+                # 取りに行き方の契約が宣言されていること (§6-10 K27 新しい決定 2)。扱えるかは見張り役が決める
+                and _declared(state, "measurement", route.repeat.contract)):
             plan.missing.append(f"route:{route_slot.slot}:missing_contract")
             continue
         state.allocations[_fb.BootSlot(declaration=d, slot=route.allocation.slot)] = route.allocation.value.amount
@@ -280,7 +282,7 @@ def _route_steps(route_slot):
             method=route.config.sampling_contract, output_contract=_c.SEGMENT_REPORT,
             # G1: 続けて測る。終わりを先に数にしない (§6-5)
             args=_fb.SegmentArgs(route=route_point, requested=_fb.Ongoing(clock=state.clock.run),
-                                 start_reason="bootstrap"),
+                                 start_reason="bootstrap", repeat=route.repeat),   # K27: 起動の時に固定
             input_points=frozenset({d, route_point}), numerical_view=None,
             allocation=_fb.BootSlot(declaration=d, slot=route.allocation.slot),
             permissions=frozenset({_fb.BootSlot(declaration=d, slot=name),

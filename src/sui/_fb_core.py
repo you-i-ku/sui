@@ -799,11 +799,14 @@ class WorkContext:
         準備 (時計の出どころを握る → before → 原文の名札を用意。共有の状態は変えない) → 源を読む (受付の鍵の外) →
         確定 (受付の鍵の下で 1 回: M を 1 回読む = after = 原文と取得の Frame の受信の時刻 → 封筒と控えを組み立て
         終える → 公開)。源の読みの鍵は準備の頭から確定の終わりまで持つ。源を読んだ後・公開の前の例外では何も
-        公開しない (片方だけ預けない・番号だけ進めない)。その回の結果と時刻は残らない (損失、★S5・紙 Z49)。"""
+        公開しない (片方だけ預けない・番号だけ進めない)。その回の結果と時刻は残らない (損失、★S5・紙 Z49)。
+        ホストが止まっていたら、始める時に 1 回だけ確かめて FHalted (RuntimeError、何も起きていない。K27 新しい決定 6)。
+        源を読んでいる間に止まった回は公開されうるが、止まったホストは受付・settle を進めないので台帳に入らない。"""
         from ._fb_bind import _route
         state, row = self._state, self._row
         with state.lock:
             self._require_entered()
+            require_running(state)
             if not isinstance(row.work, _fb.MeasureSegment):
                 raise RuntimeError("only a measuring work port can acquire from its source")
             route, _applied = _route(state, row.work.desc.args.route)

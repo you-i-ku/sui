@@ -1,7 +1,8 @@
 """K25/K25-a, F-b v0.81 :3527-3528, public Boot/Post and real host/store boundaries.
 
-No implementation body is read/patched. Resolve K25 names per test. Production
-SourceMeasurer takes once; repetitions explicitly use test-owned workers.
+No implementation body is read/patched. Resolve public names per test. K27:
+single-acquisition K25 probes hold a public forwarding return until the TEST
+sends stop(); one acquisition is no longer a production worker limit.
 Deposition (A), reconstruction (B) and independent correspondence (C) are separate.
 
 CG-K25-ES-NAMES and CG-K25-TAIL are closed by K25-a(a)/(d): directly
@@ -25,7 +26,7 @@ from sui import f, fb, fb_contracts as c, f_update2 as u
 from sui.ids import Ref, RefKind
 from sui.records import Payload, Prediction, Role
 from gate_f_facts_cases import finite_world, plain
-from test_fb_skeleton import boot, contract, source
+from test_fb_skeleton import boot, contract, source, require_boot_v3
 from test_fb_stage1 import RealRig, wire
 from test_fb_stage2 import PREPARE_BUDGET, EVALUATE_BUDGET, LaunchCut, Workers as Stage2Workers
 from test_fb_loop import LoopRig, registry, delta_args, execution_for, CLOCK_SOURCE
@@ -37,6 +38,7 @@ CLAIMS = {"sender_time_ns": -900, "nested": {"text": "unclassified", "values": [
 
 
 def acquire1_api():
+    require_boot_v3()
     missing = [name for owner, names in (
         (fb, ("FSource", "SourceItem", "Acquisition", "SourceMeasurer")),
         (fb.FWorkContext, ("now", "acquire")), (u, ("SourceObservation",)),
@@ -142,6 +144,18 @@ class AcquirePort(fb.FWorkContext):
     def evidence(self):
         return self.delegate.evidence()
 
+    def read(self, point):
+        return self.delegate.read(point)
+
+    def monitored(self, interval):
+        return self.delegate.monitored(interval)
+
+    def reader(self):
+        return self.delegate.reader()
+
+    def prepared(self):
+        return self.delegate.prepared()
+
     def post(self, event, issued=None):
         self.rig.worker_posts.append((self.work.desc.work_id, event))
         self.delegate.post(event, issued=issued)
@@ -185,7 +199,24 @@ class AcquirePort(fb.FWorkContext):
             rig.changed.notify_all()
         if rig.hold_return:
             assert rig.return_release.wait(30), "test did not release the acquire return"
+        if rig.script is None and rig.gate_production_return:
+            # K25 examines one operation. The test holds this forwarding return
+            # until stop(), rather than relying on an obsolete one-shot worker.
+            assert rig.production_returns.setdefault(self.work.desc.work_id, Event()).wait(30), "test did not stop the production probe"
         return acquired
+
+
+class AcquireStopGate:
+    """Test-owned stop forwarding; the actual SourceMeasurer still owns run()."""
+    def __init__(self, delegate, release):
+        self.delegate, self.release = delegate, release
+    def run(self, work, ctx):
+        return self.delegate.run(work, ctx)
+    def stop(self):
+        try:
+            self.delegate.stop()
+        finally:
+            self.release.set()
 
 
 class AcquireWorkers(Stage2Workers):
@@ -193,13 +224,16 @@ class AcquireWorkers(Stage2Workers):
         if work.desc.purpose != "measure_segment":
             return super().run(work, ctx)
         rig = self.rig
-        port = AcquirePort(rig, work, ctx)
+        port = rig.port_type(rig, work, ctx)
         rig.ports[work.desc.work_id], rig.work_by_id[work.desc.work_id] = port, work
         self.contexts["measure_segment"] = ctx
         rig.registered.setdefault(work.desc.work_id, Event()).set()
         try:
             if rig.script is None:
                 measurer = rig.api.SourceMeasurer()
+                if rig.gate_production_return:
+                    measurer = AcquireStopGate(measurer,
+                        rig.production_returns.setdefault(work.desc.work_id, Event()))
                 rig.measurers[work.desc.work_id] = measurer
                 if rig.closing:
                     measurer.stop()
@@ -227,6 +261,8 @@ class AcquireRig(LoopRig):
         self.clock.set(0)
         self.clock = AcquireClock(self.clock, tick)
         self.api, self.script, self.expected_errors = api, script, ()
+        self.port_type, self.gate_production_return = AcquirePort, True
+        self.production_returns = {}
         self.registry, self.launcher = registry(), LaunchCut()
         self.workers = AcquireWorkers(self)
         self.ports, self.work_by_id, self.measurers, self.now_reads = {}, {}, {}, {}
@@ -1456,7 +1492,7 @@ def test_acquire1_production_copy_memory_error_publishes_nothing_and_preserves_c
     normally returning FSource.read. No host function or private state is used.
     Swallowing MemoryError as unavailable fails the no-publication/stop checks;
     publishing half a pair or consuming a counter fails the EH/ES/next-take checks.
-    Both measuring jobs use production SourceMeasurer, each calling acquire once.
+    Both jobs use production SourceMeasurer; the TEST gates each returned take until stop().
     The second take is a new observation, not recovery of the lost first result.
     """
     api = acquire1_api()
@@ -1547,7 +1583,7 @@ def test_acquire1_production_unfinished_copy_is_not_source_unavailable(make_acqu
     iterator itself raises RuntimeError; no host function or exception is mocked.
     Turning either failure into unavailable, publishing a partial result or
     consuming counters fails the stop/EH/ES/next-take checks. Each of the two
-    production measuring jobs calls acquire once. Repairing the external claims
+    production jobs is gated by the test after its returned take. Repairing the external claims
     permits a new observation; it does not recover the failed take's result/time.
     """
     import sys
