@@ -268,14 +268,21 @@ def read1_unreadable(result, reason):
 
 
 def read1_extra_frame(scene, seq=0, *, change=None):
+    """K28 migration (reader only): supplement the pure reader through the test ledger.
+
+    This does not claim a producer can publish a Frame or that the host accepted
+    it. Positive sequences still come from genuine acquire operations above.
+    """
     call = scene.calls[seq]
     frame = acquire1_expected_frame(scene.rig, call, scene.raws[seq])
     frame = change(frame) if change is not None else frame
     event = fb.SegmentReport(segment=call.work.request, item_slot=f"reader-extra:{seq}", item=frame)
-    call.port.post(event)
-    scene.rig.until(lambda: any(r.value == wire(event) for r in scene.rig.reports("frame")))
-    extra, = (r for r in scene.rig.reports("frame") if r.value == wire(event))
-    return extra
+    original = scene.rig.read_stored(scene.frames[seq].cid)[2]
+    record = replace(original, id=scene.rig.ids.new(original.id.kind),
+        body=replace(original.body, content=Payload.json(wire(event))))
+    prepared = scene.rig.ledger.prepare(record, ())
+    saved = scene.rig.ledger.write(prepared)
+    return scene.rig.one(c.SEGMENT_REPORT, cid=saved.cid)
 
 
 def test_read1_projection_contract_has_a_separate_public_entry():

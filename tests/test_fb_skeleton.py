@@ -430,7 +430,14 @@ def desc(stage):
         allocation=fb.BootSlot(declaration=point("boot"), slot="allocation"), permissions=frozenset({boot_ref}))
 
 
+def require_belief_updates():
+    """K28-a/b: resolve new public status names at test time, never collection."""
+    assert hasattr(fb, "BeliefUpdateStatus"), "K28 public status missing: BeliefUpdateStatus"
+    assert "updates" in {field.name for field in fields(fb.FStatus)}, "K28 public status missing: FStatus.updates"
+
+
 def status_examples():
+    require_belief_updates()
     unsaved = fb.Unsaved(plan="accepted-plan")
     evidence = fb.StatusBasis(view=view(), basis=(point("basis"), unsaved))
     return dict(
@@ -449,6 +456,9 @@ def status_examples():
             process=fb.BootSlot(declaration=point("boot"), slot="sensing"), reader=None,
             target=point("request"), part=interval(), handled=True, handed_to=unsaved,
             unmet=True, evidence=evidence),),
+        updates=(fb.BeliefUpdateStatus(model=point("model"), origin=point("origin"), route_epoch="route-A",
+            sample_seq=0, obligation=point("B"), request=point("Q"), outcome="adopted", reading="read",
+            reasons=(), fields=(), published_through=0, saved_through=0, adopted_through=0),),
     )
 
 
@@ -506,7 +516,7 @@ def test_six_work_uses(stage):  # v0.25 §6-6: belief_update 1 つ (前は 8 用
     assert isinstance(d.args, get_args(fb.WorkArgs))
 
 
-@pytest.mark.parametrize("meaning", tuple(status_examples()))
+@pytest.mark.parametrize("meaning", ("receipts", "works", "readings", "pending", "segments", "purposes", "updates"))
 def test_six_status_shape_representatives(meaning):
     result = fb.FStatus(**status_examples())
     assert getattr(result, meaning)
@@ -517,6 +527,8 @@ def test_six_status_shape_representatives(meaning):
 
 def test_public_entry_signatures():
     require_boot_v3()
+    require_belief_updates()
+    assert get_type_hints(fb.FStatus)["updates"] == tuple[fb.BeliefUpdateStatus, ...]
     # K26-a/b: the declaration is mandatory and the pure reader takes its saved Point.
     constructor = signature(fb.BootDeclaration)
     observation_models = constructor.parameters["observation_models"]
@@ -785,7 +797,7 @@ FB_FIELD_SPEC = {
     "CellStatus": "interval:MeasurementInterval;reports:tuple[Literal['frame','gap','measurement_unavailable','claim','coverage_unproved'],...];certified:bool;evidence:StatusBasis",
     "SegmentStatus": "segment:Held;cells:tuple[CellStatus,...];ended:bool;evidence:StatusBasis",
     "PurposeStatus": "obligation:Held;o_id:str;condition:Literal['issue','save','run','handle','stop'];role:str;process:BootSlot|None;reader:Point|None;target:Held|None;part:MeasurementInterval|None;handled:bool;handed_to:Held|None;unmet:bool;evidence:StatusBasis",
-    "FStatus": "receipts:tuple[ReceiptStatus,...];works:tuple[WorkStatus,...];readings:tuple[ReadingStatus,...];pending:tuple[PendingStatus,...];segments:tuple[SegmentStatus,...];purposes:tuple[PurposeStatus,...]",
+    "FStatus": "receipts:tuple[ReceiptStatus,...];works:tuple[WorkStatus,...];readings:tuple[ReadingStatus,...];pending:tuple[PendingStatus,...];segments:tuple[SegmentStatus,...];purposes:tuple[PurposeStatus,...];updates:tuple[BeliefUpdateStatus,...]",
     # K23(2)(a)(c), handwritten from the new paper declarations.
     "SourceItem": "media_type:str;data:bytes;claims:ImmutableJSON",
     "Acquisition": "route_epoch:str;cursor:int;before:ReadingClock;after:ReadingClock;outcome:Literal['taken','empty','unavailable'];reason:str;item:SourceItem|None",
@@ -857,9 +869,9 @@ FA_ALIAS_SPEC = {
 def test_public_export_names_are_exact():
     expected = set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
         "FbInputError", "FbHostFault", "FHalted", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost",
-        "FSource", "SourceMeasurer", "FiniteUpdater", "read_acquisition_sequence"}
+        "FSource", "SourceMeasurer", "FiniteUpdater", "read_acquisition_sequence", "BeliefUpdateStatus"}
     missing = expected - set(fb.__all__)
-    assert not missing, "K26 public export names missing: " + ", ".join(sorted(missing))
+    assert not missing, "K28 public export names missing: " + ", ".join(sorted(missing))
     assert set(fb.__all__) == expected
     assert set(u2.__all__) == set(UPDATE_FIELD_SPEC) | set(UPDATE_ALIAS_SPEC) | {
         "fb_registry_v1", "compute_finite_update", "update_response"}
@@ -881,6 +893,8 @@ def declaration_names(surface=fb, *, group="fb"):
                  MeasurementInterval=f.MeasurementInterval)
     if group == "fb":
         names.update({name: getattr(f, name) for name in (*FA_FIELD_SPEC, *FA_ALIAS_SPEC)})
+        if hasattr(surface, "BeliefUpdateStatus"):
+            names["BeliefUpdateStatus"] = surface.BeliefUpdateStatus
     module, field_spec, alias_spec = {
         "fb": (surface, FB_FIELD_SPEC, FB_ALIAS_SPEC),
         "f": (f, FA_FIELD_SPEC, FA_ALIAS_SPEC),
@@ -936,8 +950,25 @@ def assert_exact_fields(actual, declaration, names):
     for name in table
 ])
 def test_public_fields_and_annotations_are_exact(group, name):
+    if group == "fb" and name == "FStatus": require_belief_updates()
     module, table = {"fb": (fb, FB_FIELD_SPEC), "f": (f, FA_FIELD_SPEC), "update": (u2, UPDATE_FIELD_SPEC)}[group]
     assert_exact_fields(getattr(module, name), table[name], declaration_names(group=group))
+
+
+def test_public_belief_update_status_fields():
+    """K28-a(b), K28-b(a/h): exact field names, known optional tails and FStatus owner.
+
+    The paper does not fix a Literal-vs-str annotation for outcome. Its closed
+    vocabulary is tested on live rows, rather than guessing a Python spelling.
+    """
+    require_belief_updates()
+    assert {field.name for field in fields(fb.BeliefUpdateStatus)} == {
+        "model", "origin", "route_epoch", "sample_seq", "obligation", "request", "outcome",
+        "reading", "reasons", "fields", "published_through", "saved_through", "adopted_through"}
+    hints = get_type_hints(fb.BeliefUpdateStatus)
+    for name in ("published_through", "saved_through", "adopted_through"):
+        assert hints[name] == int | None
+    assert get_type_hints(fb.FStatus)["updates"] == tuple[fb.BeliefUpdateStatus, ...]
 
 
 @pytest.mark.parametrize("group,name", [(group, name) for group, table in

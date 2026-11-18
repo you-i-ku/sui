@@ -41,7 +41,7 @@ __all__ = [
     "WorkArgs", "Desc", "MeasureSegment", "Compute", "Draw", "FWork",
     "Unsaved", "Held", "StatusBasis", "SlotStatus", "ReceiptStatus", "WorkStatus",
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
-    "PurposeStatus", "FStatus", "FWorkContext", "FWorkers", "LaunchResult", "FLauncher", "FWindow",
+    "PurposeStatus", "BeliefUpdateStatus", "FStatus", "FWorkContext", "FWorkers", "LaunchResult", "FLauncher", "FWindow",
     "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater",
     "AcquisitionControl", "AcquisitionObservationModel", "AcquisitionReadItem", "AcquisitionReadResult",
     "read_acquisition_sequence",
@@ -628,6 +628,33 @@ class PurposeStatus:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
+class BeliefUpdateStatus:
+    """意味 7 (見立てへ通す、§6-10 K28 新しい決定 11 の B1・K28-a (イ)): 取りに行きの列の 1 回 (sample_seq) ごとの到達と結末。
+    model・origin・route_epoch・sample_seq がどの見立てのどの回か。obligation はその回の Frame の結びつき B (まだ無ければ None)、
+    request は保存した更新要求 Q* (まだ無ければ None)。outcome は 1 つの語: 待ち (waiting_storage = その回の Frame か原文の
+    保存がまだ / waiting_binding = B がまだ / waiting_predecessor = 前の回が採用されて確認されていない / waiting_confirmation =
+    採用の判断を公開したが保存の確認がまだ / requested = 更新の仕事が終わっていない / recording = 仕事は終わり、結果・
+    結果の取得・採用の判断を記録している途中 (時計の出どころが無ければ理由 clock) / ready = 次の更新要求を作れる) か、
+    結末 (adopted・stale・rejected・insufficient・failure・unknown・stopped・conflicted・issued:shape・update:issued:*)。
+    adopted 以外はどれも先の回を採用へ進めない。reading はその回までを K26 の読み口で読んだ段 (read・model_zero・unreadable。まだ読んでいなければ None)。
+    reasons・fields は U の不適合・不足の理由の語と欄 (閉じた一覧、自由な文は載せない) と、待ちの理由。末尾 3 つは列全体の
+    公開・保存がそろった・採用を確認した最後の番号 (無ければ None。数の端に意味を持たせない)。"""
+    model: Point
+    origin: Point | None
+    route_epoch: str
+    sample_seq: int
+    obligation: Held | None
+    request: Held | None
+    outcome: str
+    reading: _Literal["read", "model_zero", "unreadable"] | None
+    reasons: tuple[str, ...]
+    fields: tuple[str, ...]
+    published_through: int | None
+    saved_through: int | None
+    adopted_through: int | None
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
 class FStatus:
     """窓口の公開の操作の境目でとった整合した局所の像 (M1)。正本の状態・判断の入力・
     仕事を出す命令にしない。試験の期待値の生成元にもしない。"""
@@ -637,6 +664,7 @@ class FStatus:
     pending: tuple[PendingStatus, ...]
     segments: tuple[SegmentStatus, ...]
     purposes: tuple[PurposeStatus, ...]
+    updates: tuple[BeliefUpdateStatus, ...]
 
 
 # --- 口の源と、そこからの取り出し (§6-10 K23) ---
@@ -759,8 +787,8 @@ class FWorkContext(_Protocol):
     EW・EH・EI・EA の独立の観測 (ホストが自分で行った操作の時の読み。窓口の印や台帳の自己申告から
     作らない、§6-3)。
     read(point) は保存済みの記録の本文を読む唯一の口で、ホストがその実使用 (UseObservation) を
-    M の読みとともに記録する。monitored(interval) は測る仕事が実際に見張った区間を報告と別の
-    道でホストに残す (IntervalObservation)。どちらも窓口の状態を変えず、記録を保存しない。
+    M の読みとともに記録する。monitored(interval) は係が渡した区間の控えを報告と別の道で
+    ホストに残す (IntervalObservation。ホストは区間を確かめない。取りに行きの道はこれを使わない、K28 の B3')。どちらも窓口の状態を変えず、記録を保存しない。
     開始の札を取っていない口の read・monitored は RuntimeError で、証拠に足さない (§6-10 J8・K11)。
     reader() はその仕事の Desc の numerical_view の境界と input_points の閉包だけを読む不変の読み手
     (像の外を読ませない、§6-9 H5)。numerical_view も input_points も無い仕事では None。
@@ -982,8 +1010,9 @@ class FiniteUpdater:
     ホストが出した信念の更新の仕事 (`Compute`、`desc.purpose == "belief_update"`) を受け、その口の固定の
     範囲を読み手にして入口 U (`f_update2.compute_finite_update`) を呼び、返答をその仕事の口から
     `WorkFinished` で返す。発行 (issued) の時だけ、発行物を口へ添える。不適合 (rejected)・不足 (insufficient) は
-    U の返答のまま運ぶ。U の実行が例外で続けられなかった時は失敗 (`WorkFailure`、例外の型の名前だけ) として返し、
-    不適合・不足・発行と取り違えない。完成した joint を外から受け取らない。
+    U の返答のまま運ぶ。U の実行が例外で続けられなかった時は失敗 (`WorkFailure`) として返し、不適合・不足・発行と
+    取り違えない。失敗の中身は例外の型の名前と、U の入口が自分で上げた入力の誤りの時だけその閉じた一覧の理由の語と欄
+    (`f_update2._failure_content`、K28-a (ウ))。例外の自由な文は載せない。完成した joint を外から受け取らない。
 
     `registry` は、組み立てる側がホストへ渡したものと同じ `FRegistry` を明示して渡す (係の中で作らない)。
     見立てを直す仕事以外を渡されたら TypeError (束ねるのは使う側)。読める報告の種類はこの係では増えない。"""
@@ -1005,7 +1034,7 @@ class FiniteUpdater:
                 return Unavailable(reason="clock_source_unavailable", basis=())
 
         started = reading()
-        issued, error = None, None
+        issued, error = None, None   # error は失敗の中身 (dict)
         try:
             reader = ctx.reader()
             if reader is None:
@@ -1015,13 +1044,13 @@ class FiniteUpdater:
             outputs = _u.update_response(returned)
             issued = returned if isinstance(returned, IssuedUpdate) else None
         except Exception as exc:   # 実行の障害。U が返した不適合・不足とは別の枝で返す
-            error = type(exc).__name__
+            error = _u._failure_content(exc)
         finished = reading()
         if error is None:
             outcome: WorkOutcome = WorkOutputs(outputs=outputs)
         else:
             outcome = WorkFailure(failure=FailureInfo(
-                failure_kind="execution_error", content={"error_type": error},
+                failure_kind="execution_error", content=error,
                 readings=(started, finished), basis=()))
         ctx.post(WorkFinished(work=work.desc.work_id, started=started, finished=finished, outcome=outcome),
                  issued=issued)

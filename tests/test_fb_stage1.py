@@ -397,14 +397,6 @@ class RealRig:
         witness.report(ctx, fb.SegmentReport(segment=work.request, item_slot="end", item=fb.SegmentBoundary(
             kind="ended", work=work.desc.work_id, reading=self.actual_reading(), reason="test end", evidence=())))
 
-    def report_two_actual_intervals(self, work, ctx, witness):
-        for index in range(2):
-            witness.report(ctx, fb.SegmentReport(segment=work.request, item_slot=f"test-unavailable-{index}",
-                item=f.MeasurementUnavailable(route_epoch=self.boot_input.declaration.routes[0].value.config.route_epoch,
-                    # v0.25 §6-5 G1: 要求は続けて測る枝でもよい。報告は 1 つずつ有限の区間 (要求の時計で)
-                    requested_interval=f.MeasurementInterval(clock=work.desc.args.requested.clock,
-                        start_ns=index * 10, end_ns=(index + 1) * 10, closure="(start,end]"),
-                    reason="test sensor unavailable", evidence=())))
 
 
 def make_rig(*, initial=False, launcher=None):
@@ -638,17 +630,6 @@ def test_status_and_drain_do_not_consume_work_or_write(rig):
     assert rig.workers.entries == []
 
 
-def test_initial_none_continues_measuring_receiving_and_saving(rig):
-    """B:263,3239: two report intervals and independent receive, not merely absence of Compute."""
-    rig.install_legal_boot(initial=False)
-    rig.workers.action = rig.report_two_actual_intervals
-    rig.host.post(received())
-    run_until_witness(rig, lambda: len(rig.facts(c.SEGMENT_REPORT)) >= 2 and len(rig.facts(c.RECEIVED)) == 1)
-    assert rig.workers.entries
-    assert all(isinstance(w, fb.MeasureSegment) for w in rig.workers.entries)
-    assert not rig.facts(c.CANDIDATE_REQUEST)
-    assert not rig.facts(c.EVALUATION_REQUESTED)
-    assert not rig.facts(c.SELECTION)
 
 
 def test_initial_plan_saved_with_origin_qgen_and_unstarted_wg():
@@ -690,16 +671,6 @@ def test_partial_initial_plan_is_not_complete_and_recovers_same_plan(boundary):
         rig.close()
 
 
-@pytest.mark.parametrize("branch", tuple(segment_items()))
-def test_all_segment_raw_reports_preserve_shape_without_certifying_unknown_request(rig, branch):
-    """B:471,2216-2235: unknown claimed Point legal raw; never forge a successful binding."""
-    event = fb.SegmentReport(segment=point("unknown-request"), item_slot="fixed", item=segment_items()[branch])
-    accept_and_save(rig, rig.envelope(1, event, 30), c.SEGMENT_REPORT, 1)
-    assert not rig.facts(c.SEGMENT_BINDING)
-    # Exact retransmission in a new envelope retains two raw receipts.
-    records = accept_and_save(rig, rig.envelope(2, event, 31), c.SEGMENT_REPORT, 2)
-    assert records[0].value == records[1].value
-    assert records[0].cid != records[1].cid
 
 
 def test_ended_and_actual_worker_stop_are_different(rig):
@@ -1306,7 +1277,21 @@ def test_stage1_raw_field_probes_are_constructible():
         assert probe["nearest_legal"] == ORIGINAL_BY_ID[rid]["nearest_legal"]
 
 
-@pytest.mark.parametrize("rid", tuple(RAW_FIELD_PROBES))
+def closed_raw_event(event):
+    return isinstance(event, fb.SegmentReport) and isinstance(event.item,
+        (f.MeasurementFrame, f.CoverageClaim, f.Gap, f.MeasurementUnavailable))
+
+
+def closed_raw_field_probe(rid):
+    return closed_raw_event(RAW_EXAMPLES[RAW_FIELD_PROBES[rid]["example"]])
+
+
+def closed_raw_branch_probe(rid):
+    probe = RAW_BRANCH_PROBES[rid]
+    return closed_raw_event(probe["event"]) or closed_raw_event(probe["foil"])
+
+
+@pytest.mark.parametrize("rid", tuple(rid for rid in RAW_FIELD_PROBES if not closed_raw_field_probe(rid)))
 def test_stage1_raw_field(rid, rig):
     """An executable exact input-field contrast, not a case-name-only connection."""
     probe = RAW_FIELD_PROBES[rid]
@@ -1330,9 +1315,9 @@ def test_stage1_raw_field(rid, rig):
     assert not rig.facts(c.SEGMENT_BINDING)  # unknown raw names have not been certified
 
 
-@pytest.mark.parametrize("rid", tuple(RAW_BRANCH_PROBES))
+@pytest.mark.parametrize("rid", tuple(rid for rid in RAW_BRANCH_PROBES if not closed_raw_branch_probe(rid)))
 def test_stage1_raw_branch(rid, rig):
-    """Both branches legal as raw reports; retyping an already accepted envelope is not."""
+    """K28: closed evidence branches are rejected; allowed branch contrasts keep their old meaning."""
     probe = RAW_BRANCH_PROBES[rid]
     event, foil = probe["event"], probe["foil"]
     if isinstance(event, fb.Boot):
@@ -1390,13 +1375,15 @@ def collected_id(value):
 STAGE1_CONNECTIONS = {
     row["id"]: dict(
         focus={name: ORIGINAL_BY_ID[row["id"]][name] for name in ("subject", "field", "branch", "use", "negative", "nearest_legal")},
-        references=(f"tests/test_fb_stage1.py::test_stage1_raw_field[{collected_id(row['id'])}]",) if row["id"] in RAW_FIELD_PROBES else
-                   (f"tests/test_fb_stage1.py::test_stage1_raw_branch[{collected_id(row['id'])}]",) if row["id"] in RAW_BRANCH_PROBES else
+        references=(("tests/test_fb_belief.py::test_belief1_closed_raw_field_ingress_is_rejected" if closed_raw_field_probe(row["id"])
+                     else "tests/test_fb_stage1.py::test_stage1_raw_field") + f"[{collected_id(row['id'])}]",) if row["id"] in RAW_FIELD_PROBES else
+                   (("tests/test_fb_belief.py::test_belief1_closed_raw_branch_contrasts_are_ingress_refusals" if closed_raw_branch_probe(row["id"])
+                     else "tests/test_fb_stage1.py::test_stage1_raw_branch") + f"[{collected_id(row['id'])}]",) if row["id"] in RAW_BRANCH_PROBES else
                    (f"tests/test_fb_stage1.py::test_stage1_record_field[{collected_id(row['id'])}]",) if row["id"] in RECORD_FIELD_PROBES else
                    tuple("tests/test_fb_stage1.py::" + node for node in EXACT_SCENARIO_LINKS[row["id"]]) if row["id"] in EXACT_SCENARIO_LINKS else
                    (f"tests/test_fb_stage1.py::test_stage1_obligation_connection[{row['policy']}]",),
-        connection="raw_field_contrast" if row["id"] in RAW_FIELD_PROBES else
-                   "raw_branch_contrast" if row["id"] in RAW_BRANCH_PROBES else
+        connection=("closed_ingress_refusal" if closed_raw_field_probe(row["id"]) else "raw_field_contrast") if row["id"] in RAW_FIELD_PROBES else
+                   ("closed_ingress_refusal" if closed_raw_branch_probe(row["id"]) else "raw_branch_contrast") if row["id"] in RAW_BRANCH_PROBES else
                    "record_field_integrity_contrast" if row["id"] in RECORD_FIELD_PROBES else
                    "exact_scenario_bundle" if row["id"] in EXACT_SCENARIO_LINKS else "unconnected",
         execution="not_run") for row in STAGE1_ROWS
@@ -1438,12 +1425,26 @@ def test_stage1_catalogue_inventory(request):
     assert not set(RAW_BRANCH_PROBES) & (set(RAW_FIELD_PROBES) | set(RECORD_FIELD_PROBES) | set(EXACT_SCENARIO_LINKS))
     assert set(EXACT_SCENARIO_LINKS) <= STAGE1_IDS
     assert sum(map(len, UNCONNECTED_BY_POLICY.values())) + len(RAW_FIELD_PROBES) + len(RAW_BRANCH_PROBES) + len(RECORD_FIELD_PROBES) + len(EXACT_SCENARIO_LINKS) == len(STAGE1_ROWS)
-    collected = {item.nodeid for item in request.session.items}
+    # K28 moves the refusal cases into test_fb_belief.py. A stage-1-only run
+    # must still check those exact declared parameters, without requiring the
+    # other file to have been selected for execution.
+    import test_fb_belief as belief_tests
+    external = {}
+    for name in ("test_belief1_closed_raw_field_ingress_is_rejected",
+                 "test_belief1_closed_raw_branch_contrasts_are_ingress_refusals"):
+        function = getattr(belief_tests, name)
+        marks = [mark for mark in function.pytestmark
+                 if mark.name == "parametrize" and mark.args[0] == "rid"]
+        assert len(marks) == 1, name
+        for rid in marks[0].args[1]:
+            external[f"tests/test_fb_belief.py::{name}[{collected_id(rid)}]"] = function
+    collected = {item.nodeid: item for item in request.session.items}
     for row in STAGE1_CONNECTIONS.values():
         for node in row["references"]:
-            function = node.split("::")[1].split("[")[0]
-            assert callable(globals().get(function)), node
-            assert node in collected, node
+            if node.startswith("tests/test_fb_belief.py::"):
+                assert node in external and callable(external[node]), node
+            else:
+                assert node in collected and callable(collected[node].obj), node
 
 
 @pytest.mark.parametrize("assembly", ["stage1", "stage2"])

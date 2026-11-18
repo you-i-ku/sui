@@ -11,6 +11,11 @@
 作らない。作った記録は消さず、準備済みの記録の保存と診断の T は続ける。判定は毎回の settle で受け付けた配送から導く。
 止めるまでで、戻し方は S5、本人が選ぶ口は S10。
 
+取りに行きの δ (`sui.fb.saved_acquisition_update/1`、紙 F-b K28・K28-a): 物語の対応の記録 → 読み方 reading の順に保存し、
+家の人が acquire で残した取りに行きの Frame の B ごとに義務を 1 つ持つ。番号 i + 1 の Q* は、i の義務が今採用されていて
+その採用の判断の保存が確認済みで、0〜i + 1 の Frame と原文が保存済みの時だけ作る (順を飛ばさない。採用以外の結末なら
+先は待つ。札の系列の K13「非採用でも次へ」はこの列に当てない)。待ちと結末は `statuses` で FStatus.updates に出す (B1)。
+
 最初の輪の 1 周目は正常な道だけ。★ 1 周の後: ホストの監視の記録と入力の取得 (K4・K5)、失敗の後の目的の表示 (J9-c)。
 """
 
@@ -28,6 +33,9 @@ from ._fb_wire import dumps as _dumps, encode as _encode
 from .ids import RefKind as _RefKind
 from .records import Decided as _Decided, Observed as _Observed, Payload as _Payload, \
     Prediction as _Prediction, Role as _Role
+from .contracts import ContractRef as _ContractRef
+
+_VALUE_ONLY = _ContractRef("sui.f.value_only", "1")   # 取りに行きの読み方の時間の射影 (K28-a (カ))
 
 
 @_dataclass
@@ -41,6 +49,10 @@ class Obligation:
     done: bool = False           # Wu の終わりを処理した
     final: str | None = None     # adopted / stale / rejected / insufficient / failure / unknown / stopped / conflicted / issued:*
     acquired_ns: int | None = None   # 結果 R* を実際に取得した時の M の読み (最初の 1 回で固定、入り直しで取り直さない)
+    seq: int | None = None       # 取りに行きの列の番号 (取りに行きの δ だけ)
+    reading: str | None = None   # Q* の入力の 0〜seq を K26 の読み口で読んだ段 (read / model_zero / unreadable、表示用)
+    reasons: tuple = ()          # U の不適合・不足の理由の語 (閉じた一覧、表示用)
+    fields: tuple = ()           # U の不適合・不足の欄 (表示用)
 
 
 @_dataclass
@@ -54,6 +66,7 @@ class UpdatePlan:
     missing: list = _field(default_factory=list)
     obligations: dict = _field(default_factory=dict)   # 原報告の Point → Obligation (見つけた順)
     chain: list = _field(default_factory=list)         # 保存を確認した採用 A* の Point (採用した順)。最後が系列の頭
+    kind: str = "segment"        # δ の方法: segment (区間の札、saved_segment_update/1) / acquisition (取りに行き)
 
 
 class _Pair:
@@ -151,24 +164,104 @@ def _reading_step():
 
 
 def _plan(state, boot):
+    """δ の方法の名前と版で計画を選ぶ (P9)。読めない方法も計画を置いて不足を示す (計画を作らずに黙らない、K28 の B1)。"""
     initial_slot = boot.declaration.initial
     initial = initial_slot.value
     method = initial.derivation.method
-    if method.contract != _c.SAVED_SEGMENT_UPDATE:
-        return None
     plan = UpdatePlan(boot=boot, initial=initial, slot=initial_slot.slot, args=_plain(method.args))
-    reason = _check_args(boot, plan.args)
+    if method.contract == _c.SAVED_SEGMENT_UPDATE:
+        reason = _check_args(boot, plan.args)
+        steps = [_law_step(), _reading_step()]
+    elif method.contract == _c.SAVED_ACQUISITION_UPDATE:
+        plan.kind = "acquisition"
+        reason = _check_acquisition_args(boot, plan.args)
+        steps = [_correspondence_step(), _acquisition_reading_step()]
+    else:
+        reason, steps = "delta:method", []
     if reason is not None:
         _hold(plan, reason)
     else:
-        plan.steps = [_law_step(), _reading_step()]
+        plan.steps = steps
     return plan
+
+
+# --- 取りに行きの δ: 物語の対応と読み方 (K28 (2)(a)〜(c)・K28-a (ア)) ---
+
+def _check_acquisition_args(boot, args):
+    """取りに行きの δ の args の形: {route, observation_model, correspondence: {pairs}}。対応の中身 (1 対 1・target) と
+    宣言どうしの一致は U が検査する。ここは計画を置けるかだけ (口・観測モデル・取りに行き方を名指せるか)。"""
+    if not hasattr(args, "items") or set(args) != {"route", "observation_model", "correspondence"} \
+            or not isinstance(args["route"], str) or not isinstance(args["observation_model"], str):
+        return "delta:args"
+    routes = {r.slot: r.value for r in boot.declaration.routes}
+    route = routes.get(args["route"])
+    if route is None:
+        return "delta:route"
+    if route.reading_contract != _c.ACQUISITION_SEQUENCE_PROJECTION:
+        return "delta:reading_contract"
+    if route.repeat.contract != _c.ACQUISITION_REPEAT_WHEN_DONE or _plain(route.repeat.args) != {}:
+        return "delta:repeat"   # この本で読める取りに行き方は「済んだら次」だけ (K28 新しい決定 9)
+    models = {m.slot: m.value for m in boot.declaration.observation_models}
+    model = models.get(args["observation_model"])
+    if model is None or getattr(model, "route_slot", None) != args["route"]:
+        return "delta:observation_model"
+    correspondence = args["correspondence"]
+    if not hasattr(correspondence, "items") or set(correspondence) != {"pairs"} \
+            or not isinstance(correspondence["pairs"], list) \
+            or any(not isinstance(p, list) or len(p) != 2 or not all(isinstance(x, str) for x in p)
+                   for p in correspondence["pairs"]):
+        return "delta:correspondence"
+    return None
+
+
+def _correspondence_step():
+    """物語の対応の記録 (`sui.fb.state_correspondence/1`、Prediction / MODEL): 見立てのモデルの Point と、その口の観測モデルの
+    記録の Point を解いて、起動の宣言の pairs と一緒に保存する (K28-a (ア))。読み方より先。"""
+    def build(state, plan):
+        from ._fb_core import Slot
+        observation = plan.boot.points.get("observation_model:" + plan.args["observation_model"])
+        if observation is None or plan.boot.points.get("origin") is None:
+            return None
+        ledger = state.ledger
+        content = {"model": plan.initial.model, "observation_model": observation,
+                   "pairs": plan.args["correspondence"]["pairs"]}
+        body = _Prediction(target="state_correspondence", about=(ledger.record(plan.initial.model).id,),
+                           basis=(ledger.record(plan.initial.model).id, ledger.record(observation).id),
+                           content=_Payload.json(content), contract=_c.STATE_CORRESPONDENCE)
+        return Slot(contract=_c.STATE_CORRESPONDENCE, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
+                    parents=_front(ledger, {plan.boot.d}))
+    return _Step(name="correspondence", build=build)
+
+
+def _acquisition_reading_step():
+    """読み方 (`sui.f.observation_plan/2`): projection = `acquisition_sequence_projection/1` {observation_model, correspondence,
+    time_projection}、generation = `acquisition_generation/1` {}。"""
+    def build(state, plan):
+        from ._fb_core import Slot
+        observation = plan.boot.points["observation_model:" + plan.args["observation_model"]]
+        correspondence = plan.points["correspondence"]
+        content = {"model": plan.initial.model,
+                   "projection": {"contract": _f._encode(_c.ACQUISITION_SEQUENCE_PROJECTION),
+                                  "args": {"observation_model": observation, "correspondence": correspondence,
+                                           "time_projection": {"contract": _f._encode(_VALUE_ONLY), "args": {}}}},
+                   "generation": {"contract": _f._encode(_c.ACQUISITION_GENERATION), "args": {}}}
+        ledger = state.ledger
+        body = _Prediction(target="observation_plan", about=(ledger.record(plan.initial.model).id,),
+                           basis=(ledger.record(plan.initial.model).id, ledger.record(observation).id,
+                                  ledger.record(correspondence).id),
+                           content=_Payload.json(content), contract=_c.OBSERVATION_PLAN_2)
+        return Slot(contract=_c.OBSERVATION_PLAN_2, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
+                    parents=_front(ledger, {plan.boot.d}))
+    return _Step(name="reading", build=build)
 
 
 # --- 義務 (J1) と系列の頭 (K9・K13) ---
 
 def _discover(state, plan) -> None:
     """保存した B のうち、δ の口の原 Claim に義務を置く (J1)。扱えない枝は意味の不足として示す。"""
+    if plan.kind == "acquisition":
+        _discover_acquisitions(state, plan)
+        return
     route = plan.boot.points.get("route_config:" + plan.args["route"])
     meanings = {(e["meaning"]["name"], e["meaning"]["version"]) for e in plan.args["claims"]}
     for slot in state.bindings.values():
@@ -188,6 +281,68 @@ def _discover(state, plan) -> None:
         ob = Obligation(report=b["report"], binding=slot.entry.cid)
         ob.steps = [_q_step(ob)]
         plan.obligations[b["report"]] = ob
+
+
+def _epoch(plan):
+    return next(r.value.config.route_epoch for r in plan.boot.declaration.routes if r.slot == plan.args["route"])
+
+
+def _frame_value(state, report):
+    """保存した原報告の Frame (MeasurementFrame)。Frame でなければ None。"""
+    item = state.ledger.record(report).body.content.as_json()["item"]
+    return _f._decode(item["value"], _f.MeasurementFrame) if item["kind"] == "frame" else None
+
+
+def _received(frame):
+    """取れた (taken) 回の原文の名札 (Ref)。空・取れなかった回は None。"""
+    from .ids import Ref
+    result = frame.value["result"]
+    return _f._decode(result["received"], Ref) if result["kind"] == "taken" else None
+
+
+def _discover_acquisitions(state, plan) -> None:
+    """保存した B のうち、δ の口の取りに行きの Frame (この run・この口の route_epoch、家の人の acquire が作ったもの) に
+    義務を 1 つ置く (K28 新しい決定 5)。何も主張しない札 (CoverageUnproved) は義務にしない。"""
+    route = plan.boot.points.get("route_config:" + plan.args["route"])
+    reading, epoch = _f._encode(_c.ACQUISITION_SEQUENCE_PROJECTION), _epoch(plan)
+    for slot in state.bindings.values():
+        if slot.entry is None:
+            continue
+        b = slot.record.body.content.as_json()
+        if b["route"] != route or b["report"] in plan.obligations:
+            continue
+        frame = _frame_value(state, b["report"])
+        if frame is None:
+            continue
+        mid = frame.measurement_id
+        if mid.component != "source_acquisition" or mid.origin != state.clock.run or mid.route_epoch != epoch \
+                or b["reading_contract"] != reading:
+            _hold(plan, "delta:frame")
+            continue
+        if any(ob.seq == mid.sample_seq for ob in plan.obligations.values()):
+            _hold(plan, "delta:sample_seq")   # 同じ番号の別の Frame (今の入口では作られない)
+            continue
+        ob = Obligation(report=b["report"], binding=slot.entry.cid, seq=mid.sample_seq)
+        ob.steps = [_q_step(ob)]
+        plan.obligations[b["report"]] = ob
+
+
+def _raw_saved(state, report) -> bool:
+    """取れた (taken) 回の原文が保存済みか。空・取れなかった回は原文が無い。"""
+    received = _received(_frame_value(state, report))
+    return received is None or len(state.ledger.entries_of(received)) == 1
+
+
+def _next_acquisition(plan, state):
+    """次に Q* を作る取りに行きの義務 (K28 新しい決定 5): 番号 i = 採用を確認した数 (系列の頭までの 0〜i - 1 は採用されて
+    確認済みで、その原文は前の Q* の入力にある)。採用以外の結末・進行中・確認待ちがあれば待つ。i の Frame・B と原文が
+    保存済みの時だけ。印でなく状態で決める。"""
+    if _head(plan) == "wait" or any(ob.final not in (None, "adopted") for ob in plan.obligations.values()):
+        return None
+    ob = next((ob for ob in plan.obligations.values() if ob.seq == len(plan.chain)), None)
+    if ob is None or ob.desc is not None or not _raw_saved(state, ob.report):
+        return None
+    return ob
 
 
 def _receipt_order(state, report):
@@ -225,7 +380,10 @@ def _silent_stop(state, row) -> bool:
 
 def _next(state, plan):
     """次に Q* を作る義務: まだ要求の無い義務のうち、ホストが原報告を受け取った順で最初の 1 つ。
-    受け取った順の分からない義務があれば選ばない。食い違いで止まった義務 (結末 conflicted) は、後ろを待たせない。"""
+    受け取った順の分からない義務があれば選ばない。食い違いで止まった義務 (結末 conflicted) は、後ろを待たせない。
+    取りに行きの δ は番号の順で、前が採用されて確認されるまで次を選ばない (`_next_acquisition`)。"""
+    if plan.kind == "acquisition":
+        return _next_acquisition(plan, state)
     waiting = [ob for ob in plan.obligations.values() if ob.desc is None and ob.final is None]
     orders = [(_receipt_order(state, ob.report), ob) for ob in waiting]
     if not orders:
@@ -305,7 +463,7 @@ def _names(plan, ob):
     前の採用・B の CID は入れない。"""
     d = plan.boot.d
     key = {"delta": {"declaration": d, "slot": plan.initial.derivation.slot},
-           "delta_contract": _encode(_c.SAVED_SEGMENT_UPDATE),
+           "delta_contract": _encode(plan.initial.derivation.method.contract),
            "process": {"declaration": d, "slot": plan.initial.process_slot},
            "origin": plan.boot.points["origin"], "raw_report": ob.report, "role": "trigger",
            "purpose": "belief_update"}
@@ -320,8 +478,18 @@ def _inputs(state, plan, ob, prior) -> frozenset:
     前の採用があればその A*・R*・Q* と、その Q* が読んだ全部 (系列をさかのぼった閉包)。"""
     ledger = state.ledger
     b = ledger.record(ob.binding).body.content.as_json()
-    out = {plan.boot.d, plan.boot.points["origin"], plan.initial.model, plan.points["law"], plan.points["reading"],
-           ob.binding, ob.report, b["segment"], b["route"]}
+    if plan.kind == "acquisition":
+        # 取りに行きの列 (K28 (2)(e)): 観測モデル・物語の対応・読み方と、この回の Frame・B・取れた回の原文。0〜i - 1 の
+        # Frame・B・原文は、前の採用の Q* が読んだ全部 (下の系列をさかのぼった閉包) に入っている
+        out = {plan.boot.d, plan.boot.points["origin"], plan.initial.model, plan.points["correspondence"],
+               plan.points["reading"], plan.boot.points["observation_model:" + plan.args["observation_model"]],
+               ob.binding, ob.report, b["segment"], b["route"]}
+        received = _received(_frame_value(state, ob.report))
+        if received is not None:
+            out.add(ledger.entries_of(received)[0].cid)
+    else:
+        out = {plan.boot.d, plan.boot.points["origin"], plan.initial.model, plan.points["law"], plan.points["reading"],
+               ob.binding, ob.report, b["segment"], b["route"]}
     if prior is not None:
         adopted = ledger.record(prior).body.content.as_json()
         previous = ledger.record(adopted["request"]).body.content.as_json()["desc"]
@@ -335,6 +503,8 @@ def _q_step(ob):
     def build(state, plan_ob):
         from ._fb_core import Slot
         plan, ob = plan_ob
+        if plan.kind == "acquisition" and ob.seq != len(plan.chain):
+            return None   # 取りに行きの列で次になれるのは、番号が採用を確認した数と同じ義務だけ
         if "reading" not in plan.points or _next(state, plan) is not ob:
             return None
         prior = _head(plan)
@@ -373,6 +543,15 @@ def _q_step(ob):
     return _Step(name="Q", build=build, on_prepared=prepared)
 
 
+def _read_stage(state, plan, ob) -> str:
+    """表示用 (K28 新しい決定 8 ⑤): Q* の入力の 0〜seq を K26 の読み口で読んだ段。U の判定とは別に、読みの段の 0
+    (model_zero) と更新の段の 0 (U の model_falsified) を分けて見せる。"""
+    from ._fb_read import read
+    records = {p: state.ledger.record(p) for p in ob.desc.input_points}
+    model = plan.boot.points["observation_model:" + plan.args["observation_model"]]
+    return read(records, model=model, run=state.clock.run, route_epoch=_epoch(plan), through_seq=ob.seq).kind
+
+
 # --- Wu の終わり → T・R*・結果の取得・採用 (K7〜K9) ---
 
 def _issued_result(outputs):
@@ -381,6 +560,15 @@ def _issued_result(outputs):
     if outputs.contract != _c.UPDATE_RESPONSE or not hasattr(value, "items") or set(value) != {"kind", "value"}:
         return None
     return value["value"] if value["kind"] == "issued" else None
+
+
+def _result_shape(value) -> bool:
+    """issued の返答の値が finite_update_result/1 の値として読めるか (形が合わなければ issued:shape)。"""
+    try:
+        _f._decode(value, _f.FiniteUpdateResult)
+    except (_f.FInputError, KeyError, TypeError, ValueError):
+        return False
+    return True
 
 
 def _check_issued(state, ob, row, number, outcome):
@@ -519,12 +707,16 @@ def _finish(state, plan, ob, row) -> None:
         return
     value = outcome.outputs.value
     if outcome.outputs.contract != ob.desc.output_contract or not hasattr(value, "items") \
-            or set(value) != {"kind", "value"} or value["kind"] not in ("issued", "rejected", "insufficient"):
+            or set(value) != {"kind", "value"} or value["kind"] not in ("issued", "rejected", "insufficient") \
+            or value["kind"] == "issued" and not _result_shape(value["value"]):
         ob.final = "issued:shape"
         _hold(plan, "update:response")
         return
     if value["kind"] != "issued":
         ob.final = value["kind"]   # U の正常な判定 (C10)。採用に進めない
+        issues = value["value"]["issues"] if hasattr(value["value"], "items") else ()
+        ob.reasons = tuple(dict.fromkeys(str(i["code"]) for i in issues))   # 表示用 (B1)。自由な文は載せない
+        ob.fields = tuple(dict.fromkeys(str(f) for i in issues for f in i["fields"]))
         return
     issued = _check_issued(state, ob, row, number, outcome)
     if isinstance(issued, str):
@@ -552,6 +744,8 @@ def advance(state) -> None:
             continue
         _discover(state, plan)
         for ob in plan.obligations.values():
+            if plan.kind == "acquisition" and ob.desc is not None and ob.reading is None:
+                ob.reading = _read_stage(state, plan, ob)   # 表示用。読めなければ settle ごと抜けて次で読み直す
             if ob.desc is not None and not ob.done:
                 row = state.works.get(ob.desc.work_id)
                 if row is not None and isinstance(row.work, _fb.Compute) and _saved(state, row.work.request):
@@ -574,6 +768,60 @@ def advance(state) -> None:
                     plan.chain.append(ob.points["A"])
             if ob.final == "adopted" and not ob.points.get("continued"):
                 _continue(state, plan, ob)
+
+
+# --- 公開の状態 (K28 新しい決定 11 の B1・K28-a (イ)) ---
+
+def statuses(state) -> tuple:
+    """取りに行きの δ ごとに、家の人が公開した取りに行きの 1 回ずつの到達と結末 (FStatus.updates)。その都度、P.work の
+    取りに行きの控え・保存・義務から導く (印を持たない)。"""
+    from ._fb_core import _saved_point
+    out = []
+    for plan in state.updates.values():
+        if plan.kind != "acquisition" or not plan.steps:
+            continue
+        route = plan.boot.points.get("route_config:" + plan.args["route"])
+        takes = sorted((take for row in state.works.values() if isinstance(row.work, _fb.MeasureSegment)
+                        and row.work.desc.args.route == route for take in row.takes), key=lambda t: t.sample_seq)
+        if not takes:
+            continue
+        saved = [_saved_point(state, t.frame_envelope) is not None
+                 and (t.envelope is None or _saved_point(state, t.envelope) is not None) for t in takes]
+        through = next((i - 1 for i, ok in enumerate(saved) if not ok), len(saved) - 1)
+        tails = {"published_through": takes[-1].sample_seq, "saved_through": through if through >= 0 else None,
+                 "adopted_through": len(plan.chain) - 1 if plan.chain else None}
+        for take, ok in zip(takes, saved):
+            frame = _saved_point(state, take.frame_envelope)
+            ob = plan.obligations.get(frame) if frame is not None else None
+            reasons, fields = (), ()
+            if ob is not None and ob.final is not None:
+                outcome, reasons, fields = ob.final, ob.reasons, ob.fields
+                if ob.final == "conflicted":
+                    reasons = ("update:conflict",)
+            elif ob is not None and _undecided(ob):
+                outcome = "waiting_confirmation"
+            elif ob is not None and ob.done:
+                # 仕事 Wu は終わり、結果 R*・結果の取得・採用の判断を記録している途中 (時計の出どころが無ければ待つ)
+                outcome = "recording"
+                reasons = ("clock",) if _clock_source(state) is None else ()
+            elif ob is not None and ob.desc is not None:
+                outcome = "requested"
+            elif not ok:
+                outcome = "waiting_storage"
+            elif ob is None:
+                outcome = "waiting_binding"
+                hold = state.binding_missing.get(frame)
+                reasons = (hold.reason,) if hold is not None else ()
+            elif take.sample_seq > len(plan.chain):
+                outcome = "waiting_predecessor"
+            else:
+                outcome = "ready"
+            out.append(_fb.BeliefUpdateStatus(
+                model=plan.initial.model, origin=plan.boot.points.get("origin"), route_epoch=take.route_epoch,
+                sample_seq=take.sample_seq, obligation=ob.binding if ob is not None else None,
+                request=ob.points.get("Q") if ob is not None else None, outcome=outcome,
+                reading=ob.reading if ob is not None else None, reasons=reasons, fields=fields, **tails))
+    return tuple(out)
 
 
 def _continue(state, plan, ob) -> None:

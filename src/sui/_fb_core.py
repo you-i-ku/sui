@@ -79,6 +79,7 @@ class State:
         self.cursors: dict = {}        # route_epoch → 源の次に取り出す番号 (この run の中、0 から。taken の時だけ進む)
         self.samples: dict = {}        # route_epoch → 次の取得の操作の番号 (この run の中、0 から。公開まで進んだ取得の数、K25)
         self.raw_ids: dict = {}        # 封筒の番号 → 取得の前に用意した原文の名札 (Record.id、K25 (d))。受付で使って外す
+        self.acquired: dict = {}       # 家の人が acquire で作った取りに行きの Frame の封筒: 番号 → 正準 bytes (Z55。受付の後も持つ)
         self.source_lock = _RLock()    # 源の読みを 1 つずつにする (受付の鍵とは別。源を読む間も受付は止まらない)
         self.ledger = _WatchedStore(ledger, self)
         # 置き場の操作の失敗の観測 (操作の名前, 例外)。呼び出したスレッドごとに持つ: 回す役が見るのは自分の呼び出しの
@@ -182,8 +183,20 @@ def require_running(state) -> None:
                           f"{state.halted.error_type}: {state.halted.message}")
 
 
+# 係の口から受け付けない報告の中身 (紙 F-b K28 新しい決定 4・Z55 ②・Z56 ①)。取りに行きの Frame を帳面に入れるのは家の人の
+# acquire だけで、区間の札 3 種は誰からも入らない (本体に出す者が居ない)。CoverageUnproved・境界・終わりの知らせは今のまま
+_PRODUCER_CLOSED = (_fb.MeasurementFrame, _fb.CoverageClaim, _fb.Gap, _fb.MeasurementUnavailable)
+_INTERVAL_EVIDENCE = (_fb.CoverageClaim, _fb.Gap, _fb.MeasurementUnavailable)
+
+
+def _item(event):
+    return event.item if isinstance(event, _fb.SegmentReport) else None
+
+
 def accept(state, envelope) -> None:
-    """Accept: 全欄を比べ、受信の記録の計画と受付の責務を P.receipts に一度に置く (§2-4-2)。"""
+    """Accept: 全欄を比べ、受信の記録の計画と受付の責務を P.receipts に一度に置く (§2-4-2)。取りに行きの Frame を運ぶ
+    封筒は、家の人が acquire で作った封筒と同じ番号・同じ bytes の時だけ受け付ける (受信の列に残っているかは条件に
+    しない = 受付済みの同じ封筒の再試行は今のまま成功)。区間の札 3 種を運ぶ封筒は受け付けない (K28 新しい決定 4)。"""
     require_running(state)
     if not isinstance(envelope, _fb.Envelope) or type(envelope.number) is not int \
             or type(envelope.received_ns) is not int:
@@ -192,7 +205,12 @@ def accept(state, envelope) -> None:
     # 形の検査・保存・計画・同じ番号の照合は受け付けた同じ中身で行う (R02、K25-b ★ ④ = review K25-R4)
     envelope = freeze(envelope)
     _check_event(envelope.event)
+    item = _item(envelope.event)
+    if isinstance(item, _INTERVAL_EVIDENCE):
+        raise _fb.FbInputError(reason="shape", field="/event/item")
     with state.lock:
+        if isinstance(item, _fb.MeasurementFrame) and state.acquired.get(envelope.number) != wire(envelope):
+            raise _fb.FbInputError(reason="shape", field="/event/item")
         known = state.receipts.get(envelope.number)
         if known is not None:
             if wire(known.envelope) != wire(envelope):
@@ -346,10 +364,11 @@ def status(state):
             receipts.append(_fb.ReceiptStatus(
                 envelope=number, received_ns=receipt.envelope.received_ns, state="accepted",
                 slots=tuple(_slot_status(slot) for slot in receipt.slots)))
-        from . import _fb_think
+        from . import _fb_think, _fb_update
         return _fb.FStatus(receipts=tuple(receipts), works=work_statuses(state),
                            readings=_fb_think.reading_statuses(state), pending=pending_statuses(state),
-                           segments=segment_statuses(state), purposes=_fb_think.purpose_statuses(state))
+                           segments=segment_statuses(state), purposes=_fb_think.purpose_statuses(state),
+                           updates=_fb_update.statuses(state))
 
 
 def pending_statuses(state) -> tuple:
@@ -372,6 +391,10 @@ def pending_statuses(state) -> tuple:
         out.append(item("conflict", work.request, None, f"work_id:{work.desc.work_id}"))
     from . import _fb_update
     for plan in state.updates.values():
+        # δ の計画の不足 (読めない方法・args・扱えない枝・返答の形・発行物の不一致、K28 の B1)。対象は起動の宣言
+        for reason in plan.missing:
+            kind = "conflict" if reason.startswith("update:") else "missing_contract"
+            out.append(item(kind, plan.boot.d, _c.BOOT_DECLARATION, reason))
         # 食い違った原報告に頼る採用 A* と、それで止まった更新 (紙 Z3)。保存の確認待ちの配送を含む食い違いは未確認
         confirmed = _fb_update.conflicts(state, plan)
         for target in confirmed:
@@ -462,6 +485,10 @@ def _publish(state, envelopes) -> None:
 
 
 def post(state, event) -> None:
+    """Post (係の口 FWorkContext.post とホストの FThreadHost.post)。取りに行きの Frame と区間の札 3 種を運ぶ報告は
+    TypeError で断り、何も公開しない (K28 新しい決定 4)。家の人の acquire はこの口を通らない。"""
+    if isinstance(_item(event), _PRODUCER_CLOSED):
+        raise TypeError("acquisition frames come only from the host's acquire; interval evidence is not accepted")
     with state.lock:
         _publish(state, _envelopes(state, (event,), mono_ns(state.clock)))
 
@@ -702,7 +729,7 @@ class WorkRow:
     reports: list = _field(default_factory=list)   # (封筒の番号, r)
     issued: list = _field(default_factory=list)    # 生きた発行物 (保存しない)
     uses: list = _field(default_factory=list)      # (Point, M の読み)
-    intervals: list = _field(default_factory=list)  # 実際に見張った区間
+    intervals: list = _field(default_factory=list)  # 係が monitored に渡した区間の控え (K28 の B3')
     takes: list = _field(default_factory=list)      # 源へ取りに行った操作の控え (K25 の Take。公開まで進んだ回だけ)
 
 
@@ -876,6 +903,7 @@ class WorkContext:
                 if outcome == "taken":
                     state.raw_ids[envelopes[0].number] = raw_id
                     state.cursors[epoch] = cursor + 1
+                state.acquired[envelopes[-1].number] = wire(envelopes[-1])   # 窓口が acquire の封筒と見分ける (Z55)
                 _publish(state, envelopes)
                 row.reports.extend((e.number, e.received_ns) for e in envelopes)
                 state.samples[epoch] = seq + 1

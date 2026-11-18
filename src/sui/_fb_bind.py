@@ -16,8 +16,8 @@ from .records import Observed as _Observed, Payload as _Payload, Role as _Role
 _BRANCHES = (_f.MeasurementFrame, _f.Gap, _f.MeasurementUnavailable, _f.CoverageClaim, _f.CoverageUnproved)
 # この版が意味を知る Claim の契約と kind (§2-5-19 の初回の 2 つ)。未知は missing_contract
 _CLAIMS = {_c.NO_ARRIVAL: "no_arrival", _c.COUNT_EXACTLY_ONE: "count_exactly_one"}
-# この版が B に写せる読み方の契約 (§6-8 B1)
-_READINGS = (_c.FINITE_SEGMENT_PROJECTION,)
+# この版が B に写せる読み方の契約 (§6-8 B1)。K28 (2)(d): 取りに行きの列の読み方も (B の reading_contract に写す)
+_READINGS = (_c.FINITE_SEGMENT_PROJECTION, _c.ACQUISITION_SEQUENCE_PROJECTION)
 
 
 class _Hold(Exception):
@@ -208,6 +208,8 @@ def _plan(state, row, report, r, event, groups, source):
         raise _Hold("missing_contract", "reading_contract")
     if route.reading_contract not in _READINGS:
         raise _Hold("missing_contract", "reading_contract")
+    if route.reading_contract == _c.ACQUISITION_SEQUENCE_PROJECTION and not isinstance(event.item, _f.MeasurementFrame):
+        return   # 取りに行きの読み方で結ぶのは取りに行きの Frame だけ (K28 (2)(d))。CoverageUnproved は何も主張せず読まれない
     if source is None:
         raise _Hold("awaiting_evidence", "clock")
     started = _started(state, row, groups, source)

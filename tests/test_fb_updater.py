@@ -27,11 +27,13 @@ from sui.records import Payload, Prediction, Role
 from gate_f_facts_cases import finite_world, plain
 from test_fb_skeleton import boot, contract, source
 from test_fb_stage1 import RealRig, wire
-from test_fb_stage2 import PREPARE_BUDGET, EVALUATE_BUDGET, LaunchCut
+from test_fb_stage2 import PREPARE_BUDGET, EVALUATE_BUDGET, LaunchCut, ORDER
 from test_fb_loop import (
     LoopRig, Workers, registry, delta_args, assert_update, assert_quantity,
     execution_for, row5_report_for_work, FIRST, SECOND, DOUBLE,
 )
+
+from test_fb_belief import BeliefRig, BeliefWorkers, belief1_status, T, E, U
 
 
 def updater1_api():
@@ -121,7 +123,7 @@ class ObservedUpdaterPort(fb.FWorkContext):
         self.delegate.post(event, issued=None if self.rig.drop_issued else issued)
 
 
-class UpdaterWorkers(Workers):
+class UpdaterWorkers(BeliefWorkers):
     def run(self, work, ctx):
         if work.desc.purpose != "belief_update":
             return super().run(work, ctx)
@@ -139,72 +141,34 @@ class UpdaterWorkers(Workers):
             self.stops.append(work.desc.work_id)
 
 
-class UpdaterRig(LoopRig):
-    """Literal CE1 Boot; only the Wu dispatcher differs from the existing rig."""
+class UpdaterRig(BeliefRig):
+    """K28 migration: production repeated source -> host Frame -> production Wu.
 
+    T=diag(1/4,1/16), E=diag(1/2,1/4) yields FIRST/SECOND. U is the
+    unused complement. No test script calls acquire or posts an evidence item.
+    """
     def __init__(self, updater_type, *, continuation=False, model_zero=False,
                  reader_mode="normal", unavailable_now=(), drop_issued=False, refuse_entry=False):
-        RealRig.__init__(self, connect=False)
-        self.clock.set(0)
-        self.registry, self.launcher = registry(), LaunchCut()
-        self.thread, self.executed, self.ports = None, set(), {}
         self.reader_mode, self.unavailable_now = reader_mode, unavailable_now
         self.drop_issued, self.refuse_entry = drop_issued, refuse_entry
-        self.updater = updater_type(registry=self.registry)  # Same object as the host.
-        self.workers = UpdaterWorkers(self)
-        document, _ = finite_world("FA01")
-        model = self.record(Prediction(target="updater1.model", about=(), basis=(),
-            content=Payload.json({"document": document}), contract=contract("sui.f.model_source")),
-            RefKind.PREDICTION, Role.MODEL)
-        self.model_point = self.ledger.append(model, ()).cid
-        declared = delta_args()
-        if model_zero:
-            # Each carrier is normalized. Arrival at t=1 is certain; at t=2,
-            # P(no arrival | a,b)=(1/2,1/4), hence posterior (2/3,1/3;3/8).
-            declared["law"]["rows"] = [
-                {"marks": [{"channel": "arrivals", "time_ns": 1, "count": 1}],
-                 "mass": [[1, 2], [1, 4]]},
-                {"marks": [{"channel": "arrivals", "time_ns": 1, "count": 1},
-                           {"channel": "arrivals", "time_ns": 2, "count": 1}],
-                 "mass": [[1, 2], [3, 4]]},
-            ]
-        event = boot(True)
-        initial = replace(event.declaration.initial.value, model=self.model_point,
-            generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}),
-            method=fb.MethodCall(contract=contract("sui.f.finite_evaluation"), args={}),
-            draw=fb.MethodCall(contract=contract("stage2.scripted_draw"), args={}),
-            prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET,
-            derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
-                contract=c.SAVED_SEGMENT_UPDATE, args=declared)),
-            continuation=fb.MethodCall(contract=c.REUSE_CANDIDATES, args={}) if continuation else None)
-        self.boot_input = replace(event, declaration=replace(event.declaration,
-            initial=replace(event.declaration.initial, value=initial),
-            routes=tuple(replace(route, value=replace(route.value, config=replace(route.value.config,
-                sampling_contract=contract("sui.f.finite_measurement"),
-                clock_contract=contract("sui.f.simulated_clock")))) for route in event.declaration.routes)))
-        self.host = fb.FThreadHost(ledger=self.ledger, clock=self.clock, workers=self.workers,
-            registry=self.registry, launcher=self.launcher)
-        self.host.post(fb.ClockDeclared(declaration=replace(source(), run=self.clock.run,
-            measurement=contract("sui.f.simulated_clock"))))
-        self.host.post(self.boot_input)
-        self.drive(lambda: bool(self.requests("candidate_generation")))
-
-    def post_claim(self, slot, start, end):
-        done, errors = Event(), []
-        def emit(work, ctx):
-            self.clock.set(max(self.clock.mono_ns() + 10, end))
-            self.workers.post(ctx, fb.SegmentReport(segment=work.request, item_slot=slot,
-                item=f.CoverageClaim(route_epoch="route-A", interval=f.MeasurementInterval(
-                    clock=self.clock.run, start_ns=start, end_ns=end, closure="(start,end]"),
-                    kind="no_arrival", contract=c.NO_ARRIVAL, evidence=())))
-        self.workers.commands.put((emit, done, errors))
-        assert done.wait(30), "measurement did not Post the Claim"
-        assert not errors, errors
-
+        matrices = ({T: ((0,0),(0,0)), E: ((1,0),(0,1))} if model_zero else
+            {T: ((Fraction(1,4),0),(0,Fraction(1,16))),
+             E: ((Fraction(1,2),0),(0,Fraction(1,4))),
+             U: ((Fraction(1,4),0),(0,Fraction(11,16)))})
+        super().__init__(symbols=(T,E), matrices=matrices, targets=("x0","x1"),
+            continuation=continuation, worker_type=UpdaterWorkers, updater_type=updater_type)
+        self.published = 0
+    def start(self):
+        self.begin()
+        for stage in ORDER: self.run_stage(stage)
+        self.drive(lambda: len(self.facts(c.SELECTION)) == 1)
+    def publish_next(self, slot, start, end):
+        # Legacy labels/span arguments are test labels only; they never become
+        # an interval Claim. Operation identity and time come from acquire.
+        self.publish(self.published, last=self.published == 1)
+        self.published += 1
     def update(self, slot, start, end):
-        before = len(self.requests("belief_update"))
-        self.post_claim(slot, start, end)
-        self.drive(lambda: len(self.requests("belief_update")) == before + 1)
+        self.publish_next(slot, start, end)
         return self.run_stage("belief_update")
 
 
@@ -258,7 +222,7 @@ def assert_one_chain(rig, adoptions):
 def test_updater1_ce1_two_updates_and_continuation_use_the_production_worker(make_updater_rig, continuation):
     """K24(1)(2)(5); CE1 :2917-2923: weights (1/8,1/32), then (1/16,1/128).
 
-    Dropping update 2 fails SECOND; double counting overlap fails SECOND != DOUBLE.
+    Dropping E fails SECOND; applying T twice fails SECOND != DOUBLE.
     Reusing initial at continuation fails the adopted R* input and entropy H(4/5), H(8/9).
     Omitting the live issue fails A*; invented/reused times fail the two real now() observations.
     """
@@ -303,11 +267,11 @@ def test_updater1_ce1_two_updates_and_continuation_use_the_production_worker(mak
     assert len({a.value["request"] for a in adoptions}) == 2
 
 
-def test_updater1_rejected_model_zero_is_a_normal_return_and_next_report_progresses(make_updater_rig):
+def test_updater1_rejected_model_zero_is_normal_return_and_next_acquisition_waits(make_updater_rig):
     """K24(1)(5), :2739/:2868: zero likelihood is rejected/model_falsified, not a crash.
 
     Epsilon adoption or relabeling rejected as failure/insufficient fails the exact branch and no A*.
-    Applying the rejected Claim later fails next.prior=None and (2/3,1/3;3/8).
+    K28 decision 5 replaces skipping a rejected report: the saved E must wait for T adoption.
     """
     rig = make_updater_rig(updater1_api(), model_zero=True)
     rig.start()
@@ -328,22 +292,23 @@ def test_updater1_rejected_model_zero_is_a_normal_return_and_next_report_progres
     assert not rig.facts(c.UPDATE_RESULT) and not rig.facts(c.BELIEF_ADOPTED) and not rig.facts(c.CONFLICT)
     original = row5_report_for_work(rig, bad)
     saved = rig.read_stored(original.cid)
-    good = rig.update("updater1-outside", 1, 2)
-    rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 1)
-    adopted, = rig.facts(c.BELIEF_ADOPTED)
-    assert_update(rig, good, adopted, {"joint": [[2, 3], [1, 3]], "evidence_mass": [3, 8]})
+    rig.publish_next("updater1-outside", 1, 2)
+    for _ in range(4): rig.round()
+    assert len(rig.requests("belief_update")) == 1
+    assert not rig.facts(c.BELIEF_ADOPTED)
     assert rig.read_stored(original.cid) == saved
-    assert_one_chain(rig, [adopted])
+    assert belief1_status(rig, 1).outcome == "waiting_predecessor"
+
 
 
 @pytest.mark.parametrize("reader_mode,error_type", [("raises_in_U", "UpdaterReadError"), ("none", "RuntimeError")])
-def test_updater1_execution_exception_is_failure_without_external_message_and_next_work_progresses(
+def test_updater1_execution_exception_is_failure_without_external_message_and_next_acquisition_waits(
         make_updater_rig, reader_mode, error_type):
     """K24(2) step4 and reader=None: preserve execution_error, never a U verdict.
 
     Crashing/silently returning fails the own-port WorkFailure and T.
     Copying exception text or changing failure classification fails the exact FailureInfo.
-    Keeping the failed Claim in belief or blocking reception fails the later normal FIRST adoption.
+    K28 decision 5: the later acquisition is saved, but cannot skip the failed operation.
     """
     rig = make_updater_rig(updater1_api(), reader_mode=reader_mode)
     rig.start()
@@ -359,12 +324,13 @@ def test_updater1_execution_exception_is_failure_without_external_message_and_ne
     raw = row5_report_for_work(rig, bad)
     saved = rig.read_stored(raw.cid)
     rig.reader_mode = "normal"
-    good = rig.update("updater1-after-failure", 1, 3)
-    rig.drive(lambda: len(rig.facts(c.BELIEF_ADOPTED)) == 1)
-    adopted, = rig.facts(c.BELIEF_ADOPTED)
-    assert_update(rig, good, adopted, FIRST)
+    rig.publish_next("updater1-after-failure", 1, 3)
+    for _ in range(4): rig.round()
+    assert len(rig.requests("belief_update")) == 1
+    assert not rig.facts(c.BELIEF_ADOPTED)
     assert rig.read_stored(raw.cid) == saved
-    assert_one_chain(rig, [adopted])
+    assert belief1_status(rig, 1).outcome == "waiting_predecessor"
+
 
 
 @pytest.mark.parametrize("unavailable_now", [(1,), (2,), (1, 2)], ids=("started", "finished", "both"))
@@ -395,7 +361,7 @@ def test_updater1_enter_false_reports_nothing_and_does_not_read(make_updater_rig
     """
     rig = make_updater_rig(updater1_api(), refuse_entry=True)
     rig.start()
-    rig.post_claim("updater1-no-entry", 0, 2)
+    rig.publish_next("updater1-no-entry", 0, 2)
     _, body = rig.callback("belief_update")
     body()
     rig.settle_steps()

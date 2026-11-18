@@ -1373,14 +1373,17 @@ def test_two_seats_offer_both_directions_and_receive_while_one_hangs(make_rig, h
     else:
         def report(work, ctx):
             rig.workers.post(ctx, fb.SegmentReport(segment=work.request, item_slot="while-thinking",
-                item=f.MeasurementUnavailable(route_epoch="route-A",
-                    requested_interval=f.MeasurementInterval(clock=rig.clock.run,
+                # K28 closes MeasurementUnavailable at producer Post. This scene
+                # checks reception while thinking is held, using the still-open
+                # CoverageUnproved branch rather than pretending acquisition.
+                item=f.CoverageUnproved(route_epoch="route-A",
+                    interval=f.MeasurementInterval(clock=rig.clock.run,
                         start_ns=90, end_ns=100, closure="(start,end]"),
-                    reason="real test report while Wg held", evidence=())))
+                    missing_contracts=(c.NO_ARRIVAL,), evidence=())))
         rig.workers.overrides[other] = report
         callback()
         rig.drive(lambda: bool(rig.facts(c.SEGMENT_REPORT)))
-        assert rig.one(c.SEGMENT_REPORT).value["item"]["value"]["reason"] == "real test report while Wg held"
+        assert rig.one(c.SEGMENT_REPORT).value["item"]["kind"] == "coverage_unproved"
     rig.host.post(received(b"receive while held", claims={"hung": hung}))
     rig.drive(lambda: bool(rig.facts(c.RECEIVED)))
     assert rig.one(c.RECEIVED).value["data"] == list(b"receive while held")

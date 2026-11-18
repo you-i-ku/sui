@@ -99,3 +99,9 @@ ACQUISITION_OBSERVATION_MODEL = _ContractRef("sui.fb.acquisition_observation_mod
 ACQUISITION_RESULT_PROJECTION = _ContractRef("sui.fb.acquisition_result_projection", "1")  # 取得の Frame → {result, source_called}
 ACQUISITION_CONTROL_TABLE = _ContractRef("sui.fb.acquisition_control_table", "1")          # 記録された履歴 → 制御 u の候補
 STATE_INDEPENDENT_CONTROL_SELECTION = _ContractRef("sui.fb.state_independent_control_selection", "1")  # 選び方が状態に依存しない根拠
+
+# 見立てへ通す本 (§6-10 K28・K28-a)。家の人が acquire で残した取りに行きの列を、1 回ずつの核で順に予想へ
+SAVED_ACQUISITION_UPDATE = _ContractRef("sui.fb.saved_acquisition_update", "1")   # δ: 取りに行きの Frame の B ごとに義務 1 つ
+STATE_CORRESPONDENCE = _ContractRef("sui.fb.state_correspondence", "1")           # 物語の対応の記録 (Prediction / MODEL)
+ACQUISITION_SEQUENCE_PROJECTION = _ContractRef("sui.fb.acquisition_sequence_projection", "1")  # 読み方: 列の i 番目を核で
+ACQUISITION_GENERATION = _ContractRef("sui.fb.acquisition_generation", "1")       # 生成: その Frame は acquire が k・route の中で作った

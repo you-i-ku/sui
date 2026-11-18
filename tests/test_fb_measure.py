@@ -191,8 +191,14 @@ class AcquirePort(fb.FWorkContext):
             rig.clock.phase, rig.clock.owner = None, None
         after = execution_for(self.delegate, self.work.desc.work_id).reports
         call.acquired = acquired
-        call.envelopes = tuple(r.envelope for r in after if r.envelope not in call.envelopes_before)
         call.sources_at_return, call.receipts_at_return = self.evidence().sources, rig.receipts()
+        source, = (s for s in call.sources_at_return if s.work_id == self.work.desc.work_id
+                   and s.route_epoch == epoch and s.sample_seq == call.sequence)
+        # Other legal Posts can occur while FSource.read is running. K25's
+        # public ES identifies exactly this operation's raw/Frame envelopes;
+        # a Started/Ended/Unproved Post is not an acquisition member.
+        call.envelopes = tuple(n for n in (source.envelope, source.frame_envelope) if n is not None)
+        assert set(call.envelopes) <= {r.envelope for r in after if r.envelope not in call.envelopes_before}
         call.trace = tuple(rig.clock.trace[call.trace_start:])
         with rig.changed:
             rig.calls.append(call)
@@ -252,7 +258,7 @@ class AcquireWorkers(Stage2Workers):
 class AcquireRig(LoopRig):
     """Literal CE1 Boot with deferred launch bodies and the acquisition capability.
 
-    Two routes use test_fb_clash.py:118-168's public declaration: different
+    Two routes use the explicit bootstrap declarations below: different
     positions/processes share identical route-A config, with explicit capacity.
     """
     def __init__(self, api, *, items=(), mode="taken", script=None, compute=None,
@@ -484,6 +490,37 @@ def acquire1_expected_frame(rig, call, raw):
         assert a.reason == ""
     return acquire1_frame(call.sequence, a.before, a.after, cursor=a.cursor,
                           called=rig.source.mode != "missing", result=result, route_epoch=call.route_epoch)
+
+
+def test_acquire1_started_post_during_source_read_is_not_an_acquisition_member(make_acquire_rig):
+    """Public ES, not a before/after report delta, identifies raw/Frame members.
+
+    Counting a concurrently posted Started as this acquire's Frame fails pair()
+    at its branch check. The production worker still acquires exactly once.
+    """
+    api = acquire1_api()
+    rig = make_acquire_rig(api, items=(acquire1_item(api),))
+    read, extra = rig.source.read, []
+    def source_read(cursor):
+        port = next(iter(rig.ports.values()))
+        original = next(event for _key, event in rig.worker_posts if isinstance(event, fb.SegmentReport)
+            and isinstance(event.item, fb.SegmentBoundary) and event.item.kind == "started")
+        event = replace(original, item_slot="started-during-read")
+        before = {r.envelope for r in execution_for(port.delegate, port.work.desc.work_id).reports}
+        port.post(event)
+        observation, = (r for r in execution_for(port.delegate, port.work.desc.work_id).reports if r.envelope not in before)
+        extra.append(observation.envelope)
+        return read(cursor)
+    rig.source.read = source_read
+    rig.launch("measure_segment"); rig.wait_returns()
+    call, = rig.calls
+    raw, (_observed, frame) = rig.saved_pair(call)
+    source = rig.source_for(call)
+    assert call.envelopes == (source.envelope, source.frame_envelope)
+    assert len(call.envelopes) == 2 and not set(extra) & set(call.envelopes)
+    assert len(rig.calls) == len(rig.source.calls) == 1
+    assert frame.value["item"]["kind"] == "frame" and raw is not None
+    rig.until(lambda: any(r.value.get("item_slot") == "started-during-read" for r in rig.reports("started")))
 
 
 def acquire1_assert_remaining_reports(rig, call):
@@ -1037,92 +1074,8 @@ def test_acquire1_mid_read_clock_conflict_keeps_pinned_source_and_taken_fact(mak
     rig.no_belief_update()
 
 
-@pytest.mark.parametrize("fault", ["no-acquisition", "wrong-raw-id", "different-port", "early-actual-time"])
-def test_acquire1_worker_frame_can_be_saved_without_matching_actual_take(make_acquire_rig, fault):
-    """Retain K23's negative scenes with the K25 value; no new receipt rejection is invented."""
-    api = acquire1_api()
-    def script(rig, work, ctx):
-        before = acquire1_started(rig, work, ctx)
-        if fault == "no-acquisition":
-            rig.clock.set(rig.clock.peek() + 2)
-            frame = acquire1_frame(0, before, ctx.now(), cursor=0, called=True, result={"kind": "empty"})
-        else:
-            a = ctx.acquire()
-            if fault in ("early-actual-time", "different-port"):
-                # Obtain the already saved original's public Record.id, so the
-                # time/port cases have a CORRECT raw name, not a second defect.
-                received_id = rig.other_events.get(timeout=30)
-                assert received_id is not None
-            else:
-                received_id = str(Ref(kind=RefKind.OBSERVATION, value="acquire1-unrelated"))
-            frame = acquire1_frame(0, a.before, a.after, cursor=0, called=True,
-                result={"kind": "taken", "received": received_id})
-            if fault == "early-actual-time":
-                frame = replace(frame, actual_time=a.before.reading)
-        rig.forged = fb.SegmentReport(segment=work.request, item_slot="frame:0", item=frame)
-        if fault == "different-port":
-            rig.other_events.put(rig.forged)
-        else:
-            ctx.post(rig.forged)
-        rig.action_done.set()
-        assert rig.release.wait(30)
-    def other(rig, work, ctx):
-        event = rig.other_events.get(timeout=30)
-        if event is not None:
-            ctx.post(event)
-    rig = make_acquire_rig(api, items=(acquire1_item(api),), script=script,
-                           compute=other if fault == "different-port" else None)
-    measure_key = rig.launch("measure_segment")
-    if fault in ("early-actual-time", "different-port"):
-        rig.wait_returns()
-        raw, _ = rig.saved_pair(rig.calls[0])
-        rig.other_events.put(str(raw[1].record_id))
-    assert rig.action_done.wait(30)
-    if fault == "different-port":
-        other_key = rig.launch("candidate_generation")
-        rig.until(lambda: "candidate_generation" in rig.workers.contexts and any(r.point is not None
-            for r in execution_for(rig.workers.contexts["candidate_generation"], other_key).reports))
-        report, = execution_for(rig.workers.contexts["candidate_generation"], other_key).reports
-        forged = rig.one(c.SEGMENT_REPORT, cid=report.point)
-        assert forged.value == wire(rig.forged)
-        assert not any(r.point == forged.cid for r in execution_for(rig.ports[measure_key].delegate, measure_key).reports)
-    else:
-        rig.until(lambda: any(r.value == wire(rig.forged) for r in rig.reports("frame")))
-        forged, = (r for r in rig.reports("frame") if r.value == wire(rig.forged))
-    assert all(not acquire1_corresponds(rig, forged, call) for call in rig.calls)
-    if fault == "no-acquisition":
-        assert rig.source.calls == [] and not rig.calls and not rig.facts(c.RECEIVED)
-        assert rig.ports[measure_key].evidence().sources == ()
-    else:
-        raw, _ = rig.saved_pair(rig.calls[0])
-        assert raw[1].value == wire(fb.Received(route_epoch=ROUTE, media_type=acquire1_item(api).media_type,
-                                             data=RAW, claims=CLAIMS))
-    rig.no_belief_update()
 
 
-@pytest.mark.parametrize("kind,reason", [("same-id", "report:identity"), ("same-sequence", "frame:sample_seq")])
-def test_acquire1_worker_extra_frame_obeys_existing_conflict_rules(make_acquire_rig, kind, reason):
-    """CMP-05/CL-SAME/CL-SEQ: preserve both raw reports and hold both B; no special rejection."""
-    api = acquire1_api()
-    def script(rig, work, ctx):
-        acquire1_started(rig, work, ctx)
-        a = ctx.acquire()
-        frame = acquire1_frame(0, a.before, a.after, cursor=0, called=True, result={"kind": "empty"})
-        if kind == "same-sequence":
-            frame = replace(frame, measurement_id=replace(frame.measurement_id, component="another_measurement"))
-        ctx.post(fb.SegmentReport(segment=work.request, item_slot="worker-frame", item=frame))
-        rig.action_done.set()
-        assert rig.release.wait(30)
-    rig = make_acquire_rig(api, items=(acquire1_item(api),), script=script)
-    rig.launch("measure_segment")
-    assert rig.action_done.wait(30)
-    rig.until(lambda: len(rig.reports("frame")) == 2)
-    reports = rig.reports("frame")
-    rig.until(lambda: all(any(p.kind == "conflict" and p.reason == reason and p.target == r.cid
-        for p in rig.host.window.status().pending) for r in reports))
-    assert not [b for b in rig.facts(c.SEGMENT_BINDING) if b.value["report"] in {r.cid for r in reports}]
-    assert len(rig.facts(c.RECEIVED)) == 1 and rig.source.calls == [0]
-    rig.no_belief_update()
 
 
 @pytest.mark.parametrize("phase", ["prepare", "commit"])
@@ -1335,47 +1288,6 @@ def test_acquire1_overlapping_different_routes_keep_each_cursor_and_global_envel
     rig.no_belief_update()
 
 
-@pytest.mark.parametrize("changed", [False, True], ids=["same-original", "changed-original"])
-def test_acquire1_original_frame_on_another_segment_only_conflicts_if_body_changes(make_acquire_rig, changed):
-    """CL-MEASUREMENT :1185/B9: different k alone is legal; changed original MID is not."""
-    api = acquire1_api()
-    def script(rig, work, ctx):
-        acquire1_started(rig, work, ctx)
-        if work.desc.process.slot == "sensing":
-            assert rig.acquire_release.wait(30)
-            ctx.acquire()
-            assert rig.release.wait(30)
-        else:
-            rig.other_ready.set()
-            frame = rig.other_events.get(timeout=30)
-            if frame is not None:
-                ctx.post(fb.SegmentReport(segment=work.request, item_slot="same-original", item=frame))
-    rig = make_acquire_rig(api, items=(acquire1_item(api),), script=script, segments=2)
-    first = rig.launch("measure_segment", "sensing")
-    second = rig.launch("measure_segment", "sensing-2")
-    assert rig.started.setdefault(first, Event()).wait(30) and rig.other_ready.wait(30)
-    rig.acquire_release.set()  # Both mouths entered and Started before the measured interval.
-    rig.wait_returns()
-    call, = rig.calls
-    raw, (_, original) = rig.saved_pair(call)
-    frame = acquire1_expected_frame(rig, call, raw[1])
-    if changed:
-        frame = replace(frame, value={**frame.value, "result": {"kind": "empty"}})
-    rig.other_events.put(frame)
-    rig.until(lambda: any(r.value["segment"] == rig.work_by_id[second].request for r in rig.reports("frame")))
-    other, = (r for r in rig.reports("frame") if r.value["segment"] == rig.work_by_id[second].request)
-    assert original.value["segment"] != other.value["segment"]
-    assert original.value["item"]["value"]["measurement_id"] == other.value["item"]["value"]["measurement_id"]
-    if changed:
-        rig.until(lambda: all(any(p.kind == "conflict" and p.reason == "frame:measurement" and p.target == r.cid
-            for p in rig.host.window.status().pending) for r in (original, other)))
-        assert not any(b.value["report"] == other.cid for b in rig.facts(c.SEGMENT_BINDING))
-    else:
-        rig.until(lambda: all(any(b.value["report"] == r.cid for b in rig.facts(c.SEGMENT_BINDING))
-                              for r in (original, other)))
-        assert not [p for p in rig.host.window.status().pending if p.kind == "conflict"]
-    assert len(rig.calls) == 1 and rig.source.calls == [0]
-    rig.no_belief_update()
 
 
 @pytest.mark.parametrize("operation", ["now", "acquire"])
