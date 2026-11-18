@@ -790,6 +790,8 @@ class FWorkContext(_Protocol):
     M の読みとともに記録する。monitored(interval) は係が渡した区間の控えを報告と別の道で
     ホストに残す (IntervalObservation。ホストは区間を確かめない。取りに行きの道はこれを使わない、K28 の B3')。どちらも窓口の状態を変えず、記録を保存しない。
     開始の札を取っていない口の read・monitored は RuntimeError で、証拠に足さない (§6-10 J8・K11)。
+    係の本体が戻った後の口の read・monitored・acquire も RuntimeError で、証拠に足さない (K29。境目は read が使用を足す時、
+    monitored が区間を足す時、acquire が源を読む前の準備。境目を通った acquire は結果を公開する。post・now は変えない)。
     reader() はその仕事の Desc の numerical_view の境界と input_points の閉包だけを読む不変の読み手
     (像の外を読ませない、§6-9 H5)。numerical_view も input_points も無い仕事では None。
     prepared() は評価 Ee の args.prepared (PR) と全照合した、評価の準備 Ep の生きた

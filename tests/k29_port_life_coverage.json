@@ -1,0 +1,628 @@
+{
+  "problem": "K29",
+  "spec": "specs/関所F_Fb_今の約束.md",
+  "spec_version": "1.09",
+  "source_copy": "work29 source remains master 2d3a58c without K29; current implemented-source verification uses read-only ../impl29/src",
+  "modified_scope": "Request 61: module docstring and coverage metadata only; all test bodies/assertions and src unchanged",
+  "tests": [
+    {
+      "name": "test_portlife1_live_measurement_operations_keep_their_purpose_correct_effects",
+      "file": "tests/test_fb_port_life.py",
+      "line": 227,
+      "cases": 6,
+      "passed": 6,
+      "failed": 0,
+      "purpose": "test worker and native SourceMeasurer; live read/monitored/acquire",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 6,
+        "failed": 0,
+        "failure": null
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_stopped_test_measurement_port_rejects_without_effects",
+      "file": "tests/test_fb_port_life.py",
+      "line": 239,
+      "cases": 6,
+      "passed": 6,
+      "failed": 0,
+      "purpose": "normal and exceptional FWorkers.run return; RuntimeError and unchanged evidence/publications/counters",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 0,
+        "failed": 6,
+        "failure": "RuntimeError absent"
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_stopped_production_measurer_port_rejects_without_effects",
+      "file": "tests/test_fb_port_life.py",
+      "line": 256,
+      "cases": 3,
+      "passed": 3,
+      "failed": 0,
+      "purpose": "native SourceMeasurer after actual stopped observation; all three operations",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 0,
+        "failed": 3,
+        "failure": "RuntimeError absent"
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_unentered_measurement_port_still_rejects_without_effects",
+      "file": "tests/test_fb_port_life.py",
+      "line": 269,
+      "cases": 3,
+      "passed": 3,
+      "failed": 0,
+      "purpose": "K11 controls; next admitted acquisition remains seq=cursor=0",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 3,
+        "failed": 0,
+        "failure": null
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_read_rechecks_after_public_ledger_read_and_does_not_return_body",
+      "file": "tests/test_fb_port_life.py",
+      "line": 289,
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "purpose": "public ledger barrier; stop after read entry, before returning record and adding use",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 0,
+        "failed": 2,
+        "failure": "read returned body bytes with error=None"
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_live_production_updater_can_record_evidence",
+      "file": "tests/test_fb_port_life.py",
+      "line": 352,
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "purpose": "native FiniteUpdater; admitted read/monitored then real FIRST adoption",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 2,
+        "failed": 0,
+        "failure": null
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_stopped_production_updater_cannot_record_more_evidence",
+      "file": "tests/test_fb_port_life.py",
+      "line": 358,
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "purpose": "native FiniteUpdater retained context after actual return",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 0,
+        "failed": 2,
+        "failure": "RuntimeError absent"
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_late_native_update_terminal_post_still_adopts_once",
+      "file": "tests/test_fb_port_life.py",
+      "line": 368,
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "purpose": "normal/exceptional return with terminal held; late native terminal and issued artifact adopt FIRST exactly once",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 2,
+        "failed": 0,
+        "failure": null
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_now_reader_prepared_evidence_and_post_survive_measurement_return",
+      "file": "tests/test_fb_port_life.py",
+      "line": 385,
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "purpose": "test/native measuring context; unchanged accessors, late Post and next real counters",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 2,
+        "failed": 0,
+        "failure": null
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_frozen_reader_and_prepared_remain_usable_after_compute_return",
+      "file": "tests/test_fb_port_life.py",
+      "line": 409,
+      "cases": 3,
+      "passed": 3,
+      "failed": 0,
+      "purpose": "candidate/preparation/evaluation; frozen reader unrecorded, real prepared FProblem unchanged",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 3,
+        "failed": 0,
+        "failure": null
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_acquire_past_before_publishes_once_even_after_body_returns",
+      "file": "tests/test_fb_port_life.py",
+      "line": 436,
+      "cases": 6,
+      "passed": 6,
+      "failed": 0,
+      "purpose": "test/native measuring context; source Event proves before passed; taken/empty/unavailable publish exactly once after stop",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 6,
+        "failed": 0,
+        "failure": null
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_unknown_launch_with_an_entered_running_body_is_still_live",
+      "file": "tests/test_fb_port_life.py",
+      "line": 511,
+      "cases": 1,
+      "passed": 1,
+      "failed": 0,
+      "purpose": "launcher unknown with actual admitted live body allows all three operations",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 1,
+        "failed": 0,
+        "failure": null
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive",
+      "file": "tests/test_fb_port_life.py",
+      "line": 521,
+      "cases": 3,
+      "passed": 3,
+      "failed": 0,
+      "purpose": "same unknown body after actual stopped observation rejects all three operations",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 0,
+        "failed": 3,
+        "failure": "RuntimeError absent"
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_denied_wrapper_cannot_reenter_or_revoke_the_live_owner",
+      "file": "tests/test_fb_port_life.py",
+      "line": 533,
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "purpose": "duplicate wrapper and old not_started wrapper do not enter twice, release or revoke live owner",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 2,
+        "failed": 0,
+        "failure": null
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    },
+    {
+      "name": "test_portlife1_compute_read_and_monitored_have_the_same_return_boundary",
+      "file": "tests/test_fb_port_life.py",
+      "line": 590,
+      "cases": 8,
+      "passed": 8,
+      "failed": 0,
+      "purpose": "candidate/evaluation live/stopped; acquire is purpose-invalid while live and not used as a lifetime discriminator",
+      "failure": null,
+      "historical_pre_K29_result": {
+        "passed": 4,
+        "failed": 4,
+        "failure": "RuntimeError absent"
+      },
+      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+    }
+  ],
+  "core": [
+    {
+      "id": "acceptance-read",
+      "paper": "4403; 4396; K29-b :3548",
+      "condition": "The decisive stopped check is after public ledger read, before adding use; reject without returning bytes. K29-b allows admission-only at entry as externally equivalent.",
+      "tests": [
+        "test_portlife1_stopped_test_measurement_port_rejects_without_effects",
+        "test_portlife1_stopped_production_updater_cannot_record_more_evidence",
+        "test_portlife1_read_rechecks_after_public_ledger_read_and_does_not_return_body"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "acceptance-monitored",
+      "paper": "4403; 4396",
+      "condition": "Stopped monitored cannot append an interval",
+      "tests": [
+        "test_portlife1_stopped_test_measurement_port_rejects_without_effects",
+        "test_portlife1_stopped_production_measurer_port_rejects_without_effects",
+        "test_portlife1_compute_read_and_monitored_have_the_same_return_boundary"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "acceptance-acquire-boundary",
+      "paper": "4403; 4394; K29-a :3547",
+      "condition": "Acquire checks admission only at entry (K11); its sole stopped check is after taking the source-read lock and before before-M. Rejection causes no source read, evidence/publication or counter advance.",
+      "tests": [
+        "test_portlife1_stopped_test_measurement_port_rejects_without_effects",
+        "test_portlife1_stopped_production_measurer_port_rejects_without_effects",
+        "test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive"
+      ],
+      "status": "written_and_run",
+      "note": "A stopped acquire may wait for an earlier source read before this boundary rejects it; immediate rejection at entry is not required."
+    },
+    {
+      "id": "acceptance-acquire-source-lock-wait",
+      "paper": "4403; 4396; 4430; K29-a :3547; K29-b :3548",
+      "condition": "Stop while waiting for source lock is handled by the same sole stopped check after taking that lock, before before-M; no separately distinguished post-entry stopped-check race is required by K29-a.",
+      "tests": [
+        "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-return]",
+        "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-exception]",
+        "test_portlife1_stopped_production_measurer_port_rejects_without_effects[acquire]",
+        "test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive[acquire]"
+      ],
+      "status": "covered_by_single_boundary_per_K29_a",
+      "note": "CG-K29-SOURCE-LOCK-WAIT closed by K29-a. Existing stopped acquire cases detect removal of the sole boundary check; mutation detection is reported in request 61/K29-b, not independently rerun here. A source-lock-wait race is not newly staged."
+    },
+    {
+      "id": "acceptance-acquire-after-before",
+      "paper": "4403; 4418",
+      "condition": "After real source read starts, return cannot cancel the already-started acquisition; publish once",
+      "tests": [
+        "test_portlife1_acquire_past_before_publishes_once_even_after_body_returns"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "acceptance-no-effects",
+      "paper": "4394-4395; 4403",
+      "condition": "Denied calls do not append uses/intervals/sources/receipt/EH, call source, consume envelope/sample_seq or cursor",
+      "tests": [
+        "test_portlife1_stopped_test_measurement_port_rejects_without_effects",
+        "test_portlife1_stopped_production_measurer_port_rejects_without_effects",
+        "test_portlife1_unentered_measurement_port_still_rejects_without_effects"
+      ],
+      "status": "written_and_run",
+      "note": "All no-effect and next-counter assertions passed in the independent request 61 work29-test/impl29-source run (51 passed). Earlier non-reach on pre-K29 source is historical only."
+    },
+    {
+      "id": "unchanged-post",
+      "paper": "4397; 4414; 4428",
+      "condition": "Late first WorkFinished from genuinely native updater remains acceptable after normal/exceptional return; one result/adoption",
+      "tests": [
+        "test_portlife1_late_native_update_terminal_post_still_adopts_once"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "unchanged-now-reader-prepared-evidence",
+      "paper": "4397; 4414; 4417",
+      "condition": "Current M; frozen reader and prepared remain usable; reader access adds no use; evidence remains readable",
+      "tests": [
+        "test_portlife1_now_reader_prepared_evidence_and_post_survive_measurement_return",
+        "test_portlife1_frozen_reader_and_prepared_remain_usable_after_compute_return"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "scene-01",
+      "paper": "4425",
+      "condition": "Native SourceMeasurer/FiniteUpdater and test worker after run return",
+      "tests": [
+        "test_portlife1_stopped_test_measurement_port_rejects_without_effects",
+        "test_portlife1_stopped_production_measurer_port_rejects_without_effects",
+        "test_portlife1_stopped_production_updater_cannot_record_more_evidence"
+      ],
+      "status": "written_and_run",
+      "note": "FiniteUpdater purpose forbids acquire even while live; measuring ports provide its positive/negative lifetime cases, per :4435"
+    },
+    {
+      "id": "scene-02",
+      "paper": "4426",
+      "condition": "Same operations before body returns preserve normal evidence additions",
+      "tests": [
+        "test_portlife1_live_measurement_operations_keep_their_purpose_correct_effects",
+        "test_portlife1_live_production_updater_can_record_evidence",
+        "test_portlife1_compute_read_and_monitored_have_the_same_return_boundary"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "scene-03",
+      "paper": "4427",
+      "condition": "Body returns during ledger read",
+      "tests": [
+        "test_portlife1_read_rechecks_after_public_ledger_read_and_does_not_return_body"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "scene-04",
+      "paper": "4428",
+      "condition": "Late terminal Post, current now, existing reader/prepared",
+      "tests": [
+        "test_portlife1_late_native_update_terminal_post_still_adopts_once",
+        "test_portlife1_now_reader_prepared_evidence_and_post_survive_measurement_return",
+        "test_portlife1_frozen_reader_and_prepared_remain_usable_after_compute_return"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "scene-05",
+      "paper": "4429",
+      "condition": "Unentered ports reject all three operations",
+      "tests": [
+        "test_portlife1_unentered_measurement_port_still_rejects_without_effects"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "scene-06",
+      "paper": "4430; K29-a :3547; K29-b :3548",
+      "condition": "Stop while waiting for source lock is handled by the same sole stopped check after taking that lock, before before-M; no separately distinguished post-entry stopped-check race is required by K29-a.",
+      "tests": [
+        "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-return]",
+        "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-exception]",
+        "test_portlife1_stopped_production_measurer_port_rejects_without_effects[acquire]",
+        "test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive[acquire]"
+      ],
+      "status": "covered_by_single_boundary_per_K29_a",
+      "note": "CG-K29-SOURCE-LOCK-WAIT closed by K29-a. Existing stopped acquire cases detect removal of the sole boundary check; mutation detection is reported in request 61/K29-b, not independently rerun here. A source-lock-wait race is not newly staged."
+    },
+    {
+      "id": "scene-07",
+      "paper": "4431",
+      "condition": "Return during source read / before publication, once-only raw/Frame/ES/number semantics for three outcomes",
+      "tests": [
+        "test_portlife1_acquire_past_before_publishes_once_even_after_body_returns"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "scene-08",
+      "paper": "4432",
+      "condition": "Exceptional return with no terminal rejects; late terminal still allowed",
+      "tests": [
+        "test_portlife1_stopped_test_measurement_port_rejects_without_effects",
+        "test_portlife1_late_native_update_terminal_post_still_adopts_once",
+        "test_portlife1_read_rechecks_after_public_ledger_read_and_does_not_return_body"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "scene-09",
+      "paper": "4433",
+      "condition": "unknown does not imply stopped; actual return does",
+      "tests": [
+        "test_portlife1_unknown_launch_with_an_entered_running_body_is_still_live",
+        "test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "scene-10",
+      "paper": "4434",
+      "condition": "Duplicate wrapper and not_started old wrapper cannot reenter/revoke/release live owner",
+      "tests": [
+        "test_portlife1_denied_wrapper_cannot_reenter_or_revoke_the_live_owner"
+      ],
+      "status": "written_and_run",
+      "note": null
+    },
+    {
+      "id": "scene-11",
+      "paper": "4435",
+      "condition": "Purpose-correct live controls for measurement, updater, candidate, evaluation",
+      "tests": [
+        "test_portlife1_live_measurement_operations_keep_their_purpose_correct_effects",
+        "test_portlife1_live_production_updater_can_record_evidence",
+        "test_portlife1_compute_read_and_monitored_have_the_same_return_boundary"
+      ],
+      "status": "written_and_run",
+      "note": null
+    }
+  ],
+  "cg": [],
+  "existing_test_audit": [
+    {
+      "file": "tests/test_fb_loop.py",
+      "scope": "current copied file; no stopped-port-exclusion note found",
+      "action": "no migration proposed from this note"
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "line": 1304,
+      "test": "test_belief1_monitored_is_the_worker_supplied_interval_not_an_acquisition",
+      "finding": "monitored executes while the script still waits on release",
+      "action": "keep"
+    },
+    {
+      "file": "tests/test_fb_acquisition_loop.py",
+      "line": 236,
+      "test": "test_unentered_update_port_cannot_record_evidence_but_entered_port_can",
+      "finding": "read/monitored are in admission hook before the native updater proceeds",
+      "action": "keep"
+    },
+    {
+      "file": "tests/test_fb_measure.py",
+      "line": 819,
+      "test": "test_acquire1_worker_stops_after_acquire_but_host_keeps_the_pair",
+      "finding": "acquire completes inside worker script before return; later evidence() is unchanged by K29",
+      "action": "keep"
+    },
+    {
+      "file": "tests/test_fb_measure.py",
+      "line": 1214,
+      "test": "test_acquire1_overlapping_acquires_serialize_source_reads_without_blocking_other_post",
+      "finding": "attempted Event precedes real delegate.acquire; proves attempted calls/serialization, not post-entry source-lock-wait K29 recheck",
+      "action": "Keep serialization test; no distinct post-entry wait-race test is required after K29-a. The stopped acquire cases cover the single boundary check."
+    },
+    {
+      "file": "tests/test_fb_measure.py",
+      "line": 1248,
+      "test": "test_acquire1_overlapping_different_routes_keep_each_cursor_and_global_envelopes",
+      "finding": "acquires are inside live scripts",
+      "action": "keep"
+    }
+  ],
+  "audit_limit": "AST/text candidate search of copied test_fb*.py and reading relevant helpers; no confirmed stopped read/monitored/acquire dependency found. Not a semantic proof for every dynamic helper path.",
+  "verification": {
+    "state": "passed",
+    "command": "In work29: PYTHONPATH=../impl29/src; PYTHONDONTWRITEBYTECODE=1; python -B - invoking pytest.main([tests/test_fb_port_life.py, -q, -p, no:cacheprovider, -n, 0, -o, pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1154/impl29/src, --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1154/bt_tests61, --tb=short], plugins=[VerifySource()])",
+    "source_verified": "sui.fb.__file__ was impl29/src/sui/fb.py before collection, at collection finish, and after execution",
+    "passed": 51,
+    "failed": 0,
+    "seconds": 27.27,
+    "parallelism": 0,
+    "test_bodies": "Exact text following the module docstring matches the impl29 test copy, which matched the work29 baseline before editing; all assertions unchanged",
+    "test_body_sha256": "b50e309a4ce1b52f648f951b494b2df2ba8aca1c9d449966830edf89e075e530",
+    "processes": "Both request 61 pytest sessions completed; test cleanup finished without teardown errors",
+    "mutation": "not independently rerun; K29-b and user report retained separately",
+    "earlier_attempt": {
+      "passed": 31,
+      "failed": 20,
+      "seconds": 15.21,
+      "parallelism": 2,
+      "qualification": "Not counted as implemented-source verification: parent-only import verification did not control worker imports and pytest default pythonpath=src was not overridden (pyproject.toml:11). Replaced by explicit pythonpath override and serial source verification."
+    }
+  },
+  "failure_judgment": "Request 61 independent implemented-source verification: 51 passed, no failures. Historical pre-K29 31/20 results and classification remain in history.",
+  "conceptual_discrimination": [
+    {
+      "mutation": "omit stopped checks",
+      "expected": "18 rejection cases fail RuntimeError assertion"
+    },
+    {
+      "mutation": "check read only at entry",
+      "expected": "both public-ledger-barrier cases return bytes/add use after actual stop and fail"
+    },
+    {
+      "mutation": "remove the sole acquire stopped check after source lock, before before-M (K29-a)",
+      "expected": "The four listed stopped acquire cases fail; request 61 reports mutation detection. No separate post-entry stopped-check race or new public synchronization hook is required.",
+      "evidence": "K29-a :3547; K29-b :3548; request 61; not rerun by this test author"
+    },
+    {
+      "mutation": "cancel acquire after source read because body returned",
+      "expected": "6 after-before cases fail once-only successful publication and ES/raw/Frame checks"
+    },
+    {
+      "mutation": "revoke all port operations after return",
+      "expected": "late native terminal, now/frozen-reader/prepared controls fail"
+    },
+    {
+      "mutation": "treat unknown launch as stopped",
+      "expected": "live unknown control fails all three allowed operations"
+    },
+    {
+      "mutation": "duplicate/old wrapper enters twice or releases live owner",
+      "expected": "EW admission/stopped and live-owner positive-operation checks fail"
+    }
+  ],
+  "read_scope": {
+    "paper": "Request 61: K29-a :3547 and K29-b :3548 read in full; current K29 body :4376-4438 read in full. Request 60 readings retained in the prior report.",
+    "public_source": "type fields/signatures/docstrings only; no implementation function bodies or private host modules",
+    "tests": "relevant copied fixtures and test bodies; no main src/tests reads"
+  },
+  "recording": "Durable work result stored here inside the user-authorized tests directory; no Obsidian write made under this tests-only instruction.",
+  "history": [
+    {
+      "request": 60,
+      "spec_version": "1.07",
+      "source_copy": "master 2d3a58c; K29 implementation absent",
+      "verification": {
+        "final_command": "PYTHONPATH=work29/src; python -B / pytest.main with logreport-only collector; tests/test_fb_port_life.py -q -p no:cacheprovider -n 2 --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1154/bt_tests60 --tb=line",
+        "passed": 31,
+        "failed": 20,
+        "seconds": 15.12,
+        "missing_RuntimeError": 18,
+        "mid_read_returned_bytes": 2,
+        "other_failures": 0,
+        "skips": 0,
+        "focused_controls": "unentered or denied_wrapper: 5 passed, 46 deselected, 1.85s",
+        "syntax": "ast.parse passed; no bytecode written",
+        "implementation_mutation": "not run",
+        "processes": "all returned exec sessions completed; helper cleanup joins threads and releases gates",
+        "scope_check": "All tracked src/tests match 2d3a58c after CRLF-to-LF normalization (70 CRLF-only differences in the supplied copy); only two non-bytecode extras are the new test and this coverage JSON."
+      },
+      "failure_judgment": "All final red cases observe behavior contrary to K29 :4391-4394,:4401; no test-fixture failure remains in final run. They demonstrate absent K29 behavior in the supplied pre-K29 copy, not an implementation fix request.",
+      "closed_cg": [
+        {
+          "id": "CG-K29-SOURCE-LOCK-WAIT",
+          "evidence": "paper :4394,:4428; public FSource.read and FWorkContext.acquire; tests/test_fb_measure.py:170-184,1214",
+          "question": "Is there an existing public synchronization event or specification that proves a second acquire passed its entry check before waiting for the source-read lock?",
+          "reason": "FSource.read can hold a previous acquisition, but a pre-delegation Event proves only an attempted call. Without such an event, stopping the body could precede the entry check and an entry-only mutant could pass.",
+          "not_run": "No weak schedule-dependent replacement test, skip, xfail, retry, private lock/stack access or implementation patch was introduced."
+        }
+      ]
+    }
+  ],
+  "paper_line_convention": "Current core.paper references use v1.09; historical references in history use v1.07",
+  "cg_resolution": {
+    "id": "CG-K29-SOURCE-LOCK-WAIT",
+    "status": "closed_by_K29_a",
+    "paper": "K29-a :3547, new decision 4 :4396",
+    "resolution": "No public synchronization hook added. Acquire entry checks admission only; the sole stopped check is at the source-lock/before-M boundary. Normal stopped acquire cases discriminate its removal. A separate waiting-race test is not required.",
+    "discriminating_cases": [
+      "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-return]",
+      "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-exception]",
+      "test_portlife1_stopped_production_measurer_port_rejects_without_effects[acquire]",
+      "test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive[acquire]"
+    ],
+    "tradeoff": "A stopped call may wait for the source-read lock before being rejected."
+  },
+  "verification_reported": {
+    "source": "request 61 from the user; not an independent execution by this test author",
+    "copy": "scratchpad/sui1154/impl29",
+    "passed": 51,
+    "failed": 0,
+    "mutation": "K29-b :3548 reports 9 red and 1 equivalent; no mutation rerun in request 61",
+    "discriminating_cases": [
+      "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-return]",
+      "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-exception]",
+      "test_portlife1_stopped_production_measurer_port_rejects_without_effects[acquire]",
+      "test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive[acquire]"
+    ]
+  }
+}

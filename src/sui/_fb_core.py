@@ -674,8 +674,9 @@ def start_works(state) -> None:
             finally:
                 with state.lock:
                     if ctx.entered:
-                        # 開始札を取った本体の実際の終わり。ここで初めて占有を解放する
+                        # 開始札を取った本体の実際の終わり。ここで初めて占有を解放する。この口は以後、控えを足さない (K29)
                         row.stopped, row.phase, row.held, row.claim = True, "stopped", None, None
+                        ctx.returned = True
                     elif row.claim is ctx and not row.ticket_used:
                         # 今の占有を持つ起動が入場せずに終わった: 開始していないので開始待ちに戻す
                         row.phase, row.held, row.claim = "pending", None, None
@@ -756,6 +757,7 @@ class WorkContext:
         self._state, self._row = state, row
         self.entered = False   # この口が開始札を取ったか
         self.invoked = False   # この口の本体が呼ばれたか
+        self.returned = False  # 入場した本体が戻ったのをホストが観測したか (K29)
 
     def enter(self) -> bool:
         with self._state.lock:
@@ -786,18 +788,26 @@ class WorkContext:
         if not self.entered:
             raise RuntimeError("this work port has not entered: it cannot record evidence")
 
+    def _require_live(self) -> None:
+        """入場していて、本体がまだ戻っていない口だけが、ホストの控え (使用・区間・取りに行き) を足せる (K29)。
+        戻った後の口は入場していない口と同じに断る (§6-10 J8 の「失効した口」)。ロックの中で呼ぶ。"""
+        self._require_entered()
+        if self.returned:
+            raise RuntimeError("this work port's body has returned: it cannot record evidence")
+
     def read(self, point) -> bytes:
         state = self._state
         with state.lock:
-            self._require_entered()
+            self._require_live()
         record = state.ledger.record(point)
         with state.lock:
+            self._require_live()   # 台帳を読んでいる間に本体が戻ったら、使用を足さず本文も返さない (K29 決定 4)
             self._row.uses.append((point, mono_ns(state.clock)))
         return record.body.content.data
 
     def monitored(self, interval) -> None:
         with self._state.lock:
-            self._require_entered()
+            self._require_live()
             self._row.intervals.append(interval)
 
     def evidence(self):
@@ -832,7 +842,7 @@ class WorkContext:
         from ._fb_bind import _route
         state, row = self._state, self._row
         with state.lock:
-            self._require_entered()
+            self._require_entered()   # 止まった後かどうかは、下の準備の境目だけで見る (K29 決定 4・K29-a)
             require_running(state)
             if not isinstance(row.work, _fb.MeasureSegment):
                 raise RuntimeError("only a measuring work port can acquire from its source")
@@ -842,6 +852,8 @@ class WorkContext:
             epoch = route.config.route_epoch
         with state.source_lock:
             with state.lock:   # 準備: ここで例外なら、まだ源を読んでいない (何も起きていない)
+                # 源の読みの鍵を待つ間に本体が戻っていたら、ここで断る (K29 の境目)。通った回は公開まで進む
+                self._require_live()
                 cursor = state.cursors.get(epoch, 0)
                 source = state.sources.get(epoch)
                 before = self._reading()
