@@ -42,7 +42,7 @@ __all__ = [
     "Unsaved", "Held", "StatusBasis", "SlotStatus", "ReceiptStatus", "WorkStatus",
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
     "PurposeStatus", "BeliefUpdateStatus", "FStatus", "FWorkContext", "FWorkers", "LaunchResult", "FLauncher", "FWindow",
-    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater",
+    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater", "WorkerBundle",
     "AcquisitionControl", "AcquisitionObservationModel", "AcquisitionReadItem", "AcquisitionReadResult",
     "read_acquisition_sequence",
 ]
@@ -821,7 +821,8 @@ class FWorkContext(_Protocol):
 
 
 class FWorkers(_Protocol):
-    """仕事の本体を走らせる係 (段 1〜3 で試験の側が用意する)。run はホストのスレッドで呼ばれ、
+    """仕事の本体を走らせる係。本体の束ね `WorkerBundle` が用途ごとの係へ振り分ける (K30。束ねを組むのは今は使う側、
+    起動の入口は ④' 段 4)。run はホストのスレッドで呼ばれ、
     戻ったことが実際の停止の観測になる。返す前に ctx.enter() が False なら本体に入らない。"""
 
     def run(self, work: FWork, ctx: FWorkContext) -> None: ...
@@ -955,7 +956,7 @@ class SourceMeasurer:
     決着まで待ち、その結果を残す。扱えない取りに行き方は、入場して取りに行かずに Ended (unsupported_repeat) で
     終わる (断って pending へ戻すと起こし直しが続く、決定 4)。acquire() の例外 (止まったホスト・家の人の中の
     失敗) は偽りの結果にせず上げて、係はそこで止まる (決定 6・7)。測る仕事以外は TypeError
-    (ほかの仕事の係と束ねるのは使う側)。"""
+    (ほかの仕事の係と束ねるのは `WorkerBundle`)。"""
 
     def __init__(self) -> None:
         from threading import Lock
@@ -1017,7 +1018,7 @@ class FiniteUpdater:
     (`f_update2._failure_content`、K28-a (ウ))。例外の自由な文は載せない。完成した joint を外から受け取らない。
 
     `registry` は、組み立てる側がホストへ渡したものと同じ `FRegistry` を明示して渡す (係の中で作らない)。
-    見立てを直す仕事以外を渡されたら TypeError (束ねるのは使う側)。読める報告の種類はこの係では増えない。"""
+    見立てを直す仕事以外を渡されたら TypeError (束ねるのは `WorkerBundle`)。読める報告の種類はこの係では増えない。"""
 
     def __init__(self, *, registry: FRegistry) -> None:
         self._registry = registry
@@ -1056,3 +1057,29 @@ class FiniteUpdater:
                 readings=(started, finished), basis=()))
         ctx.post(WorkFinished(work=work.desc.work_id, started=started, finished=finished, outcome=outcome),
                  issued=issued)
+
+
+class WorkerBundle:
+    """係の束ね (紙 F-b §6-10 K30、Z51 ②)。用途 (`Stage`) → 係 の対応を作る時に受け取り、仕事の `desc.purpose` で
+    係を 1 人選んで、同じ (work, ctx) で `run` を 1 回呼ぶ。`FWorkers` を満たす。
+
+    作る時に用途の 6 つ全部がちょうどそろっていなければ ValueError (欠け・余りを名指す)、係に呼べる `run` が無ければ
+    TypeError。係がその用途を扱えるかは確かめない (書き間違えると係が入場前に断り、起こし直しが続く = K30 (4))。
+    同じ係を幾つの用途に書いてもよい。受け取った対応は写して持ち、作った後は変えない。束ね自身は入場せず
+    (`ctx.enter()` を呼ばない)、口のどの操作も呼ばず、係の戻りと例外をそのまま通す。"""
+
+    def __init__(self, workers: _Mapping[Stage, FWorkers]) -> None:
+        from typing import get_args
+        stages = get_args(Stage)
+        table = dict(workers)
+        missing = [s for s in stages if s not in table]
+        extra = [k for k in table if k not in stages]
+        if missing or extra:
+            raise ValueError(f"WorkerBundle needs exactly one worker per purpose: missing {missing}, extra {extra}")
+        for stage, worker in table.items():
+            if not callable(getattr(worker, "run", None)):
+                raise TypeError(f"WorkerBundle: the worker for {stage!r} has no callable run")
+        self._workers = table
+
+    def run(self, work: "FWork", ctx: FWorkContext) -> None:
+        return self._workers[work.desc.purpose].run(work, ctx)

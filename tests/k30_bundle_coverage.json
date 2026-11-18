@@ -1,0 +1,622 @@
+{
+  "problem": "K30",
+  "spec": "specs/関所F_Fb_今の約束.md",
+  "spec_version": "1.11",
+  "source_copy": "master 2b65ad5; WorkerBundle absent",
+  "scope": "Only tests/test_fb_bundle.py, tests/test_fb_skeleton.py (one export expectation), and this JSON; src untouched",
+  "tests": [
+    {
+      "name": "test_bundle1_public_shape_and_exact_six_stage_domain",
+      "file": "tests/test_fb_bundle.py",
+      "line": 88,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_exact_mapping_constructs_without_entering_or_running_workers",
+      "file": "tests/test_fb_bundle.py",
+      "line": 103,
+      "cases": 2,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_each_missing_purpose_is_value_error",
+      "file": "tests/test_fb_bundle.py",
+      "line": 112,
+      "cases": 6,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_extra_replacement_and_empty_domains_are_value_error",
+      "file": "tests/test_fb_bundle.py",
+      "line": 121,
+      "cases": 3,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_every_value_requires_a_callable_run",
+      "file": "tests/test_fb_bundle.py",
+      "line": 135,
+      "cases": 18,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context",
+      "file": "tests/test_fb_bundle.py",
+      "line": 144,
+      "cases": 6,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_copies_the_mapping_before_caller_replaces_and_deletes_keys",
+      "file": "tests/test_fb_bundle.py",
+      "line": 155,
+      "cases": 6,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_one_worker_may_cover_all_purposes_and_receives_each_call",
+      "file": "tests/test_fb_bundle.py",
+      "line": 169,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_same_work_with_a_new_context_is_forwarded_again",
+      "file": "tests/test_fb_bundle.py",
+      "line": 181,
+      "cases": 6,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_exact_worker_exception_escapes_without_extra_context_operations",
+      "file": "tests/test_fb_bundle.py",
+      "line": 195,
+      "cases": 12,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_false_enter_is_not_replaced_by_bundle_admission_or_work",
+      "file": "tests/test_fb_bundle.py",
+      "line": 210,
+      "cases": 6,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_native_purpose_mismatch_is_not_constructor_validation",
+      "file": "tests/test_fb_bundle.py",
+      "line": 225,
+      "cases": 2,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_host_keeps_unentered_work_pending_and_forwards_retry_with_new_context",
+      "file": "tests/test_fb_bundle.py",
+      "line": 293,
+      "cases": 2,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_host_wrapper_cannot_admit_twice_or_revoke_the_live_owner",
+      "file": "tests/test_fb_bundle.py",
+      "line": 326,
+      "cases": 2,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_host_observes_exceptional_return_and_preserves_K29_rejection",
+      "file": "tests/test_fb_bundle.py",
+      "line": 365,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    },
+    {
+      "name": "test_bundle1_native_measurement_update_and_three_selections_use_the_main_loop_bundle",
+      "file": "tests/test_fb_bundle.py",
+      "line": 455,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K30 public API missing: fb.WorkerBundle",
+      "later_assertions": "not reached against the supplied source"
+    }
+  ],
+  "core": [
+    {
+      "id": "acceptance-complete-domain",
+      "paper": "K30 :3549; :4460,:4470",
+      "condition": "Exactly the six Stage purposes; missing six ways, extra, empty, five-plus-unknown are ValueError",
+      "tests": [
+        "test_bundle1_public_shape_and_exact_six_stage_domain",
+        "test_bundle1_exact_mapping_constructs_without_entering_or_running_workers",
+        "test_bundle1_each_missing_purpose_is_value_error",
+        "test_bundle1_extra_replacement_and_empty_domains_are_value_error"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "acceptance-worker-shape",
+      "paper": "4461;4470",
+      "condition": "Every value has callable run; no run/None/noncallable rejected with TypeError, in each of six positions",
+      "tests": [
+        "test_bundle1_every_value_requires_a_callable_run"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "acceptance-frozen-mapping",
+      "paper": "4462;4470",
+      "condition": "Replacing an input dictionary worker and deleting a key after construction cannot change routing",
+      "tests": [
+        "test_bundle1_copies_the_mapping_before_caller_replaces_and_deletes_keys"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "acceptance-purpose-dispatch",
+      "paper": "4459;4463;4470",
+      "condition": "Use desc.purpose, including four Compute purposes; only that worker called",
+      "tests": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "acceptance-same-arguments",
+      "paper": "4463;4470",
+      "condition": "Worker receives identical work and ctx objects",
+      "tests": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context",
+        "test_bundle1_one_worker_may_cover_all_purposes_and_receives_each_call"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "acceptance-once-per-call",
+      "paper": "4463;4470",
+      "condition": "Exactly once per bundle call, including same work with a new context; do not deduplicate WorkId",
+      "tests": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context",
+        "test_bundle1_same_work_with_a_new_context_is_forwarded_again",
+        "test_bundle1_host_keeps_unentered_work_pending_and_forwards_retry_with_new_context"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "acceptance-no-port-operations",
+      "paper": "4463;4470",
+      "condition": "No bundle calls to enter/now/acquire/read/monitored/reader/prepared/post/evidence when worker returns or raises without using ctx",
+      "tests": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context",
+        "test_bundle1_exact_worker_exception_escapes_without_extra_context_operations"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "acceptance-return-transparency",
+      "paper": "4463;4470",
+      "condition": "Return exactly the worker result",
+      "tests": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context",
+        "test_bundle1_one_worker_may_cover_all_purposes_and_receives_each_call"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": "A sentinel worker return deliberately detects dropped return values; Python annotation remains run -> None as paper (2)."
+    },
+    {
+      "id": "acceptance-exception-transparency",
+      "paper": "4463;4470",
+      "condition": "Same exception instance before/after entry, without wrapping, swallowing or extra port calls",
+      "tests": [
+        "test_bundle1_exact_worker_exception_escapes_without_extra_context_operations",
+        "test_bundle1_host_observes_exceptional_return_and_preserves_K29_rejection"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "acceptance-native-workers",
+      "paper": "4470;4503",
+      "condition": "Actual SourceMeasurer and FiniteUpdater are the mapping values; four thinking purposes use TEST workers",
+      "tests": [
+        "test_bundle1_native_measurement_update_and_three_selections_use_the_main_loop_bundle"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "public-shape",
+      "paper": "4475-4477",
+      "condition": "WorkerBundle exported; required workers Mapping[Stage,FWorkers]; run(work,ctx)->None; no new host argument",
+      "tests": [
+        "test_bundle1_public_shape_and_exact_six_stage_domain",
+        "test_fb_skeleton.py::test_public_export_names_are_exact",
+        "test_fb_skeleton.py::test_public_entry_signatures"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "unchanged-FWorkers-and-host-signatures",
+      "paper": "4482",
+      "condition": "FWorkers.run and FThreadHost workers= stay unchanged",
+      "tests": [
+        "test_fb_skeleton.py::test_public_entry_signatures"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": "Existing signature test passed in the supplied source; new WorkerBundle export test fails solely for the absent name."
+    },
+    {
+      "id": "unchanged-host-admission-retry",
+      "paper": "4482;4499",
+      "condition": "Host retains admission/retry ownership and gives a new context for same work",
+      "tests": [
+        "test_bundle1_host_keeps_unentered_work_pending_and_forwards_retry_with_new_context",
+        "test_bundle1_host_wrapper_cannot_admit_twice_or_revoke_the_live_owner"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "unchanged-context-K29",
+      "paper": "4482;4501",
+      "condition": "After actual exception return, stopped context rejects read/monitored/acquire; now remains usable",
+      "tests": [
+        "test_bundle1_host_observes_exceptional_return_and_preserves_K29_rejection"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "unchanged-native-purpose-errors",
+      "paper": "4482;4485",
+      "condition": "Constructor validates only run shape; misplaced native workers still raise TypeError before admission",
+      "tests": [
+        "test_bundle1_native_purpose_mismatch_is_not_constructor_validation"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "unchanged-window-delta-U",
+      "paper": "4482",
+      "condition": "Same real acquisition binding, request, native U result/adoption chain and continuation; hand-derived CE1 values",
+      "tests": [
+        "test_bundle1_native_measurement_update_and_three_selections_use_the_main_loop_bundle"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-01",
+      "paper": "4493",
+      "condition": "Exact/missing-six/extra/five-plus-unknown/empty domain",
+      "tests": [
+        "test_bundle1_exact_mapping_constructs_without_entering_or_running_workers",
+        "test_bundle1_each_missing_purpose_is_value_error",
+        "test_bundle1_extra_replacement_and_empty_domains_are_value_error"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-02",
+      "paper": "4494",
+      "condition": "Absent or noncallable run",
+      "tests": [
+        "test_bundle1_every_value_requires_a_callable_run"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-03",
+      "paper": "4495",
+      "condition": "Caller replaces and deletes dictionary entries",
+      "tests": [
+        "test_bundle1_copies_the_mapping_before_caller_replaces_and_deletes_keys"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-04",
+      "paper": "4496",
+      "condition": "Six separate purpose workers; one worker may cover multiple purposes",
+      "tests": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context",
+        "test_bundle1_one_worker_may_cover_all_purposes_and_receives_each_call"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-05",
+      "paper": "4497",
+      "condition": "No port operations on return/exception; public host sees unentered work pending and one real admission",
+      "tests": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context",
+        "test_bundle1_exact_worker_exception_escapes_without_extra_context_operations",
+        "test_bundle1_host_keeps_unentered_work_pending_and_forwards_retry_with_new_context",
+        "test_bundle1_host_wrapper_cannot_admit_twice_or_revoke_the_live_owner"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-06",
+      "paper": "4498",
+      "condition": "False enter is not replaced by bundle admission or more work",
+      "tests": [
+        "test_bundle1_false_enter_is_not_replaced_by_bundle_admission_or_work"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-07",
+      "paper": "4499",
+      "condition": "Pre-entry error/no-entry normal return -> retry same WorkId with fresh context",
+      "tests": [
+        "test_bundle1_host_keeps_unentered_work_pending_and_forwards_retry_with_new_context",
+        "test_bundle1_same_work_with_a_new_context_is_forwarded_again"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-08",
+      "paper": "4500",
+      "condition": "Duplicate wrapper; stale not_started wrapper does not invalidate current owner",
+      "tests": [
+        "test_bundle1_host_wrapper_cannot_admit_twice_or_revoke_the_live_owner"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-09",
+      "paper": "4501",
+      "condition": "Post-entry exception; actual stopped observation and K29 protections",
+      "tests": [
+        "test_bundle1_host_observes_exceptional_return_and_preserves_K29_rejection"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-10",
+      "paper": "4502",
+      "condition": "Transparent returns and pre/post-entry exceptions",
+      "tests": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context",
+        "test_bundle1_exact_worker_exception_escapes_without_extra_context_operations"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-11",
+      "paper": "4503",
+      "condition": "Native measurement/update via host; four TEST thinking purposes",
+      "tests": [
+        "test_bundle1_native_measurement_update_and_three_selections_use_the_main_loop_bundle"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    },
+    {
+      "id": "scene-12",
+      "paper": "4504",
+      "condition": "Main first-loop path and continuations use bundle",
+      "tests": [
+        "test_bundle1_native_measurement_update_and_three_selections_use_the_main_loop_bundle"
+      ],
+      "coverage": "public-entry test written; WorkerBundle currently absent",
+      "note": null
+    }
+  ],
+  "cg": [],
+  "rig_migration": {
+    "name": "test_fb_bundle.py::BundleLoopRig",
+    "base": "test_fb_belief.py::BeliefRig",
+    "location": 389,
+    "change": "Use existing declarative fixture with defer_boot=True, then connect a fresh real host with workers=WorkerBundle before any queued Boot is accepted. The mapping directly contains SourceMeasurer and FiniteUpdater, plus existing test Workers for four thinking purposes.",
+    "test_telemetry": "Keep self.workers only as test-worker telemetry; host actually receives self.bundle. No AcquirePort wrapper is needed for native paths; observe real saved Frames/results/adoptions and global EW/ES through a compute context.",
+    "continuation_wait": "Wait for a new unexecuted request actually offered to the launcher; adoption and saving continuation need not share a settle call.",
+    "native_workers": [
+      "SourceMeasurer",
+      "FiniteUpdater"
+    ],
+    "test_workers": [
+      "candidate_generation",
+      "evaluation_prepare",
+      "selection_draw",
+      "evaluation"
+    ],
+    "test_source": "BeliefSource Event gates; only native SourceMeasurer calls acquire",
+    "expected": "Declared p0=(1/2,1/2), diagonal T=(1/4,1/16), E=(1/2,1/4). After T: joint=(4/5,1/5), mass=5/32; after TE: joint=(8/9,1/9), mass=9/128. Initial plus two continuation selections: 3.",
+    "actual_bundle_result": "blocked at missing WorkerBundle before rig construction; no claim of native-bundle execution",
+    "footing_only_result": "Main loop helper passed using an ephemeral TEST-only dispatcher (not fb.WorkerBundle); native SourceMeasurer/FiniteUpdater, real host/store/clock were used. This validates fixture plumbing only."
+  },
+  "existing_tests": [
+    {
+      "file": "tests/test_fb_skeleton.py",
+      "line": 872,
+      "function": "test_public_export_names_are_exact",
+      "action": "migrated",
+      "reason": "K30(2) adds WorkerBundle to exact __all__ expectation; no other public signatures change"
+    },
+    {
+      "file": "tests/test_fb_skeleton.py",
+      "line": 574,
+      "function": "test_public_entry_signatures",
+      "action": "keep",
+      "reason": "FWorkers and FThreadHost signatures unchanged; this existing test passed"
+    },
+    {
+      "file": "tests/test_fb_skeleton.py",
+      "line": 55,
+      "item": "GAPS historical prose about old FWorkers",
+      "action": "keep historical note",
+      "reason": "Not an assertion about the current FWorkers docstring"
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "line": 151,
+      "item": "BeliefWorkers.run",
+      "action": "main-path derived rig migrated here; retain existing fault-probe fixture",
+      "reason": "FHost still accepts any FWorkers; purpose-specific probes can later be registered as bundle values without losing test fault hooks"
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "line": 173,
+      "item": "Workers.run/normal",
+      "action": "four TEST purposes retained as one shared worker value",
+      "reason": "K30 explicitly allows one worker for several purposes; moving their computation is K30-out-of-scope"
+    },
+    {
+      "file": "tests/test_fb_acquisition_loop.py",
+      "line": 104,
+      "item": "ProductionUpdaterProbe",
+      "action": "not needed in the new bundle main path; keep existing admission/fault scenes",
+      "reason": "Probe forwards the native updater via public context; a later wider fixture migration can register this probe for belief_update"
+    },
+    {
+      "file": "tests/test_fb_measure.py",
+      "line": 228,
+      "item": "AcquireWorkers.run",
+      "action": "keep existing acquisition/fault probes",
+      "reason": "Protocol remains compatible; replacing every test adapter is not K30 requirement"
+    }
+  ],
+  "existing_test_audit_scope": "Searched copied *fb*.py for __all__, getdoc/__doc__, FWorkers docstring dependence and dispatch fixtures. Only the exact export expectation needs mandatory migration. Other fixtures remain valid as test FWorkers; not all are globally migrated.",
+  "verification": {
+    "production_source": "Verified sui.fb.__file__ under work30/src; pyproject.toml:11 pythonpath=[src], also explicitly overridden to that same absolute source path",
+    "command": "In work30: python -B - / pytest.main, tests/test_fb_bundle.py tests/test_fb_skeleton.py -q -p no:cacheprovider -n 0 -o pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/work30/src --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/bt_tests63 --tb=no -r \"\"; PYTHONDONTWRITEBYTECODE=1",
+    "bundle": {
+      "failed": 75,
+      "passed": 0,
+      "reason": "All 75: K30 public API missing: fb.WorkerBundle"
+    },
+    "skeleton": {
+      "failed": 1,
+      "passed": 174,
+      "reason": "Only test_public_export_names_are_exact: expected new WorkerBundle export absent"
+    },
+    "total": {
+      "failed": 76,
+      "passed": 174,
+      "seconds": 2.42
+    },
+    "other_failure_reasons": 0,
+    "collection_errors": 0,
+    "skip_or_xfail": 0,
+    "footing_only": {
+      "qualification": "Ephemeral pytest collection hook replaced only test_fb_bundle.bundle_type with a minimal TEST-only dispatcher; no fb symbol or src was modified. These green results are NOT WorkerBundle product verification.",
+      "host_cases": "5 passed; before/after admission, retry, duplicate/stale wrappers and stopped-port controls use the real existing host",
+      "main_loop": "1 passed, 74 deselected in 15.67s after fixing fixture continuation wait",
+      "earlier_footing_failure": "Main-loop fixture first chose an already executed last request. Fixed by waiting for a newly offered unexecuted request. No product change."
+    },
+    "implementation_mutations": "not run",
+    "source_scope_check": "Tracked src/tests match 2b65ad5 after CRLF normalization except the one skeleton export expectation; extra test file plus this coverage artifact only",
+    "processes": "All started exec sessions completed; test cleanup released gates and joined helper threads"
+  },
+  "conceptual_discrimination": [
+    {
+      "mistake": "route to neighbor purpose or use Compute class alone",
+      "caught_by": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context"
+      ]
+    },
+    {
+      "mistake": "delegate twice",
+      "caught_by": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context",
+        "test_bundle1_one_worker_may_cover_all_purposes_and_receives_each_call"
+      ]
+    },
+    {
+      "mistake": "bundle calls enter or another public port operation",
+      "caught_by": [
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context",
+        "test_bundle1_exact_worker_exception_escapes_without_extra_context_operations",
+        "test_bundle1_false_enter_is_not_replaced_by_bundle_admission_or_work"
+      ]
+    },
+    {
+      "mistake": "swallow/wrap exception or drop return",
+      "caught_by": [
+        "test_bundle1_exact_worker_exception_escapes_without_extra_context_operations",
+        "test_bundle1_dispatches_once_only_to_the_purpose_worker_without_touching_context"
+      ]
+    },
+    {
+      "mistake": "retain supplied mapping instead of copy",
+      "caught_by": [
+        "test_bundle1_copies_the_mapping_before_caller_replaces_and_deletes_keys"
+      ]
+    },
+    {
+      "mistake": "count six keys without checking exact domain",
+      "caught_by": [
+        "test_bundle1_extra_replacement_and_empty_domains_are_value_error"
+      ]
+    },
+    {
+      "mistake": "remember WorkId and discard retried call",
+      "caught_by": [
+        "test_bundle1_same_work_with_a_new_context_is_forwarded_again",
+        "test_bundle1_host_keeps_unentered_work_pending_and_forwards_retry_with_new_context"
+      ]
+    }
+  ],
+  "limits": [
+    "All actual WorkerBundle assertions after bundle_type are not reached in the pre-K30 source. Test-side dispatcher footing checks are separate and do not close product verification.",
+    "Error messages are not fixed; only ValueError/TypeError types, per user request.",
+    "No unexpected-purpose runtime behavior or non-Mapping input behavior is invented; host purpose domain is the specified six.",
+    "Worker replacement by the owner and production startup assembly remain S10/S11 and stage 4; no approval or new API inferred."
+  ],
+  "read_scope": {
+    "paper": "K30 summary :3549 and entire body :4441-4509; Z51 :3782 full line; K27 decision 4 :4158 full item",
+    "public_source": "work30/src/sui/fb.py type aliases, fields, signatures and docstrings only; no implementation function bodies or private host modules read",
+    "tests": "Relevant copied BeliefRig, AcquireRig, Stage2/Loop worker fixtures and public lifecycle tests; withdrawn K27/K28 drafts not read"
+  },
+  "recording": "This coverage artifact is the durable result inside the user-authorized tests scope; no external vault write."
+}
