@@ -1,14 +1,14 @@
 {
   "problem": "K29",
   "spec": "specs/関所F_Fb_今の約束.md",
-  "spec_version": "1.09",
-  "source_copy": "work29 source remains master 2d3a58c without K29; current implemented-source verification uses read-only ../impl29/src",
-  "modified_scope": "Request 61: module docstring and coverage metadata only; all test bodies/assertions and src unchanged",
+  "spec_version": "1.10",
+  "source_copy": "work29 source remains the pre-K29 master 2d3a58c; current verification uses read-only ../impl29/src, specified by request 62 as master bd7311a",
+  "modified_scope": "Request 62: corrected module docstring, two new test functions (three cases), and coverage metadata only; existing function/assert ASTs unchanged; src untouched",
   "tests": [
     {
       "name": "test_portlife1_live_measurement_operations_keep_their_purpose_correct_effects",
       "file": "tests/test_fb_port_life.py",
-      "line": 227,
+      "line": 233,
       "cases": 6,
       "passed": 6,
       "failed": 0,
@@ -19,12 +19,12 @@
         "failed": 0,
         "failure": null
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_stopped_test_measurement_port_rejects_without_effects",
       "file": "tests/test_fb_port_life.py",
-      "line": 239,
+      "line": 245,
       "cases": 6,
       "passed": 6,
       "failed": 0,
@@ -35,12 +35,12 @@
         "failed": 6,
         "failure": "RuntimeError absent"
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_stopped_production_measurer_port_rejects_without_effects",
       "file": "tests/test_fb_port_life.py",
-      "line": 256,
+      "line": 262,
       "cases": 3,
       "passed": 3,
       "failed": 0,
@@ -51,12 +51,12 @@
         "failed": 3,
         "failure": "RuntimeError absent"
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_unentered_measurement_port_still_rejects_without_effects",
       "file": "tests/test_fb_port_life.py",
-      "line": 269,
+      "line": 275,
       "cases": 3,
       "passed": 3,
       "failed": 0,
@@ -67,12 +67,12 @@
         "failed": 0,
         "failure": null
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_read_rechecks_after_public_ledger_read_and_does_not_return_body",
       "file": "tests/test_fb_port_life.py",
-      "line": 289,
+      "line": 295,
       "cases": 2,
       "passed": 2,
       "failed": 0,
@@ -83,12 +83,12 @@
         "failed": 2,
         "failure": "read returned body bytes with error=None"
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_live_production_updater_can_record_evidence",
       "file": "tests/test_fb_port_life.py",
-      "line": 352,
+      "line": 358,
       "cases": 2,
       "passed": 2,
       "failed": 0,
@@ -99,12 +99,12 @@
         "failed": 0,
         "failure": null
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_stopped_production_updater_cannot_record_more_evidence",
       "file": "tests/test_fb_port_life.py",
-      "line": 358,
+      "line": 364,
       "cases": 2,
       "passed": 2,
       "failed": 0,
@@ -115,12 +115,12 @@
         "failed": 2,
         "failure": "RuntimeError absent"
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_late_native_update_terminal_post_still_adopts_once",
       "file": "tests/test_fb_port_life.py",
-      "line": 368,
+      "line": 374,
       "cases": 2,
       "passed": 2,
       "failed": 0,
@@ -131,12 +131,12 @@
         "failed": 0,
         "failure": null
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_now_reader_prepared_evidence_and_post_survive_measurement_return",
       "file": "tests/test_fb_port_life.py",
-      "line": 385,
+      "line": 391,
       "cases": 2,
       "passed": 2,
       "failed": 0,
@@ -147,12 +147,12 @@
         "failed": 0,
         "failure": null
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_frozen_reader_and_prepared_remain_usable_after_compute_return",
       "file": "tests/test_fb_port_life.py",
-      "line": 409,
+      "line": 415,
       "cases": 3,
       "passed": 3,
       "failed": 0,
@@ -163,12 +163,12 @@
         "failed": 0,
         "failure": null
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_acquire_past_before_publishes_once_even_after_body_returns",
       "file": "tests/test_fb_port_life.py",
-      "line": 436,
+      "line": 442,
       "cases": 6,
       "passed": 6,
       "failed": 0,
@@ -179,12 +179,12 @@
         "failed": 0,
         "failure": null
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_unknown_launch_with_an_entered_running_body_is_still_live",
       "file": "tests/test_fb_port_life.py",
-      "line": 511,
+      "line": 517,
       "cases": 1,
       "passed": 1,
       "failed": 0,
@@ -195,12 +195,12 @@
         "failed": 0,
         "failure": null
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive",
       "file": "tests/test_fb_port_life.py",
-      "line": 521,
+      "line": 527,
       "cases": 3,
       "passed": 3,
       "failed": 0,
@@ -211,12 +211,12 @@
         "failed": 3,
         "failure": "RuntimeError absent"
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_denied_wrapper_cannot_reenter_or_revoke_the_live_owner",
       "file": "tests/test_fb_port_life.py",
-      "line": 533,
+      "line": 539,
       "cases": 2,
       "passed": 2,
       "failed": 0,
@@ -227,12 +227,12 @@
         "failed": 0,
         "failure": null
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
     },
     {
       "name": "test_portlife1_compute_read_and_monitored_have_the_same_return_boundary",
       "file": "tests/test_fb_port_life.py",
-      "line": 590,
+      "line": 596,
       "cases": 8,
       "passed": 8,
       "failed": 0,
@@ -243,21 +243,59 @@
         "failed": 4,
         "failure": "RuntimeError absent"
       },
-      "result_provenance": "Request 61 independent execution: work29/tests with verified impl29/src; 51 passed overall"
+      "result_provenance": "Request 62 independent execution: work29/tests with verified impl29/src; 54 passed overall"
+    },
+    {
+      "name": "test_portlife1_stopped_read_of_unsaved_point_is_rejected_before_ledger_lookup",
+      "file": "tests/test_fb_port_life.py",
+      "line": 619,
+      "cases": 2,
+      "passed": 2,
+      "failed": 0,
+      "purpose": "Normal and exceptional admitted body return: valid-shaped unsaved Point read raises RuntimeError, not a ledger error, and uses/other evidence/publications remain unchanged",
+      "failure": null,
+      "result_provenance": "Request 62 independent implemented-source run: 54 passed overall"
+    },
+    {
+      "name": "test_portlife1_unentered_read_of_unsaved_point_is_runtime_error",
+      "file": "tests/test_fb_port_life.py",
+      "line": 640,
+      "cases": 1,
+      "passed": 1,
+      "failed": 0,
+      "purpose": "K11 unentered control: same valid-shaped unsaved Point situation raises RuntimeError without adding uses or other evidence/publications",
+      "failure": null,
+      "result_provenance": "Request 62 independent implemented-source run: 54 passed overall"
     }
   ],
   "core": [
     {
       "id": "acceptance-read",
       "paper": "4403; 4396; K29-b :3548",
-      "condition": "The decisive stopped check is after public ledger read, before adding use; reject without returning bytes. K29-b allows admission-only at entry as externally equivalent.",
+      "condition": "An already-stopped port is rejected with RuntimeError before ledger lookup, even if the Point is not saved. Also recheck after a read begun while live, before adding use, so an intervening stop returns no bytes or use.",
       "tests": [
         "test_portlife1_stopped_test_measurement_port_rejects_without_effects",
         "test_portlife1_stopped_production_updater_cannot_record_more_evidence",
-        "test_portlife1_read_rechecks_after_public_ledger_read_and_does_not_return_body"
+        "test_portlife1_read_rechecks_after_public_ledger_read_and_does_not_return_body",
+        "test_portlife1_stopped_read_of_unsaved_point_is_rejected_before_ledger_lookup"
       ],
       "status": "written_and_run",
-      "note": null
+      "note": "K29-b v1.10 corrects the earlier equivalence claim: admission-only at read entry leaks ledger exceptions on unsaved Points/store faults before the post-read check can run. The new tests exercise an unsaved Point; live missing-read exception type is deliberately not specified."
+    },
+    {
+      "id": "acceptance-read-unsaved-point",
+      "paper": "K29-b :3548; K29 (1) :4403; K11 :3511",
+      "condition": "RuntimeError takes precedence over lookup failure for an already-stopped port (normal/exceptional return) or an unentered port; uses remain unchanged. The missing Point is checked absent through the public entry store.",
+      "tests": [
+        "test_portlife1_stopped_read_of_unsaved_point_is_rejected_before_ledger_lookup",
+        "test_portlife1_unentered_read_of_unsaved_point_is_runtime_error"
+      ],
+      "test_lines": {
+        "test_portlife1_stopped_read_of_unsaved_point_is_rejected_before_ledger_lookup": 619,
+        "test_portlife1_unentered_read_of_unsaved_point_is_runtime_error": 640
+      },
+      "status": "written_and_run",
+      "note": "2 stopped cases + 1 unentered control; no assertion about the exception for a live missing-Point read; no mutation execution in request 62."
     },
     {
       "id": "acceptance-monitored",
@@ -316,7 +354,7 @@
         "test_portlife1_unentered_measurement_port_still_rejects_without_effects"
       ],
       "status": "written_and_run",
-      "note": "All no-effect and next-counter assertions passed in the independent request 61 work29-test/impl29-source run (51 passed). Earlier non-reach on pre-K29 source is historical only."
+      "note": "All no-effect and next-counter assertions passed in the independent request 62 work29-test/impl29-source run (54 passed). Earlier non-reach on pre-K29 source is historical only."
     },
     {
       "id": "unchanged-post",
@@ -390,7 +428,8 @@
       "paper": "4429",
       "condition": "Unentered ports reject all three operations",
       "tests": [
-        "test_portlife1_unentered_measurement_port_still_rejects_without_effects"
+        "test_portlife1_unentered_measurement_port_still_rejects_without_effects",
+        "test_portlife1_unentered_read_of_unsaved_point_is_runtime_error"
       ],
       "status": "written_and_run",
       "note": null
@@ -510,25 +549,24 @@
   "audit_limit": "AST/text candidate search of copied test_fb*.py and reading relevant helpers; no confirmed stopped read/monitored/acquire dependency found. Not a semantic proof for every dynamic helper path.",
   "verification": {
     "state": "passed",
-    "command": "In work29: PYTHONPATH=../impl29/src; PYTHONDONTWRITEBYTECODE=1; python -B - invoking pytest.main([tests/test_fb_port_life.py, -q, -p, no:cacheprovider, -n, 0, -o, pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1154/impl29/src, --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1154/bt_tests61, --tb=short], plugins=[VerifySource()])",
+    "command": "In work29: PYTHONPATH=../impl29/src; PYTHONDONTWRITEBYTECODE=1; python -B - invoking pytest.main([tests/test_fb_port_life.py, -q, -p, no:cacheprovider, -n, 0, -o, pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1154/impl29/src, --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1154/bt_tests62, --tb=short], plugins=[VerifySource()])",
     "source_verified": "sui.fb.__file__ was impl29/src/sui/fb.py before collection, at collection finish, and after execution",
-    "passed": 51,
+    "passed": 54,
     "failed": 0,
-    "seconds": 27.27,
+    "seconds": 30.15,
     "parallelism": 0,
-    "test_bodies": "Exact text following the module docstring matches the impl29 test copy, which matched the work29 baseline before editing; all assertions unchanged",
-    "test_body_sha256": "b50e309a4ce1b52f648f951b494b2df2ba8aca1c9d449966830edf89e075e530",
-    "processes": "Both request 61 pytest sessions completed; test cleanup finished without teardown errors",
-    "mutation": "not independently rerun; K29-b and user report retained separately",
-    "earlier_attempt": {
-      "passed": 31,
-      "failed": 20,
-      "seconds": 15.21,
-      "parallelism": 2,
-      "qualification": "Not counted as implemented-source verification: parent-only import verification did not control worker imports and pytest default pythonpath=src was not overridden (pyproject.toml:11). Replaced by explicit pythonpath override and serial source verification."
-    }
+    "new_tests": {
+      "functions": 2,
+      "cases": 3,
+      "passed": 3,
+      "failed": 0
+    },
+    "existing_tests": "All original function/assert ASTs match impl29/tests/test_fb_port_life.py; 51 existing cases remain green",
+    "syntax": "ast.parse and UTF-8 JSON parsing passed",
+    "processes": "The request 62 pytest session completed with exit code 0; cleanup had no teardown errors",
+    "mutation": "Not run by this test author; mutation 03 expected to fail the added stopped/missing-Point cases, to be checked separately by Claude"
   },
-  "failure_judgment": "Request 61 independent implemented-source verification: 51 passed, no failures. Historical pre-K29 31/20 results and classification remain in history.",
+  "failure_judgment": "Request 62 implemented-source run: 54 passed, including all three added cases. Previous independent results remain in history.",
   "conceptual_discrimination": [
     {
       "mutation": "omit stopped checks",
@@ -558,10 +596,15 @@
     {
       "mutation": "duplicate/old wrapper enters twice or releases live owner",
       "expected": "EW admission/stopped and live-owner positive-operation checks fail"
+    },
+    {
+      "mutation": "make the read check before ledger lookup admission-only (mutation 03)",
+      "expected": "The two stopped unsaved-Point cases require RuntimeError; reaching the missing record first would raise a ledger error and fail. The unentered RuntimeError control remains legal.",
+      "evidence": "K29-b v1.10 :3548; K29 (1) :4403; not an executed mutation result"
     }
   ],
   "read_scope": {
-    "paper": "Request 61: K29-a :3547 and K29-b :3548 read in full; current K29 body :4376-4438 read in full. Request 60 readings retained in the prior report.",
+    "paper": "Request 62: corrected K29-b v1.10 :3548 read in full; K29 (1) :4402-4403 read in full. Previous K29/K29-a/body readings are recorded in request 61.",
     "public_source": "type fields/signatures/docstrings only; no implementation function bodies or private host modules",
     "tests": "relevant copied fixtures and test bodies; no main src/tests reads"
   },
@@ -596,6 +639,44 @@
           "not_run": "No weak schedule-dependent replacement test, skip, xfail, retry, private lock/stack access or implementation patch was introduced."
         }
       ]
+    },
+    {
+      "request": 61,
+      "spec_version": "1.09",
+      "verification": {
+        "state": "passed",
+        "command": "In work29: PYTHONPATH=../impl29/src; PYTHONDONTWRITEBYTECODE=1; python -B - invoking pytest.main([tests/test_fb_port_life.py, -q, -p, no:cacheprovider, -n, 0, -o, pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1154/impl29/src, --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1154/bt_tests61, --tb=short], plugins=[VerifySource()])",
+        "source_verified": "sui.fb.__file__ was impl29/src/sui/fb.py before collection, at collection finish, and after execution",
+        "passed": 51,
+        "failed": 0,
+        "seconds": 27.27,
+        "parallelism": 0,
+        "test_bodies": "Exact text following the module docstring matches the impl29 test copy, which matched the work29 baseline before editing; all assertions unchanged",
+        "test_body_sha256": "b50e309a4ce1b52f648f951b494b2df2ba8aca1c9d449966830edf89e075e530",
+        "processes": "Both request 61 pytest sessions completed; test cleanup finished without teardown errors",
+        "mutation": "not independently rerun; K29-b and user report retained separately",
+        "earlier_attempt": {
+          "passed": 31,
+          "failed": 20,
+          "seconds": 15.21,
+          "parallelism": 2,
+          "qualification": "Not counted as implemented-source verification: parent-only import verification did not control worker imports and pytest default pythonpath=src was not overridden (pyproject.toml:11). Replaced by explicit pythonpath override and serial source verification."
+        }
+      },
+      "mutation_report_as_of_request_61": {
+        "source": "request 61 from the user; not an independent execution by this test author",
+        "copy": "scratchpad/sui1154/impl29",
+        "passed": 51,
+        "failed": 0,
+        "mutation": "K29-b :3548 reports 9 red and 1 equivalent; no mutation rerun in request 61",
+        "discriminating_cases": [
+          "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-return]",
+          "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-exception]",
+          "test_portlife1_stopped_production_measurer_port_rejects_without_effects[acquire]",
+          "test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive[acquire]"
+        ]
+      },
+      "correction": "The prior equivalent classification of read-entry mutation 03 is superseded by K29-b v1.10 :3548; it was an untested failure-precedence difference."
     }
   ],
   "paper_line_convention": "Current core.paper references use v1.09; historical references in history use v1.07",
@@ -613,16 +694,8 @@
     "tradeoff": "A stopped call may wait for the source-read lock before being rejected."
   },
   "verification_reported": {
-    "source": "request 61 from the user; not an independent execution by this test author",
-    "copy": "scratchpad/sui1154/impl29",
-    "passed": 51,
-    "failed": 0,
-    "mutation": "K29-b :3548 reports 9 red and 1 equivalent; no mutation rerun in request 61",
-    "discriminating_cases": [
-      "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-return]",
-      "test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-exception]",
-      "test_portlife1_stopped_production_measurer_port_rejects_without_effects[acquire]",
-      "test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive[acquire]"
-    ]
+    "source": "Corrected K29-b v1.10 :3548 read in full, plus request 62; information only, not independent mutation execution",
+    "copy": "scratchpad/sui1154/impl29; src specified as master bd7311a",
+    "mutation": "Earlier table: 9 red, 1 survived. Mutation 03 is not equivalent: stopped read can leak ledger exceptions. Corrected table execution with the added cases is not yet verified by this test author."
   }
 }

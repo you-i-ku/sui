@@ -1,4 +1,4 @@
-"""K29, F-b v1.09; K29-a :3547, K29-b :3548, body :4376-4438.
+"""K29, F-b v1.10; K29-a :3547, K29-b :3548, body :4376-4438.
 
 Public contexts, workers, stores and sources only.
 
@@ -15,14 +15,19 @@ test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-ret
 test_portlife1_stopped_test_measurement_port_rejects_without_effects[acquire-exception]
 test_portlife1_stopped_production_measurer_port_rejects_without_effects[acquire]
 test_portlife1_unknown_launch_does_not_keep_a_returned_body_alive[acquire]
-K29-b records the mutation results (9 red, 1 equivalent); these were not rerun
-by this test author. The equivalent read-entry change leaves the decisive
-post-ledger-read stopped check intact, so entry-time rejection is not required.
+K29-b v1.10 corrects the earlier equivalence claim for mutation 03: read must
+reject an already-stopped port before ledger lookup, because lookup can fail
+before the post-ledger stopped check. The added unsaved-Point cases require
+RuntimeError after normal/exceptional return, with an unentered K11 control.
+They do not fix the exception type for a live port reading an unsaved Point.
+The mutation table has not been independently rerun by this test author.
 
 Implemented-copy result reported for impl29: 51 passed. Independently verified
 in request 61: this work29 test with impl29/src, 51 passed (27.27s, -n 0).
+Request 62 with the three new unsaved-Point cases: 54 passed (30.15s, -n 0).
 Historical pre-K29 work29 result: 31 passed / 20 failed. See
-k29_port_life_coverage.json for verification/provenance. Bodies/assertions unchanged.
+k29_port_life_coverage.json for verification/provenance. Request 62 adds three
+unsaved-Point cases; existing test bodies/assertions remain unchanged.
 """
 
 from dataclasses import replace
@@ -38,6 +43,7 @@ from test_fb_acquisition_loop import AcquisitionLoopRig
 from test_fb_loop import execution_for, FIRST, assert_update, cut_first_update_launch
 from test_fb_stage1 import wire
 from test_fb_stage2 import Stage2Rig, ORDER
+from test_fb_skeleton import point
 
 
 WATCHDOG = 30
@@ -607,4 +613,41 @@ def test_portlife1_compute_read_and_monitored_have_the_same_return_boundary(life
         before = evidence_rows(ctx)
         with pytest.raises(RuntimeError): operate(rig, ctx, operation)
         assert evidence_rows(ctx) == before
+
+
+@pytest.mark.parametrize("failure", [False, True], ids=["return", "exception"])
+def test_portlife1_stopped_read_of_unsaved_point_is_rejected_before_ledger_lookup(life, failure):
+    """K29-b(03): admission-only at read entry leaks a ledger failure after stop.
+
+    The missing Point has valid public shape and no saved entry. Requiring
+    RuntimeError discriminates early stopped rejection from that ledger error;
+    a returned body or a new use also fails. No live missing-read type is fixed.
+    """
+    rig = make_measure(life, failure=failure, take=False)
+    work, ctx = start_measure(rig)
+    positive(rig, ctx, work.desc.work_id, "read")
+    assert stop_measure(rig, work, ctx).entered == 1
+    missing = point("K29 stopped read: deliberately unsaved")
+    assert missing not in {cid for cid, _ in rig.entry_store.load()}
+    before = signature(rig, ctx)
+    uses = ctx.evidence().uses
+    with pytest.raises(RuntimeError):
+        ctx.read(missing)
+    assert ctx.evidence().uses == uses
+    assert signature(rig, ctx) == before
+
+
+def test_portlife1_unentered_read_of_unsaved_point_is_runtime_error(life):
+    """K11 control: lack of admission rejects before a missing-record lookup."""
+    rig = make_measure(life, enter=False, take=False)
+    work, ctx = start_measure(rig)
+    assert execution_for(ctx, work.desc.work_id).entered == 0
+    missing = point("K29 unentered read: deliberately unsaved")
+    assert missing not in {cid for cid, _ in rig.entry_store.load()}
+    before = signature(rig, ctx)
+    uses = ctx.evidence().uses
+    with pytest.raises(RuntimeError):
+        ctx.read(missing)
+    assert ctx.evidence().uses == uses
+    assert signature(rig, ctx) == before
 
