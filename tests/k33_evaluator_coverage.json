@@ -1,0 +1,638 @@
+{
+  "problem": "K33",
+  "requests": [
+    72,
+    73,
+    74
+  ],
+  "date": "2026-11-20",
+  "state": "試験を記述済み。本体のK33は未実装。実行結果と到達していない後段を区別する。",
+  "specification": {
+    "path": "specs/関所F_Fb_今の約束.md",
+    "read_scope": "K33 line 3557 and the full body were read in requests 72/73 (before K33-a: lines 4692-4785). Request 74 reread K33-a line 3558 in full, decision 5 at 4726 and scene 11 at 4777, plus the relevant public declarations and test fixtures.",
+    "acceptance": [
+      4737
+    ],
+    "public_api": [
+      4742,
+      4743
+    ],
+    "unchanged": [
+      4748,
+      4749,
+      4750,
+      4751,
+      4752
+    ],
+    "scenes": [
+      4767,
+      4768,
+      4769,
+      4770,
+      4771,
+      4772,
+      4773,
+      4774,
+      4775,
+      4776,
+      4777,
+      4778,
+      4779,
+      4780
+    ]
+  },
+  "read_boundary": "実装の関数本文は調査しない。公開の宣言・署名・docstring、仕様、既存試験の足場から作成。pytestのトレースに含まれた実装行は期待の根拠に使わない。",
+  "coverage_rows": [
+    {
+      "condition": "A1.native_worker",
+      "paper_lines": [
+        4737,
+        4722,
+        4723
+      ],
+      "tests": [
+        "T01",
+        "T02",
+        "T03",
+        "T12",
+        "T13",
+        "T14",
+        "T23"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "A1.clocks_errors",
+      "paper_lines": [
+        4737,
+        4724,
+        4725
+      ],
+      "tests": [
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T10",
+        "T11",
+        "T20",
+        "T21"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "A1.no_fixed_depth",
+      "paper_lines": [
+        4737,
+        4726
+      ],
+      "tests": [
+        "T16",
+        "T17",
+        "T18",
+        "T19",
+        "T20",
+        "T21",
+        "T22",
+        "T25"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene01.selected_to_EV_and_selection",
+      "paper_lines": [
+        4767
+      ],
+      "tests": [
+        "T02",
+        "T13",
+        "T23"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene02.NoDecision_outputs",
+      "paper_lines": [
+        4768
+      ],
+      "tests": [
+        "T03",
+        "T14"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene03.missing_dependencies_and_exceptions",
+      "paper_lines": [
+        4769
+      ],
+      "tests": [
+        "T04",
+        "T05",
+        "T20",
+        "T21"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene04.closed_reason_field",
+      "paper_lines": [
+        4770
+      ],
+      "tests": [
+        "T05",
+        "T06"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene05.clock_boundaries",
+      "paper_lines": [
+        4771
+      ],
+      "tests": [
+        "T07"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene06.admission_purpose_post",
+      "paper_lines": [
+        4772
+      ],
+      "tests": [
+        "T08",
+        "T09",
+        "T10",
+        "T11"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene07.reuse_current_inputs",
+      "paper_lines": [
+        4773
+      ],
+      "tests": [
+        "T12"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene08.budget_association",
+      "paper_lines": [
+        4774
+      ],
+      "tests": [
+        "T13",
+        "T15"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene09.optional_caps",
+      "paper_lines": [
+        4775
+      ],
+      "tests": [
+        "T03"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene10.deep_full_and_prefix",
+      "paper_lines": [
+        4776
+      ],
+      "tests": [
+        "T16",
+        "T17"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene11.semantic_stops",
+      "paper_lines": [
+        4777
+      ],
+      "tests": [
+        "T18",
+        "T25"
+      ],
+      "coverage": "T18: complete-enumeration precheck and finite-horizon end only. T25: direct recursive unbounded cycle; require finite FEvaluation with zero information/cost and q=1. No private revisit counter is used."
+    },
+    {
+      "condition": "scene12.natural_walk_failure_and_recovery",
+      "paper_lines": [
+        4778
+      ],
+      "tests": [
+        "T19",
+        "T20",
+        "T21"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene13.replay_two_entries",
+      "paper_lines": [
+        4779
+      ],
+      "tests": [
+        "T22"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "scene14.native_main_loop",
+      "paper_lines": [
+        4780
+      ],
+      "tests": [
+        "T23"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "unchanged01.arguments_and_shallow_results",
+      "paper_lines": [
+        4748
+      ],
+      "tests": [
+        "T24",
+        "T02",
+        "T16",
+        "T17",
+        "T22"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "unchanged02.host_EV_NoDecision",
+      "paper_lines": [
+        4749
+      ],
+      "tests": [
+        "T13",
+        "T14",
+        "T15"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    },
+    {
+      "condition": "unchanged03.S4_Z59",
+      "paper_lines": [
+        4750
+      ],
+      "tests": [],
+      "coverage": "Existing S4 tests retained unchanged; outside authorized execution scope. No S4 unbounded budget case is introduced.",
+      "existing_tests": [
+        {
+          "path": "tests/test_s4b2_contract.py",
+          "line": 215,
+          "name": "test_budget_ContractRef_and_extended_quantity_public_types"
+        },
+        {
+          "path": "tests/test_s4b2_contract.py",
+          "line": 451,
+          "name": "test_phase4_public_roundtrip_injected_budget_prepare_retry_and_future_report"
+        }
+      ]
+    },
+    {
+      "condition": "unchanged04.workers_bundle_ports",
+      "paper_lines": [
+        4751
+      ],
+      "tests": [
+        "T08",
+        "T09",
+        "T10",
+        "T23"
+      ],
+      "coverage": "tests written; execution state is in test_inventory",
+      "existing_tests": [
+        {
+          "path": "tests/test_fb_port_life.py",
+          "line": 245,
+          "name": "test_portlife1_stopped_test_measurement_port_rejects_without_effects"
+        },
+        {
+          "path": "tests/test_fb_port_life.py",
+          "line": 262,
+          "name": "test_portlife1_stopped_production_measurer_port_rejects_without_effects"
+        }
+      ],
+      "note": "Existing K29 stop-port tests retained, not executed in this task; native main path and admission tested here."
+    },
+    {
+      "condition": "unchanged05.Python_recursion_limit",
+      "paper_lines": [
+        4752
+      ],
+      "tests": [
+        "T16",
+        "T17",
+        "T18",
+        "T19",
+        "T20",
+        "T21",
+        "T22",
+        "T25"
+      ],
+      "coverage": "tests written; execution state is in test_inventory"
+    }
+  ],
+  "test_inventory": [
+    {
+      "id": "T01",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 136,
+      "name": "test_eval1_public_constructor_run_and_export",
+      "checks": "No-argument constructor, run(work, ctx), public export, FWorkers-shaped callable.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 1
+    },
+    {
+      "id": "T02",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 145,
+      "name": "test_eval1_native_selected_uses_only_current_port_issue_reader_draw_and_budget",
+      "checks": "Real FA01 Selected through only the current port issue/reader/draw; q=(1/3,2/3), both selections; exact output contract; one public computation.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 2
+    },
+    {
+      "id": "T03",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 170,
+      "name": "test_eval1_native_small_integer_limit_is_no_decision_and_none_can_finish",
+      "checks": "Each small integer evaluation cap yields NoDecision, and removing only that cap permits finite FA13 selection W.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 3
+    },
+    {
+      "id": "T04",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 185,
+      "name": "test_eval1_missing_port_dependency_is_execution_failure",
+      "checks": "Missing reader or prepared issue is execution_error, not an escaped exception or outputs.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 2
+    },
+    {
+      "id": "T05",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 204,
+      "name": "test_eval1_public_reader_exception_is_failure_without_open_reason",
+      "checks": "Five public-reader exception classes including RecursionError; open reason attributes do not leak.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 5
+    },
+    {
+      "id": "T06",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 213,
+      "name": "test_eval1_incomplete_reason_and_field_are_filtered_exactly",
+      "checks": "All five closed FIncomplete reasons plus an unknown one; four field forms; exact closed content.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 24
+    },
+    {
+      "id": "T07",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 226,
+      "name": "test_eval1_clock_boundaries_and_unilateral_unavailable",
+      "checks": "Different before/after readings, failure readings, and each unilateral unavailable clock.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 6
+    },
+    {
+      "id": "T08",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 238,
+      "name": "test_eval1_wrong_purpose_is_type_error_before_admission",
+      "checks": "Wrong Compute purposes rejected with TypeError before enter.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 4
+    },
+    {
+      "id": "T09",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 246,
+      "name": "test_eval1_non_compute_is_type_error_before_admission",
+      "checks": "Non-Compute rejected with TypeError before enter.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 1
+    },
+    {
+      "id": "T10",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 252,
+      "name": "test_eval1_false_admission_has_no_other_operation",
+      "checks": "False admission performs no other public operation.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 1
+    },
+    {
+      "id": "T11",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 259,
+      "name": "test_eval1_post_failure_escapes_without_second_report",
+      "checks": "Post failure escapes on success and execution-failure paths; no second report.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 2
+    },
+    {
+      "id": "T12",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 268,
+      "name": "test_eval1_same_worker_does_not_reuse_problem_draw_or_budget",
+      "checks": "Same native object uses different genuine prepared problems, draws and integer/null budgets.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 1
+    },
+    {
+      "id": "T13",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 360,
+      "name": "test_eval1_host_accepts_matching_bind_and_evaluation_budgets_and_selects",
+      "checks": "Real host accepts five matching integer/null budget combinations in bind_draw and later calls; saves EV and selects.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 5
+    },
+    {
+      "id": "T14",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 378,
+      "name": "test_eval1_host_preserves_no_decision_as_outputs_without_selection",
+      "checks": "Real host persists a genuine evaluation NoDecision as outputs/EV, displays no_decision, and does not select.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 1
+    },
+    {
+      "id": "T15",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 393,
+      "name": "test_eval1_host_distinguishes_bind_draw_and_later_budget_association",
+      "checks": "Real changed-budget artifacts distinguish artifact:draw at bind_draw from artifact:budget in later calls; matching issues are controls in T13.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 2
+    },
+    {
+      "id": "T16",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 451,
+      "name": "test_eval1_full_finite_horizon_walk_completes_without_a_fixed_depth_cap",
+      "checks": "Flat finite_horizon loop completes at depths 4 and 258; information=cost=0 and q=1; no ledger writes.",
+      "target": "public F-a mathematical API",
+      "cases": 2
+    },
+    {
+      "id": "T17",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 467,
+      "name": "test_eval1_unbounded_prefix_walk_keeps_scope_and_nonzero_tail",
+      "checks": "FA13 unbounded_total prefixes at 2 and 258 retain residual mass 1/4+3/(4*2**n) and a nonzero tail; select W.",
+      "target": "public F-a mathematical API",
+      "cases": 2
+    },
+    {
+      "id": "T18",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 481,
+      "name": "test_eval1_unbounded_cycle_still_stops_semantically_and_horizon_finishes",
+      "checks": "Complete-enumeration precheck remains certificate_incomplete; finite horizon finishes. This case alone is not evidence that recursive walking detects a revisit.",
+      "target": "public F-a mathematical API",
+      "cases": 1
+    },
+    {
+      "id": "T19",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 491,
+      "name": "test_eval1_natural_walk_recursion_error_propagates_from_public_math",
+      "checks": "A flat finite-horizon public F-a calculation must raise natural RecursionError; horizon is derived from environment recursion limit.",
+      "target": "public F-a mathematical API",
+      "cases": 1
+    },
+    {
+      "id": "T20",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 500,
+      "name": "test_eval1_native_real_walk_limit_is_execution_failure",
+      "checks": "The native evaluator directly receives the real deep problem and returns only execution_error/RecursionError.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 1
+    },
+    {
+      "id": "T21",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 509,
+      "name": "test_eval1_host_saves_native_recursion_failure_and_accepts_next_work",
+      "checks": "Real deep public F-a walk inside a public reader operation fails naturally; native worker report is persisted, host stays live, next measuring job enters and returns.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 1
+    },
+    {
+      "id": "T22",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 545,
+      "name": "test_eval1_over_256_evaluation_is_verifiable_and_restorable",
+      "checks": "Persist/replay both ordinary and prefix evaluations at depths 4 and 258; verify and restore are checked separately.",
+      "target": "public F-a mathematical API",
+      "cases": 4
+    },
+    {
+      "id": "T23",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 599,
+      "name": "test_eval1_main_loop_native_measure_update_candidates_prepare_evaluate_and_three_choices",
+      "checks": "Native SourceMeasurer/FiniteUpdater/CandidateGenerator/EvaluationPreparer/Evaluator main path, TEST draw only; two adoptions and three selections.",
+      "target": "native Evaluator (public test port or real host)",
+      "cases": 1
+    },
+    {
+      "id": "T24",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 622,
+      "name": "test_eval1_public_math_and_replay_entry_signatures_are_unchanged",
+      "checks": "Public mathematical evaluation/prefix/verification/restoration signatures remain unchanged.",
+      "target": "public F-a mathematical API",
+      "cases": 1
+    },
+    {
+      "id": "T25",
+      "file": "tests/test_fb_evaluator.py",
+      "line": 633,
+      "name": "test_eval1_recursive_unbounded_cycle_preserves_revisit_stop_and_returns_zero_information",
+      "checks": "Direct evaluate_f_recursive on the flat unbounded identity loop, no steps/caps: FEvaluation(Q), unchanged scope/root, information=cost=0, q=1, Selected Q, unchanged ledger and Python recursion limit. An escaped budget/recursion failure is a test failure.",
+      "target": "public F-a mathematical API",
+      "cases": 1
+    }
+  ],
+  "cg": [],
+  "limitations": [
+    "本体のEvaluatorが無いので、本体を対象にしたケースの後段assertはまだ到達していない。試験側の係による足場点検を、本体の合格に数えない。",
+    "H2は好みが白紙のホストだけを通す。実際の深い方針を本体のEvaluatorへ直接渡す試験と、公開FReaderの操作が別の公開F-a評価を行って実際にRecursionErrorになる故障をホストが保存・回復する試験を分ける。ホストのBoot自体がfinite_horizonの好みを受け付けたとは数えない。",
+    "K33:4773のbind_drawの予算（またはくじ）の対照は、他の関連付けを保った正規の予算違いの発行物で確かめる。異なる読み手像のくじではenvironment、正規発行物と違う報告ではoutputの照合が先に止まり、この条件の識別には数えない。",
+    "古い256打ち切りのNoDecisionの再読互換はK33(4)で約束されないため、合格条件に足さない。",
+    "全試験・除外された模型ファイル・S4の上限なしは回していない。"
+  ],
+  "session_log": {
+    "codex_session_id": "01a1aeda-b48f-7622-9bbf-6084d8289457",
+    "claude_reference": "依頼文の引継ぎのみ。Claudeとの別の通信は実施していない。",
+    "vault": "今回の明示された書込み範囲はwork33/testsだけ。VaultとHeat.mdは未反映。作業記録はこの対応表に置く。",
+    "reused_knowledge": "既存K30〜K32の試験の足場と、Projects/sui.mdの現在地を再利用。足場の点検は別記。本体K33の動作確認の代用にはしない。"
+  },
+  "source_audit": {
+    "master": "23f9845",
+    "tracked_src_files": 71,
+    "normalized_content_differences": [],
+    "preexisting_EOL_only_src_files": 24,
+    "normalized_tracked_test_differences": [
+      "tests/test_fb_skeleton.py"
+    ],
+    "new_files": [
+      "tests/test_fb_evaluator.py",
+      "tests/k33_evaluator_coverage.json"
+    ],
+    "legacy_256_guard_tests": "No existing test in tests/*.py matched recursive policy stack, setrecursionlimit, RecursionError, max_depth=256, > 256, or depth=256 before adding this module. No existing depth-stop expectation was migrated.",
+    "other_256_uses_retained": [
+      {
+        "path": "tests/test_fb_acquisition_pending.py",
+        "line": 43,
+        "meaning": "driver settle bound, not policy depth"
+      },
+      {
+        "path": "tests/test_fb_measure.py",
+        "lines": [
+          333,
+          914,
+          1672
+        ],
+        "meaning": "driver observation/settle bounds, not policy depth"
+      },
+      {
+        "path": "tests/s4b2_information_oracle.py",
+        "line": 16,
+        "meaning": "numeric precision bits, not policy depth"
+      }
+    ]
+  },
+  "execution_record": "scratchpad/sui0206/bt_tests74/k33_revisit_results.json",
+  "previous_execution_record": "scratchpad/sui0206/bt_tests73/k33_test_results.json",
+  "revision_74": {
+    "paper": "K33 decision 5 at line 4726 and scene 11 at line 4777; relevant parts read. K33-a line 3558 read in full.",
+    "correction": "Previous T18 coverage overstated recursive-revisit discrimination. Its assertions stay unchanged, while T25 directly uses evaluate_f_recursive.",
+    "oracle": "Declared Q has an identity kernel, no information, no preferences/costs, and a nonterminating loop. Its recursive evaluation is FEvaluation with q=1; a low-level certificate_incomplete need not escape this public entry.",
+    "discrimination": "Reasoned only: removing the semantic revisit stop makes the unbounded recursive call fail to return the required finite result. No production mutation or private branch instrumentation was performed.",
+    "initial_test_correction": "An extra nonempty-tails assertion failed with StopIteration. K33/public FEvaluation do not require that representation for this zero-information result, so the extra assertion was removed.",
+    "excluded_heavy_cases": [
+      "unbounded_prefix_walk_keeps_scope_and_nonzero_tail[over-256]",
+      "over_256_evaluation_is_verifiable_and_restorable[over-256-full-horizon]",
+      "over_256_evaluation_is_verifiable_and_restorable[over-256-unbounded-prefix]"
+    ],
+    "session_note": "Request 74: tests and coverage only. Vault/Heat remain unmodified under the explicit write scope.",
+    "codex_session_id": "01a1aeda-b48f-7622-9bbf-6084d8289457"
+  }
+}

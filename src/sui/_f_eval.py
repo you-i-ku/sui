@@ -493,8 +493,6 @@ class _FiniteWork:
         self.cells += 1
         if _over(self.cells, self.budget.max_cells):
             raise FIncomplete("budget_exhausted", "policy cells")
-        if len(active) > 256:
-            raise FIncomplete("budget_exhausted", "recursive policy stack")
         pos = state.position
         policy = self.policies[pos.policy]
         node = next(n for n in policy.nodes if n.id == pos.node)

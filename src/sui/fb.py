@@ -42,7 +42,7 @@ __all__ = [
     "Unsaved", "Held", "StatusBasis", "SlotStatus", "ReceiptStatus", "WorkStatus",
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
     "PurposeStatus", "BeliefUpdateStatus", "FStatus", "FWorkContext", "FWorkers", "LaunchResult", "FLauncher", "FWindow",
-    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "WorkerBundle",
+    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "Evaluator", "WorkerBundle",
     "AcquisitionControl", "AcquisitionObservationModel", "AcquisitionReadItem", "AcquisitionReadResult",
     "read_acquisition_sequence",
 ]
@@ -1151,6 +1151,59 @@ class CandidateGenerator:
         ctx.post(WorkFinished(work=desc.work_id, started=started, finished=finished, outcome=outcome))
 
 
+_STOP_REASONS = ("budget_exhausted", "selection_boundary", "certificate_incomplete", "cost_certificate",
+                 "c1_closure_unproved")   # f.py の頭の説明の FIncomplete の語 (K32 決定 3)
+
+
+def _run_math_work(work: "FWork", ctx: FWorkContext, purpose: str, compute) -> None:
+    """数学の発行物を 1 つ作る仕事 (比べる準備・比べて選ぶ) の共通の形 (K32・K33 の決定 1〜4)。
+
+    用途違いは入場前に TypeError。入場できなければ何もしない。始めの読み → compute(desc, ctx) → 終わりの読み →
+    WorkFinished を 1 回 post (成功の時だけ発行物を issued で添える)。compute の例外は型を問わず (RecursionError も)
+    `WorkFailure` (`execution_error`)。content は例外の型の名前と、F-a の閉じた一覧にある FIncomplete の理由の語と
+    止まった所 (`/` から始まる時だけ) だけ。自由な文は載せない。"""
+    import json
+    from .f import FIncomplete as _FIncomplete
+    if not isinstance(work, Compute) or work.desc.purpose != purpose:
+        raise TypeError(f"this worker runs {purpose} works only")
+    if not ctx.enter():
+        return
+
+    def reading() -> ReadingEvidence:
+        try:
+            return ctx.now()
+        except RuntimeError:   # 時計の出どころを名指せない: 読みを作らず、理由を残して続ける (K24 と同じ)
+            return Unavailable(reason="clock_source_unavailable", basis=())
+
+    desc = work.desc
+    started = reading()
+    artifact, failure = None, None
+    try:
+        artifact = compute(desc, ctx)
+        value = json.loads(artifact.canonical_bytes)
+    except Exception as exc:   # できない: 偽りの発行物を作らず失敗として返す
+        artifact, failure = None, {"error_type": type(exc).__name__}
+        if isinstance(exc, _FIncomplete) and exc.reason in _STOP_REASONS:
+            # F-a の閉じた理由の語と止まった所だけ残す (自由な文は載せない、K32-DC-03・DC-06)
+            field = exc.field if isinstance(exc.field, str) and exc.field.startswith("/") else None
+            failure.update(reason=exc.reason, field=field)
+    finished = reading()
+    if failure is None:
+        outcome: WorkOutcome = WorkOutputs(outputs=ContractValue(contract=desc.output_contract, value=value))
+    else:
+        outcome = WorkFailure(failure=FailureInfo(failure_kind="execution_error", content=failure,
+                                                  readings=(started, finished), basis=()))
+    ctx.post(WorkFinished(work=desc.work_id, started=started, finished=finished, outcome=outcome),
+             issued=artifact)
+
+
+def _reader(ctx: FWorkContext) -> FReader:
+    reader = ctx.reader()
+    if reader is None:
+        raise RuntimeError("this work port has no fixed reader")
+    return reader
+
+
 class EvaluationPreparer:
     """`FWorkers` の「比べる準備」の仕事の本体 (紙 F-b §6-10 K32、Z51 ②・Z57)。
 
@@ -1165,47 +1218,37 @@ class EvaluationPreparer:
         self._registry = registry
 
     def run(self, work: "FWork", ctx: FWorkContext) -> None:
-        import json
+        _run_math_work(work, ctx, "evaluation_prepare", self._prepare)
+
+    def _prepare(self, desc: "Desc", ctx: FWorkContext) -> FMathArtifact:
         from . import f_facts as _ff
-        from .f import FIncomplete as _FIncomplete
-        _STOP_REASONS = ("budget_exhausted", "selection_boundary", "certificate_incomplete", "cost_certificate",
-                         "c1_closure_unproved")   # f.py の頭の説明の FIncomplete の語 (K32 決定 3)
-        if not isinstance(work, Compute) or work.desc.purpose != "evaluation_prepare":
-            raise TypeError("EvaluationPreparer runs evaluation_prepare works only")
-        if not ctx.enter():
-            return
+        request = desc.args.input
+        return _ff.prepare_f_from_facts(
+            _reader(ctx), fixed_parents=request.fixed_parents, model_ref=request.model,
+            candidate_ref=request.candidates, preference_refs=request.preferences,
+            scope_request=request.scope, context_ref=request.context, registry=self._registry,
+            method=request.method, budget=desc.args.budget)
 
-        def reading() -> ReadingEvidence:
-            try:
-                return ctx.now()
-            except RuntimeError:   # 時計の出どころを名指せない: 読みを作らず、理由を残して続ける (K24 と同じ)
-                return Unavailable(reason="clock_source_unavailable", basis=())
 
-        desc = work.desc
-        started = reading()
-        artifact, failure = None, None
-        try:
-            reader = ctx.reader()
-            if reader is None:
-                raise RuntimeError("this work port has no fixed reader")
-            request, args = desc.args.input, desc.args
-            artifact = _ff.prepare_f_from_facts(
-                reader, fixed_parents=request.fixed_parents, model_ref=request.model,
-                candidate_ref=request.candidates, preference_refs=request.preferences,
-                scope_request=request.scope, context_ref=request.context, registry=self._registry,
-                method=request.method, budget=args.budget)
-            value = json.loads(artifact.canonical_bytes)
-        except Exception as exc:   # 準備できない: 偽りの発行物を作らず失敗として返す
-            artifact, failure = None, {"error_type": type(exc).__name__}
-            if isinstance(exc, _FIncomplete) and exc.reason in _STOP_REASONS:
-                # F-a の閉じた理由の語と止まった所だけ残す (自由な文は載せない、K32-DC-03・DC-06)
-                field = exc.field if isinstance(exc.field, str) and exc.field.startswith("/") else None
-                failure.update(reason=exc.reason, field=field)
-        finished = reading()
-        if failure is None:
-            outcome: WorkOutcome = WorkOutputs(outputs=ContractValue(contract=desc.output_contract, value=value))
-        else:
-            outcome = WorkFailure(failure=FailureInfo(failure_kind="execution_error", content=failure,
-                                                      readings=(started, finished), basis=()))
-        ctx.post(WorkFinished(work=desc.work_id, started=started, finished=finished, outcome=outcome),
-                 issued=artifact)
+class Evaluator:
+    """`FWorkers` の「比べて選ぶ」の仕事の本体 (紙 F-b §6-10 K33、Z51 ②・Z57)。
+
+    ホストが出した評価の仕事 (`Compute`、`desc.purpose == "evaluation"`) を受け、仕事の口の読み手と準備の発行物
+    (`ctx.prepared()`) で `f_facts.evaluate_f_from_draw` を呼ぶ。くじ (`desc.args.draw`) と予算 (`desc.args.budget`) は
+    そのまま渡し、係が予算を変えたりやり直したりしない (K33 決定 2・6)。評価は registry を使わないので、作る時に
+    何も受け取らない (決定 1)。発行物 (Selected でも NoDecision でも) を `WorkFinished` の outputs と issued で返す。
+    読み手か準備の発行物が無い・評価の例外は型を問わず `WorkFailure` (`execution_error`)。評価の再帰が Python の
+    再帰の限界に当たった時は `RecursionError` の名前で残る (環境が止めた、決定 5)。始めと終わりの読みは別々に取る。
+    評価の仕事以外を渡されたら TypeError (束ねるのは `WorkerBundle`)。"""
+
+    def run(self, work: "FWork", ctx: FWorkContext) -> None:
+        _run_math_work(work, ctx, "evaluation", self._evaluate)
+
+    @staticmethod
+    def _evaluate(desc: "Desc", ctx: FWorkContext) -> FMathArtifact:
+        from . import f_facts as _ff
+        reader = _reader(ctx)
+        prepared = ctx.prepared()
+        if prepared is None:
+            raise RuntimeError("this work port has no prepared artifact")
+        return _ff.evaluate_f_from_draw(prepared, desc.args.draw, reader=reader, budget=desc.args.budget)
