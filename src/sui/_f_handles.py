@@ -28,7 +28,8 @@ def charge_verification(kind='cells',count=1):
     work=_VERIFY_WORK.get()
     if work is not None:
         work[kind]+=count
-        if work[kind]>getattr(work['budget'],'max_'+kind):
+        limit=getattr(work['budget'],'max_'+kind)
+        if limit is not None and work[kind]>limit:   # None は上限を置かない (紙 F-b K32)
             raise VerificationBudgetExceeded(kind)
 
 

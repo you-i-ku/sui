@@ -61,17 +61,36 @@ class RationalInterval:
 
 @_dataclass(frozen=True, slots=True)
 class RateBudget:
-    """実行側が渡す計算の予算 (§3-10-10 G2)。モデル・好み・行動の規則ではない。"""
+    """実行側が渡す計算の予算 (§3-10-10 G2)。モデル・好み・行動の規則ではない。
+    上限 (max_cells・max_terms・max_refinements) は正の int か None。None はその上限を置かない (紙 F-b K32、
+    Z32 (え)・Z57)。置かない上限で終わらない計算を何が止めるかは F-c。tolerance は上限ではなく細かさの目標で、必須。"""
     tolerance: _Fraction
-    max_cells: int
-    max_terms: int
-    max_refinements: int
+    max_cells: int | None
+    max_terms: int | None
+    max_refinements: int | None
 
     def __post_init__(self):
         if (not isinstance(self.tolerance, _Fraction) or self.tolerance <= 0 or
-                any(type(v) is not int or v <= 0 for v in
+                any(v is not None and (type(v) is not int or v <= 0) for v in
                     (self.max_cells, self.max_terms, self.max_refinements))):
-            raise RateInputError("invalid_budget", "positive Fraction tolerance and positive integer limits required")
+            raise RateInputError("invalid_budget",
+                                 "positive Fraction tolerance and positive integer (or None) limits required")
+
+
+def _over(value, limit) -> bool:
+    """上限を超えたか。None (上限を置かない) なら超えない (K32)。"""
+    return limit is not None and value > limit
+
+
+def _reached(value, limit) -> bool:
+    """上限に届いたか。None なら届かない (K32)。"""
+    return limit is not None and value >= limit
+
+
+def _rounds(limit, start=0):
+    """上限までの繰り返しの番号。None なら限らない (K32)。"""
+    from itertools import count
+    return count(start) if limit is None else range(start, limit)
 
 
 def default_rate_budget() -> RateBudget:
@@ -225,7 +244,7 @@ def fixed_likelihood(model, history, *, theta, budget) -> LikelihoodCertificate:
     processes = {p["id"]: p for p in d["processes"]}
     state = next(p for p in processes.values() if p["family"]["name"] == "finite-ctmc")
     n = len(model.states)
-    if n > budget.max_cells: raise RateIncomplete("budget", "state space exceeds max_cells")
+    if _over(n, budget.max_cells): raise RateIncomplete("budget", "state space exceeds max_cells")
     def expr(e):
         return _Fraction(*e["value"]) if e["kind"] == "constant" else values[e["variable"]] * _Fraction(*e["coefficient"])
     generators = {}
@@ -281,7 +300,7 @@ def fixed_likelihood(model, history, *, theta, budget) -> LikelihoodCertificate:
         starting = [w for w in windows if w["kind"] == "count" and w["start"] == t]
         for w in starting:
             size = len(vector) * (w["cap"] + 1)
-            if size > budget.max_cells: raise RateIncomplete("budget", "count state space exceeds max_cells")
+            if _over(size, budget.max_cells): raise RateIncomplete("budget", "count state space exceeds max_cells")
             vector = vector + (_Fraction(0),) * (size - len(vector))
             possible = possible + (False,) * (size - len(possible))
             active_counts += (w["record"],)
@@ -481,7 +500,7 @@ class _SeriesWork:
         # has x<=1; this is exact composition of the same constant generator.
         x = omega * duration
         pieces = max(1, (x.numerator + x.denominator - 1) // x.denominator)
-        if pieces + self.refinements > self.budget.max_refinements:
+        if _over(pieces + self.refinements, self.budget.max_refinements):
             raise RateIncomplete("budget", "uniformization time subdivisions exceed max_refinements")
         self.refinements += pieces
         if pieces > 1: _trace(self.trace, "split", dimension="time", cutoff=_pair(duration / pieces))
@@ -501,7 +520,7 @@ class _SeriesWork:
             k = 0
             while True:
                 self.terms += 1
-                if self.terms > self.budget.max_terms:
+                if _over(self.terms, self.budget.max_terms):
                     raise RateIncomplete("budget", "uniformization series exceeds max_terms")
                 next_term = term * x / (k + 1)
                 remainder = next_term / (1 - x / (k + 2))
@@ -563,7 +582,7 @@ def state_marginal(belief, *, targets, budget) -> tuple:
     if not isinstance(targets, tuple) or not targets:
         raise RateInputError("shape", "nonempty tuple of FixedLabel targets required", "targets")
     times = tuple(_c1_label(cfg, t) for t in targets)
-    if 2**len(times) > budget.max_cells:
+    if _over(2**len(times), budget.max_cells):
         raise RateIncomplete("budget", "joint state output exceeds max_cells")
     kernels = _c1_paths(cfg, belief._windows, times, budget)
     raw = tuple(kernels.get(tuple(cfg["state_space"]["states"].index(s) for s in states), ())
@@ -616,7 +635,7 @@ def parameter_moment(belief, *, powers, budget) -> CertifiedQuantity:
         raise RateInputError("noncanonical", "powers must follow variable/label declaration order without duplicates", "powers")
     if not powers:
         return _c1_exact_quantity(_Fraction(1), belief, budget, "parameter_moment")
-    if sum(component_powers) + len(belief._measurements) > budget.max_terms:
+    if _over(sum(component_powers) + len(belief._measurements), budget.max_terms):
         raise RateIncomplete("budget", "Dirichlet monomial degree exceeds max_terms")
     kernel = _c1_total(_c1_paths(cfg, belief._windows, (), budget).values())
     probe_mass = _c1_probe_mass(cfg, belief._measurements)
@@ -910,7 +929,7 @@ def _c1_transition(duration, count=None, threshold=None):
 def _c1_paths(cfg, windows, labels, budget):
     """Sum hidden paths; split count windows without resetting their counter."""
     times = sorted({_Fraction(0), *(t for w in windows for t in (w["start"], w["end"])), *labels})
-    if len(times) - 1 > budget.max_refinements:
+    if _over(len(times) - 1, budget.max_refinements):
         raise RateIncomplete("budget", "physical time subdivisions exceed max_refinements")
     vector = {((), 0, 0): ((0, _Fraction(0), _Fraction(1)),)}
     active = None
@@ -944,7 +963,7 @@ def _c1_paths(cfg, windows, labels, budget):
                     key = (prefix, endpoint, next_count)
                     following[key] = _c1_total((following.get(key, ()), contribution))
         vector = following
-        if len(vector) > budget.max_cells:
+        if _over(len(vector), budget.max_cells):
             raise RateIncomplete("budget", "joint state/count cells exceed max_cells")
     result = {}
     for (prefix, state, count), kernel in vector.items():
@@ -1009,7 +1028,7 @@ class _C1IntegralWork:
         k = 0
         while True:
             self.terms += 1
-            if self.terms > self.budget.max_terms:
+            if _over(self.terms, self.budget.max_terms):
                 raise RateIncomplete("budget", "Gamma/exponential series exceeds max_terms")
             following = term * x / (k + 1)
             if x < k + 2:
@@ -1026,7 +1045,7 @@ class _C1IntegralWork:
     def gamma_term(self, shape, beta, degree, decay, cutoff, epsilon):
         from math import factorial
         n = shape + degree - 1
-        if n + 1 > self.budget.max_terms:
+        if _over(n + 1, self.budget.max_terms):
             raise RateIncomplete("budget", "Gamma moment degree exceeds max_terms")
         rate = beta + decay
         x = rate * cutoff
@@ -1046,7 +1065,7 @@ def _c1_integrate(cfg, kernels, budget, parent, quantity, *, normalize=False, po
     """Enclose the actual continuous-prior integral, then condition on Z_->0."""
     _rate_budget(budget)
     shape = int(_Fraction(*cfg["_rate"]["prior"]["params"]["shape"]))
-    if shape + power > budget.max_terms:
+    if _over(shape + power, budget.max_terms):
         raise RateIncomplete("budget", "Gamma moment degree exceeds max_terms")
     beta = _Fraction(*cfg["_rate"]["prior"]["params"]["rate"])
     denominator = denominator if denominator is not None else _c1_total(kernels)
@@ -1073,11 +1092,11 @@ def _c1_integrate(cfg, kernels, budget, parent, quantity, *, normalize=False, po
         polynomial = sum((_Fraction(x**k, factorial(k)) for k in range(shape + power)), _Fraction(0))
         if moment_bound * polynomial / 2**x <= allocation: break
         subdivisions += 1
-        if subdivisions >= budget.max_refinements:
+        if _reached(subdivisions, budget.max_refinements):
             raise RateIncomplete("budget", "prior tail cutoff exceeds max_refinements")
         x *= 2
     work = _C1IntegralWork(budget)
-    for refinement in range(budget.max_refinements - subdivisions):
+    for refinement in _rounds(None if budget.max_refinements is None else budget.max_refinements - subdivisions):
         cutoff = _Fraction(x * 2**refinement, 1) / beta
         compact_prior, tail_prior = work.gamma_term(shape, beta, 0, _Fraction(0), cutoff, epsilon)
         _, tail_moment = work.gamma_term(shape, beta, power, _Fraction(0), cutoff, epsilon)
@@ -1322,7 +1341,7 @@ class _RateInformationWork:
         old = getattr(self, name)
         if degree <= old:
             return
-        if self.terms + degree - old > self.budget.max_terms:
+        if _over(self.terms + degree - old, self.budget.max_terms):
             raise RateIncomplete("budget", "elementary-series coefficients exceed max_terms")
         if kind == "log":
             self.log_coefficients.extend(self.number(2, 2 * n + 1) for n in range(old, degree))
@@ -1398,7 +1417,7 @@ class _RateInformationWork:
             return self.interval(self.exp(lower).lower, self.exp(upper).upper)
         if x == 0:
             return self.interval(self.number(1), self.number(1))
-        if abs(x) > self.budget.max_terms:
+        if _over(abs(x), self.budget.max_terms):
             raise RateNumericalRange("representation_limit", "exponential argument exceeds rational series resources")
         key = (x, self.epsilon)
         if key in self.exponentials:
@@ -1669,7 +1688,7 @@ class _C1Information:
                               tuple(quantity(v) for v in qs), tuple(self.work.public(v) for v in cumulative), cert, (self.view, self.choices, self.resolved))
 
     def refine(self):
-        if self.refinements >= self.budget.max_refinements:
+        if _reached(self.refinements, self.budget.max_refinements):
             raise RateIncomplete("budget", "information subdivisions exceed max_refinements")
         self.refinements += 1
         if self.cells and (self.base_series * self.z + sum(v[3] for v in self.cells.values()) >=
@@ -1692,7 +1711,7 @@ class _C1Information:
         if not self.cells:
             self.cells["0"] = self.cell(_Fraction(0), self.cutoff)
         else:
-            if len(self.cells) >= self.budget.max_cells:
+            if _reached(len(self.cells), self.budget.max_cells):
                 raise RateIncomplete("budget", "information cells exceed max_cells")
             key = min(self.cells, key=lambda k: (self.work.arithmetic.order_key(-(self.cells[k][2].upper - self.cells[k][2].lower)), k))
             cell_width = self.cells[key][2].upper - self.cells[key][2].lower

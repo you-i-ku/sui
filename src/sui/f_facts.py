@@ -6,6 +6,7 @@ F-b の ticket・受付・乱数消費・保存操作はこの公開一覧に含
 """
 
 from __future__ import annotations
+from .rate import _over   # 上限を置かない予算 (紙 F-b K32)
 
 from .contracts import ContractRef
 from . import f as core, f_contracts as fc
@@ -394,7 +395,7 @@ def check_f_preflight_from_facts(
         from ._f_handles import charge_verification
         charge_verification()
         cells+=1
-        if cells>budget.max_cells: raise core.FIncomplete('budget_exhausted',field='/preflight')
+        if _over(cells,budget.max_cells): raise core.FIncomplete('budget_exhausted',field='/preflight')
     def audit(point,field):
         tick()
         entry=image._entries.get(point)

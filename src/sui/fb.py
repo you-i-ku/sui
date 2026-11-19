@@ -42,7 +42,7 @@ __all__ = [
     "Unsaved", "Held", "StatusBasis", "SlotStatus", "ReceiptStatus", "WorkStatus",
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
     "PurposeStatus", "BeliefUpdateStatus", "FStatus", "FWorkContext", "FWorkers", "LaunchResult", "FLauncher", "FWindow",
-    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "WorkerBundle",
+    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "WorkerBundle",
     "AcquisitionControl", "AcquisitionObservationModel", "AcquisitionReadItem", "AcquisitionReadResult",
     "read_acquisition_sequence",
 ]
@@ -1149,3 +1149,63 @@ class CandidateGenerator:
             outcome = WorkFailure(failure=FailureInfo(failure_kind=failure[0], content=failure[1],
                                                       readings=(started, finished), basis=()))
         ctx.post(WorkFinished(work=desc.work_id, started=started, finished=finished, outcome=outcome))
+
+
+class EvaluationPreparer:
+    """`FWorkers` の「比べる準備」の仕事の本体 (紙 F-b §6-10 K32、Z51 ②・Z57)。
+
+    ホストが出した評価の準備の仕事 (`Compute`、`desc.purpose == "evaluation_prepare"`) を受け、仕事の口の読み手と、
+    作る時に明示して渡された `registry` で `f_facts.prepare_f_from_facts` を呼ぶ。要求 (`desc.args.input`) と予算
+    (`desc.args.budget`) はそのまま渡し、係が予算を変えたりやり直したりしない (上限を置くかは起動の宣言が決める、
+    K32 決定 6)。発行物 (FProblem でも NoDecision でも) を `WorkFinished` の outputs と issued で返す。読み手が無い・
+    準備の例外は型を問わず `WorkFailure` (`execution_error`、例外の型の名前だけ)。始めと終わりの読みは別々に取る
+    (時計の出どころを名指せない時は Unavailable)。準備の仕事以外を渡されたら TypeError (束ねるのは `WorkerBundle`)。"""
+
+    def __init__(self, *, registry: FRegistry) -> None:
+        self._registry = registry
+
+    def run(self, work: "FWork", ctx: FWorkContext) -> None:
+        import json
+        from . import f_facts as _ff
+        from .f import FIncomplete as _FIncomplete
+        _STOP_REASONS = ("budget_exhausted", "selection_boundary", "certificate_incomplete", "cost_certificate",
+                         "c1_closure_unproved")   # f.py の頭の説明の FIncomplete の語 (K32 決定 3)
+        if not isinstance(work, Compute) or work.desc.purpose != "evaluation_prepare":
+            raise TypeError("EvaluationPreparer runs evaluation_prepare works only")
+        if not ctx.enter():
+            return
+
+        def reading() -> ReadingEvidence:
+            try:
+                return ctx.now()
+            except RuntimeError:   # 時計の出どころを名指せない: 読みを作らず、理由を残して続ける (K24 と同じ)
+                return Unavailable(reason="clock_source_unavailable", basis=())
+
+        desc = work.desc
+        started = reading()
+        artifact, failure = None, None
+        try:
+            reader = ctx.reader()
+            if reader is None:
+                raise RuntimeError("this work port has no fixed reader")
+            request, args = desc.args.input, desc.args
+            artifact = _ff.prepare_f_from_facts(
+                reader, fixed_parents=request.fixed_parents, model_ref=request.model,
+                candidate_ref=request.candidates, preference_refs=request.preferences,
+                scope_request=request.scope, context_ref=request.context, registry=self._registry,
+                method=request.method, budget=args.budget)
+            value = json.loads(artifact.canonical_bytes)
+        except Exception as exc:   # 準備できない: 偽りの発行物を作らず失敗として返す
+            artifact, failure = None, {"error_type": type(exc).__name__}
+            if isinstance(exc, _FIncomplete) and exc.reason in _STOP_REASONS:
+                # F-a の閉じた理由の語と止まった所だけ残す (自由な文は載せない、K32-DC-03・DC-06)
+                field = exc.field if isinstance(exc.field, str) and exc.field.startswith("/") else None
+                failure.update(reason=exc.reason, field=field)
+        finished = reading()
+        if failure is None:
+            outcome: WorkOutcome = WorkOutputs(outputs=ContractValue(contract=desc.output_contract, value=value))
+        else:
+            outcome = WorkFailure(failure=FailureInfo(failure_kind="execution_error", content=failure,
+                                                      readings=(started, finished), basis=()))
+        ctx.post(WorkFinished(work=desc.work_id, started=started, finished=finished, outcome=outcome),
+                 issued=artifact)

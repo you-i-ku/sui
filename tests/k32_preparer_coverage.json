@@ -1,0 +1,2051 @@
+{
+  "problem": "K32",
+  "request": 71,
+  "source_revision": "e244ceb",
+  "spec": "specs/関所F_Fb_今の約束.md",
+  "read_scope": {
+    "K32": "summary and complete body read in request 67; current body line 4602 through 4688",
+    "decisions": [
+      "Z57",
+      "Z59",
+      "Z32",
+      "Z51",
+      "K24",
+      "K31"
+    ],
+    "public_surfaces": "AST-extracted public declarations/signatures/docstrings only; no implementation body inspection",
+    "K32_a": "line 3555, complete",
+    "request_71_public_api": "check_f_preflight_from_facts signature and full docstring at src/sui/f_facts.py:365; FPreflightFacts and PreflightReady public fields; existing test construction examples only. No implementation body read."
+  },
+  "files_changed": [
+    "tests/test_fb_preparer.py",
+    "tests/k32_preparer_coverage.json"
+  ],
+  "source_verification": {
+    "entries": 71,
+    "content_differences_after_LF_normalization": 0,
+    "raw_line_ending_differences": 24,
+    "request": 67
+  },
+  "tests": [
+    {
+      "name": "test_prep1_public_constructor_run_export_and_optional_limit_annotations",
+      "line": 188,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "missing_EvaluationPreparer": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_public_constructor_run_export_and_optional_limit_annotations",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_native_output_uses_exact_reader_request_registry_budget_once",
+      "line": 202,
+      "passed": 0,
+      "failed": 2,
+      "reasons": {
+        "missing_EvaluationPreparer": 2
+      },
+      "cases": [
+        {
+          "name": "test_prep1_native_output_uses_exact_reader_request_registry_budget_once[problem]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_native_output_uses_exact_reader_request_registry_budget_once[no_decision]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_native_preparation_keeps_nondefault_scope_and_preferences",
+      "line": 223,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "missing_EvaluationPreparer": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_native_preparation_keeps_nondefault_scope_and_preferences",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side",
+      "line": 234,
+      "passed": 0,
+      "failed": 8,
+      "reasons": {
+        "missing_EvaluationPreparer": 8
+      },
+      "cases": [
+        {
+          "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side[problem-unavailable0]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side[problem-unavailable1]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side[problem-unavailable2]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side[problem-unavailable3]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side[failure-unavailable0]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side[failure-unavailable1]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side[failure-unavailable2]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side[failure-unavailable3]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_reader_exceptions_are_failure_with_only_the_type_name",
+      "line": 249,
+      "passed": 0,
+      "failed": 5,
+      "reasons": {
+        "missing_EvaluationPreparer": 5
+      },
+      "cases": [
+        {
+          "name": "test_prep1_reader_exceptions_are_failure_with_only_the_type_name[ordinary-reason-attribute]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reader_exceptions_are_failure_with_only_the_type_name[OSError]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reader_exceptions_are_failure_with_only_the_type_name[KeyError]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reader_exceptions_are_failure_with_only_the_type_name[ValueError]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_reader_exceptions_are_failure_with_only_the_type_name[MemoryError]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_missing_reader_is_failure_without_fictitious_issue",
+      "line": 257,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "missing_EvaluationPreparer": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_missing_reader_is_failure_without_fictitious_issue",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved",
+      "line": 267,
+      "passed": 0,
+      "failed": 20,
+      "reasons": {
+        "missing_EvaluationPreparer": 20
+      },
+      "cases": [
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[pointer-budget_exhausted]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[pointer-selection_boundary]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[pointer-certificate_incomplete]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[pointer-cost_certificate]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[pointer-c1_closure_unproved]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[nonpointer-budget_exhausted]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[nonpointer-selection_boundary]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[nonpointer-certificate_incomplete]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[nonpointer-cost_certificate]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[nonpointer-c1_closure_unproved]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[absent-budget_exhausted]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[absent-selection_boundary]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[absent-certificate_incomplete]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[absent-cost_certificate]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[absent-c1_closure_unproved]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[not-string-budget_exhausted]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[not-string-selection_boundary]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[not-string-certificate_incomplete]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[not-string-cost_certificate]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved[not-string-c1_closure_unproved]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_other_exception_reasons_and_details_are_not_disclosed",
+      "line": 278,
+      "passed": 0,
+      "failed": 3,
+      "reasons": {
+        "missing_EvaluationPreparer": 3
+      },
+      "cases": [
+        {
+          "name": "test_prep1_other_exception_reasons_and_details_are_not_disclosed[FIncomplete-private_reason]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_other_exception_reasons_and_details_are_not_disclosed[FInputError-budget_exhausted]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_other_exception_reasons_and_details_are_not_disclosed[FIncomplete-None]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_wrong_work_is_type_error_before_enter",
+      "line": 287,
+      "passed": 0,
+      "failed": 6,
+      "reasons": {
+        "missing_EvaluationPreparer": 6
+      },
+      "cases": [
+        {
+          "name": "test_prep1_wrong_work_is_type_error_before_enter[measure_segment]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_wrong_work_is_type_error_before_enter[not-compute]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_wrong_work_is_type_error_before_enter[candidate_generation]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_wrong_work_is_type_error_before_enter[belief_update]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_wrong_work_is_type_error_before_enter[evaluation]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_wrong_work_is_type_error_before_enter[selection_draw]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_false_admission_has_no_reader_clock_or_post",
+      "line": 296,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "missing_EvaluationPreparer": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_false_admission_has_no_reader_clock_or_post",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_post_error_escapes_without_second_report",
+      "line": 303,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "missing_EvaluationPreparer": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_post_error_escapes_without_second_report",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_each_combination_of_optional_limits_is_accepted",
+      "line": 312,
+      "passed": 0,
+      "failed": 7,
+      "reasons": {
+        "None_limit_still_invalid_budget": 7
+      },
+      "cases": [
+        {
+          "name": "test_prep1_each_combination_of_optional_limits_is_accepted[1]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_each_combination_of_optional_limits_is_accepted[2]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_each_combination_of_optional_limits_is_accepted[3]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_each_combination_of_optional_limits_is_accepted[4]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_each_combination_of_optional_limits_is_accepted[5]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_each_combination_of_optional_limits_is_accepted[6]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_each_combination_of_optional_limits_is_accepted[7]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget",
+      "line": 322,
+      "passed": 21,
+      "failed": 0,
+      "reasons": {},
+      "cases": [
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[zero-max_cells]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[float-max_refinements]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[string-max_cells]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[string-max_terms]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[zero-max_terms]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[string-max_refinements]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[zero-max_refinements]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[fraction-max_cells]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[negative-max_cells]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[fraction-max_terms]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[negative-max_terms]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[fraction-max_refinements]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[negative-max_refinements]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[list-max_cells]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[bool-max_cells]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[list-max_terms]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[bool-max_terms]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[list-max_refinements]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[bool-max_refinements]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[float-max_cells]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget[float-max_terms]",
+          "result": "passed",
+          "reason": null
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "name": "test_prep1_tolerance_is_still_a_required_positive_fraction",
+      "line": 328,
+      "passed": 6,
+      "failed": 0,
+      "reasons": {},
+      "cases": [
+        {
+          "name": "test_prep1_tolerance_is_still_a_required_positive_fraction[None]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_tolerance_is_still_a_required_positive_fraction[bad1]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_tolerance_is_still_a_required_positive_fraction[bad2]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_tolerance_is_still_a_required_positive_fraction[1]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_tolerance_is_still_a_required_positive_fraction[0.1]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_tolerance_is_still_a_required_positive_fraction[True]",
+          "result": "passed",
+          "reason": null
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "name": "test_prep1_preflight_budget_failure_and_unbounded_preparation_are_distinct",
+      "line": 334,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "None_limit_still_invalid_budget": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_preflight_budget_failure_and_unbounded_preparation_are_distinct",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_real_finite_evaluation_exceeds_each_optional_cell_or_term_cap",
+      "line": 352,
+      "passed": 0,
+      "failed": 6,
+      "reasons": {
+        "None_limit_still_invalid_budget": 6
+      },
+      "cases": [
+        {
+          "name": "test_prep1_real_finite_evaluation_exceeds_each_optional_cell_or_term_cap[recursive-max_cells]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_real_finite_evaluation_exceeds_each_optional_cell_or_term_cap[recursive-max_terms]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_real_finite_evaluation_exceeds_each_optional_cell_or_term_cap[enumerated-max_cells]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_real_finite_evaluation_exceeds_each_optional_cell_or_term_cap[enumerated-max_terms]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_real_finite_evaluation_exceeds_each_optional_cell_or_term_cap[prefix-max_cells]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_real_finite_evaluation_exceeds_each_optional_cell_or_term_cap[prefix-max_terms]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_refinement_loop_passes_one_step_with_no_refinement_cap",
+      "line": 372,
+      "passed": 0,
+      "failed": 2,
+      "reasons": {
+        "None_limit_still_invalid_budget": 2
+      },
+      "cases": [
+        {
+          "name": "test_prep1_refinement_loop_passes_one_step_with_no_refinement_cap[facts-draw]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_refinement_loop_passes_one_step_with_no_refinement_cap[selected]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_one_unbounded_limit_does_not_disable_other_integer_limits",
+      "line": 389,
+      "passed": 0,
+      "failed": 6,
+      "reasons": {
+        "None_limit_still_invalid_budget": 6
+      },
+      "cases": [
+        {
+          "name": "test_prep1_one_unbounded_limit_does_not_disable_other_integer_limits[max_cells-max_terms]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_one_unbounded_limit_does_not_disable_other_integer_limits[max_cells-max_refinements]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_one_unbounded_limit_does_not_disable_other_integer_limits[max_terms-max_cells]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_one_unbounded_limit_does_not_disable_other_integer_limits[max_terms-max_refinements]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_one_unbounded_limit_does_not_disable_other_integer_limits[max_refinements-max_cells]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_one_unbounded_limit_does_not_disable_other_integer_limits[max_refinements-max_terms]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_bounded_finite_control_retains_declared_choice_and_input",
+      "line": 397,
+      "passed": 1,
+      "failed": 0,
+      "reasons": {},
+      "cases": [
+        {
+          "name": "test_prep1_bounded_finite_control_retains_declared_choice_and_input",
+          "result": "passed",
+          "reason": null
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "name": "test_prep1_S4_integer_saved_budget_and_public_replay_remain_unchanged",
+      "line": 408,
+      "passed": 1,
+      "failed": 0,
+      "reasons": {},
+      "cases": [
+        {
+          "name": "test_prep1_S4_integer_saved_budget_and_public_replay_remain_unchanged",
+          "result": "passed",
+          "reason": null
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets",
+      "line": 424,
+      "passed": 2,
+      "failed": 6,
+      "reasons": {
+        "None_limit_still_invalid_budget": 6
+      },
+      "cases": [
+        {
+          "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets[evaluate-verify-int-saved-int]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets[evaluate-verify-int-saved-null]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets[evaluate-verify-null-saved-int]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets[evaluate-verify-null-saved-null]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets[prepare-verify-int-saved-int]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets[prepare-verify-int-saved-null]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets[prepare-verify-null-saved-int]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets[prepare-verify-null-saved-null]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_unbounded_saved_execution_does_not_remove_bounded_replay_limit",
+      "line": 444,
+      "passed": 0,
+      "failed": 2,
+      "reasons": {
+        "None_limit_still_invalid_budget": 2
+      },
+      "cases": [
+        {
+          "name": "test_prep1_unbounded_saved_execution_does_not_remove_bounded_replay_limit[verify]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_unbounded_saved_execution_does_not_remove_bounded_replay_limit[restore]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_native_preflight_failure_is_not_regular_calculation_no_decision",
+      "line": 456,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "missing_EvaluationPreparer": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_native_preflight_failure_is_not_regular_calculation_no_decision",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_same_native_worker_uses_two_current_inputs_and_budgets",
+      "line": 469,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "missing_EvaluationPreparer": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_same_native_worker_uses_two_current_inputs_and_budgets",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_host_saves_requested_budget_and_live_problem_then_offers_draw",
+      "line": 537,
+      "passed": 0,
+      "failed": 2,
+      "reasons": {
+        "missing_EvaluationPreparer": 2
+      },
+      "cases": [
+        {
+          "name": "test_prep1_host_saves_requested_budget_and_live_problem_then_offers_draw[bounded-control]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_host_saves_requested_budget_and_live_problem_then_offers_draw[null-limits]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_host_keeps_no_decision_as_outputs_and_never_draws",
+      "line": 558,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "missing_EvaluationPreparer": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_host_keeps_no_decision_as_outputs_and_never_draws",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_host_records_preflight_failure_reason_field_and_no_regular_issue",
+      "line": 570,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "missing_EvaluationPreparer": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_host_records_preflight_failure_reason_field_and_no_regular_issue",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_host_rejects_real_issue_with_changed_budget_or_registry",
+      "line": 587,
+      "passed": 0,
+      "failed": 2,
+      "reasons": {
+        "missing_EvaluationPreparer": 2
+      },
+      "cases": [
+        {
+          "name": "test_prep1_host_rejects_real_issue_with_changed_budget_or_registry[integer-budget]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        },
+        {
+          "name": "test_prep1_host_rejects_real_issue_with_changed_budget_or_registry[foreign-registry]",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_main_loop_native_source_update_candidate_preparation_and_three_selections",
+      "line": 635,
+      "passed": 0,
+      "failed": 1,
+      "reasons": {
+        "missing_EvaluationPreparer": 1
+      },
+      "cases": [
+        {
+          "name": "test_prep1_main_loop_native_source_update_candidate_preparation_and_three_selections",
+          "result": "failed",
+          "reason": "missing_EvaluationPreparer"
+        }
+      ],
+      "state": "failed"
+    },
+    {
+      "name": "test_prep1_preflight_retains_cell_limit_when_another_limit_is_unbounded",
+      "line": 658,
+      "passed": 0,
+      "failed": 2,
+      "reasons": {
+        "None_limit_still_invalid_budget": 2
+      },
+      "cases": [
+        {
+          "name": "test_prep1_preflight_retains_cell_limit_when_another_limit_is_unbounded[max_terms]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_preflight_retains_cell_limit_when_another_limit_is_unbounded[max_refinements]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        }
+      ],
+      "state": "failed",
+      "case_count": 2
+    },
+    {
+      "name": "test_prep1_replay_integer_cap_stops_verification_after_reader_intake_fits",
+      "line": 685,
+      "passed": 0,
+      "failed": 4,
+      "reasons": {
+        "None_limit_still_invalid_budget": 4
+      },
+      "cases": [
+        {
+          "name": "test_prep1_replay_integer_cap_stops_verification_after_reader_intake_fits[max_cells-verify]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_replay_integer_cap_stops_verification_after_reader_intake_fits[max_cells-restore]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_replay_integer_cap_stops_verification_after_reader_intake_fits[max_terms-verify]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_replay_integer_cap_stops_verification_after_reader_intake_fits[max_terms-restore]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        }
+      ],
+      "state": "failed",
+      "case_count": 4
+    },
+    {
+      "name": "test_prep1_integer_refinement_cap_includes_the_last_required_attempt",
+      "line": 745,
+      "passed": 2,
+      "failed": 0,
+      "reasons": {},
+      "cases": [
+        {
+          "name": "test_prep1_integer_refinement_cap_includes_the_last_required_attempt[selected]",
+          "result": "passed",
+          "reason": null
+        },
+        {
+          "name": "test_prep1_integer_refinement_cap_includes_the_last_required_attempt[facts-draw]",
+          "result": "passed",
+          "reason": null
+        }
+      ],
+      "state": "passed",
+      "case_count": 2
+    },
+    {
+      "name": "test_prep1_integer_policy_cell_cap_limits_a_zero_information_finite_chain",
+      "line": 782,
+      "passed": 1,
+      "failed": 0,
+      "reasons": {},
+      "cases": [
+        {
+          "name": "test_prep1_integer_policy_cell_cap_limits_a_zero_information_finite_chain",
+          "result": "passed",
+          "reason": null
+        }
+      ],
+      "state": "passed",
+      "case_count": 1
+    },
+    {
+      "name": "test_prep1_facts_preflight_retains_cell_limit_after_reader_intake",
+      "line": 830,
+      "passed": 0,
+      "failed": 2,
+      "reasons": {
+        "None_limit_still_invalid_budget": 2
+      },
+      "cases": [
+        {
+          "name": "test_prep1_facts_preflight_retains_cell_limit_after_reader_intake[max_terms]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        },
+        {
+          "name": "test_prep1_facts_preflight_retains_cell_limit_after_reader_intake[max_refinements]",
+          "result": "failed",
+          "reason": "None_limit_still_invalid_budget"
+        }
+      ],
+      "state": "failed",
+      "case_count": 2
+    }
+  ],
+  "coverage": [
+    {
+      "section": "acceptance",
+      "paper_line": 4634,
+      "condition": "Native preparer obtains current reader and explicit registry, without replacing inputs/budget",
+      "tests": [
+        {
+          "name": "test_prep1_native_output_uses_exact_reader_request_registry_budget_once",
+          "file": "tests/test_fb_preparer.py",
+          "line": 202
+        },
+        {
+          "name": "test_prep1_native_preparation_keeps_nondefault_scope_and_preferences",
+          "file": "tests/test_fb_preparer.py",
+          "line": 223
+        },
+        {
+          "name": "test_prep1_same_native_worker_uses_two_current_inputs_and_budgets",
+          "file": "tests/test_fb_preparer.py",
+          "line": 469
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "acceptance",
+      "paper_line": 4634,
+      "condition": "Distinct before/after readings, including unavailable sides",
+      "tests": [
+        {
+          "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side",
+          "file": "tests/test_fb_preparer.py",
+          "line": 234
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "acceptance",
+      "paper_line": 4634,
+      "condition": "Normal output vs failure are preserved",
+      "tests": [
+        {
+          "name": "test_prep1_native_preflight_failure_is_not_regular_calculation_no_decision",
+          "file": "tests/test_fb_preparer.py",
+          "line": 456
+        },
+        {
+          "name": "test_prep1_host_keeps_no_decision_as_outputs_and_never_draws",
+          "file": "tests/test_fb_preparer.py",
+          "line": 558
+        },
+        {
+          "name": "test_prep1_host_records_preflight_failure_reason_field_and_no_regular_issue",
+          "file": "tests/test_fb_preparer.py",
+          "line": 570
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "acceptance",
+      "paper_line": 4634,
+      "condition": "Each optional cap is removed independently on terminating calculations",
+      "tests": [
+        {
+          "name": "test_prep1_each_combination_of_optional_limits_is_accepted",
+          "file": "tests/test_fb_preparer.py",
+          "line": 312
+        },
+        {
+          "name": "test_prep1_real_finite_evaluation_exceeds_each_optional_cell_or_term_cap",
+          "file": "tests/test_fb_preparer.py",
+          "line": 352
+        },
+        {
+          "name": "test_prep1_refinement_loop_passes_one_step_with_no_refinement_cap",
+          "file": "tests/test_fb_preparer.py",
+          "line": 372
+        },
+        {
+          "name": "test_prep1_one_unbounded_limit_does_not_disable_other_integer_limits",
+          "file": "tests/test_fb_preparer.py",
+          "line": 389
+        },
+        {
+          "name": "test_prep1_preflight_retains_cell_limit_when_another_limit_is_unbounded",
+          "file": "tests/test_fb_preparer.py",
+          "line": 658
+        },
+        {
+          "name": "test_prep1_replay_integer_cap_stops_verification_after_reader_intake_fits",
+          "file": "tests/test_fb_preparer.py",
+          "line": 685
+        },
+        {
+          "name": "test_prep1_facts_preflight_retains_cell_limit_after_reader_intake",
+          "file": "tests/test_fb_preparer.py",
+          "line": 830
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": null
+    },
+    {
+      "section": "unchanged",
+      "paper_line": 4647,
+      "condition": "Bounded prepare arguments and finite numerical result",
+      "tests": [
+        {
+          "name": "test_prep1_native_output_uses_exact_reader_request_registry_budget_once",
+          "file": "tests/test_fb_preparer.py",
+          "line": 202
+        },
+        {
+          "name": "test_prep1_bounded_finite_control_retains_declared_choice_and_input",
+          "file": "tests/test_fb_preparer.py",
+          "line": 397
+        },
+        {
+          "name": "test_prep1_integer_refinement_cap_includes_the_last_required_attempt",
+          "file": "tests/test_fb_preparer.py",
+          "line": 745
+        },
+        {
+          "name": "test_prep1_integer_policy_cell_cap_limits_a_zero_information_finite_chain",
+          "file": "tests/test_fb_preparer.py",
+          "line": 782
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "unchanged",
+      "paper_line": 4648,
+      "condition": "Host association, PR, D and regular NoDecision",
+      "tests": [
+        {
+          "name": "test_prep1_host_saves_requested_budget_and_live_problem_then_offers_draw",
+          "file": "tests/test_fb_preparer.py",
+          "line": 537
+        },
+        {
+          "name": "test_prep1_host_keeps_no_decision_as_outputs_and_never_draws",
+          "file": "tests/test_fb_preparer.py",
+          "line": 558
+        },
+        {
+          "name": "test_prep1_host_rejects_real_issue_with_changed_budget_or_registry",
+          "file": "tests/test_fb_preparer.py",
+          "line": 587
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "unchanged",
+      "paper_line": 4649,
+      "condition": "S4 integer saved budget / restoration / replay, never None",
+      "tests": [
+        {
+          "name": "test_prep1_S4_integer_saved_budget_and_public_replay_remain_unchanged",
+          "file": "tests/test_fb_preparer.py",
+          "line": 408
+        }
+      ],
+      "mode": "unchanged_existing_S4_tests_reused",
+      "note": "Calls the two unchanged public-path regressions test_s4b2_integration.py:145 and :392. No S4 None test."
+    },
+    {
+      "section": "unchanged",
+      "paper_line": 4650,
+      "condition": "Other native workers, bundle and public ports",
+      "tests": [
+        {
+          "name": "test_prep1_main_loop_native_source_update_candidate_preparation_and_three_selections",
+          "file": "tests/test_fb_preparer.py",
+          "line": 635
+        },
+        {
+          "name": "test_prep1_false_admission_has_no_reader_clock_or_post",
+          "file": "tests/test_fb_preparer.py",
+          "line": 296
+        },
+        {
+          "name": "test_prep1_post_error_escapes_without_second_report",
+          "file": "tests/test_fb_preparer.py",
+          "line": 303
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": "The complete existing K29 port-life suite is unchanged and not rerun in this request."
+    },
+    {
+      "section": "scene_01",
+      "paper_line": 4663,
+      "condition": "Native FProblem is issued; host saves PR and offers draw",
+      "tests": [
+        {
+          "name": "test_prep1_host_saves_requested_budget_and_live_problem_then_offers_draw",
+          "file": "tests/test_fb_preparer.py",
+          "line": 537
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_02",
+      "paper_line": 4664,
+      "condition": "Native NoDecision remains outputs; no draw",
+      "tests": [
+        {
+          "name": "test_prep1_host_keeps_no_decision_as_outputs_and_never_draws",
+          "file": "tests/test_fb_preparer.py",
+          "line": 558
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_03",
+      "paper_line": 4665,
+      "condition": "Missing reader and several exception classes are execution failures without issued",
+      "tests": [
+        {
+          "name": "test_prep1_missing_reader_is_failure_without_fictitious_issue",
+          "file": "tests/test_fb_preparer.py",
+          "line": 257
+        },
+        {
+          "name": "test_prep1_reader_exceptions_are_failure_with_only_the_type_name",
+          "file": "tests/test_fb_preparer.py",
+          "line": 249
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_04",
+      "paper_line": 4666,
+      "condition": "Distinct clock readings and either unavailable side",
+      "tests": [
+        {
+          "name": "test_prep1_reads_distinct_clocks_even_on_failure_and_preserves_readable_side",
+          "file": "tests/test_fb_preparer.py",
+          "line": 234
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_05",
+      "paper_line": 4667,
+      "condition": "Wrong purpose/class, false enter, and Post failure",
+      "tests": [
+        {
+          "name": "test_prep1_wrong_work_is_type_error_before_enter",
+          "file": "tests/test_fb_preparer.py",
+          "line": 287
+        },
+        {
+          "name": "test_prep1_false_admission_has_no_reader_clock_or_post",
+          "file": "tests/test_fb_preparer.py",
+          "line": 296
+        },
+        {
+          "name": "test_prep1_post_error_escapes_without_second_report",
+          "file": "tests/test_fb_preparer.py",
+          "line": 303
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_06",
+      "paper_line": 4668,
+      "condition": "Only constructor registry; artifact names its registry key",
+      "tests": [
+        {
+          "name": "test_prep1_native_output_uses_exact_reader_request_registry_budget_once",
+          "file": "tests/test_fb_preparer.py",
+          "line": 202
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_07",
+      "paper_line": 4669,
+      "condition": "Optional caps and unchanged invalid-budget/tolerance rules",
+      "tests": [
+        {
+          "name": "test_prep1_each_combination_of_optional_limits_is_accepted",
+          "file": "tests/test_fb_preparer.py",
+          "line": 312
+        },
+        {
+          "name": "test_prep1_invalid_integer_limits_still_have_invalid_budget",
+          "file": "tests/test_fb_preparer.py",
+          "line": 322
+        },
+        {
+          "name": "test_prep1_tolerance_is_still_a_required_positive_fraction",
+          "file": "tests/test_fb_preparer.py",
+          "line": 328
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": null
+    },
+    {
+      "section": "scene_08",
+      "paper_line": 4670,
+      "condition": "Small reader/calc limit stops; unbounded prepare yields FProblem",
+      "tests": [
+        {
+          "name": "test_prep1_preflight_budget_failure_and_unbounded_preparation_are_distinct",
+          "file": "tests/test_fb_preparer.py",
+          "line": 334
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": null
+    },
+    {
+      "section": "scene_09",
+      "paper_line": 4671,
+      "condition": "Bounded finite result unchanged",
+      "tests": [
+        {
+          "name": "test_prep1_bounded_finite_control_retains_declared_choice_and_input",
+          "file": "tests/test_fb_preparer.py",
+          "line": 397
+        },
+        {
+          "name": "test_prep1_integer_refinement_cap_includes_the_last_required_attempt",
+          "file": "tests/test_fb_preparer.py",
+          "line": 745
+        },
+        {
+          "name": "test_prep1_integer_policy_cell_cap_limits_a_zero_information_finite_chain",
+          "file": "tests/test_fb_preparer.py",
+          "line": 782
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": null
+    },
+    {
+      "section": "scene_10",
+      "paper_line": 4672,
+      "condition": "Null limits persist in Boot-derived preparation/evaluation requests and issued artifact",
+      "tests": [
+        {
+          "name": "test_prep1_host_saves_requested_budget_and_live_problem_then_offers_draw",
+          "file": "tests/test_fb_preparer.py",
+          "line": 537
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_11",
+      "paper_line": 4673,
+      "condition": "Each cap crossed; other integer caps still stop",
+      "tests": [
+        {
+          "name": "test_prep1_real_finite_evaluation_exceeds_each_optional_cell_or_term_cap",
+          "file": "tests/test_fb_preparer.py",
+          "line": 352
+        },
+        {
+          "name": "test_prep1_refinement_loop_passes_one_step_with_no_refinement_cap",
+          "file": "tests/test_fb_preparer.py",
+          "line": 372
+        },
+        {
+          "name": "test_prep1_one_unbounded_limit_does_not_disable_other_integer_limits",
+          "file": "tests/test_fb_preparer.py",
+          "line": 389
+        },
+        {
+          "name": "test_prep1_preflight_retains_cell_limit_when_another_limit_is_unbounded",
+          "file": "tests/test_fb_preparer.py",
+          "line": 658
+        },
+        {
+          "name": "test_prep1_integer_refinement_cap_includes_the_last_required_attempt",
+          "file": "tests/test_fb_preparer.py",
+          "line": 745
+        },
+        {
+          "name": "test_prep1_integer_policy_cell_cap_limits_a_zero_information_finite_chain",
+          "file": "tests/test_fb_preparer.py",
+          "line": 782
+        },
+        {
+          "name": "test_prep1_facts_preflight_retains_cell_limit_after_reader_intake",
+          "file": "tests/test_fb_preparer.py",
+          "line": 830
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": null
+    },
+    {
+      "section": "scene_12",
+      "paper_line": 4674,
+      "condition": "Finite and certified-prefix evaluation entry loops with optional refinements",
+      "tests": [
+        {
+          "name": "test_prep1_real_finite_evaluation_exceeds_each_optional_cell_or_term_cap",
+          "file": "tests/test_fb_preparer.py",
+          "line": 352
+        },
+        {
+          "name": "test_prep1_refinement_loop_passes_one_step_with_no_refinement_cap",
+          "file": "tests/test_fb_preparer.py",
+          "line": 372
+        },
+        {
+          "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets",
+          "file": "tests/test_fb_preparer.py",
+          "line": 424
+        },
+        {
+          "name": "test_prep1_integer_refinement_cap_includes_the_last_required_attempt",
+          "file": "tests/test_fb_preparer.py",
+          "line": 745
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": "K32-a limits this scene to the two F-a evaluation loops; rate.py C1 loop is excluded."
+    },
+    {
+      "section": "scene_13",
+      "paper_line": 4675,
+      "condition": "Execution/verification budgets independent, including bounded replay cutoff",
+      "tests": [
+        {
+          "name": "test_prep1_artifacts_restore_and_verify_with_independent_execution_and_verification_budgets",
+          "file": "tests/test_fb_preparer.py",
+          "line": 424
+        },
+        {
+          "name": "test_prep1_unbounded_saved_execution_does_not_remove_bounded_replay_limit",
+          "file": "tests/test_fb_preparer.py",
+          "line": 444
+        },
+        {
+          "name": "test_prep1_replay_integer_cap_stops_verification_after_reader_intake_fits",
+          "file": "tests/test_fb_preparer.py",
+          "line": 685
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": null
+    },
+    {
+      "section": "scene_14",
+      "paper_line": 4676,
+      "condition": "S4 integer regression only",
+      "tests": [
+        {
+          "name": "test_prep1_S4_integer_saved_budget_and_public_replay_remain_unchanged",
+          "file": "tests/test_fb_preparer.py",
+          "line": 408
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_15",
+      "paper_line": 4677,
+      "condition": "Closed reasons only; field redaction; ordinary reason attributes do not leak",
+      "tests": [
+        {
+          "name": "test_prep1_closed_incomplete_reason_and_only_pointer_field_are_preserved",
+          "file": "tests/test_fb_preparer.py",
+          "line": 267
+        },
+        {
+          "name": "test_prep1_other_exception_reasons_and_details_are_not_disclosed",
+          "file": "tests/test_fb_preparer.py",
+          "line": 278
+        },
+        {
+          "name": "test_prep1_reader_exceptions_are_failure_with_only_the_type_name",
+          "file": "tests/test_fb_preparer.py",
+          "line": 249
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_16",
+      "paper_line": 4678,
+      "condition": "Reader preflight failure vs calculation NoDecision and stored failure contents",
+      "tests": [
+        {
+          "name": "test_prep1_native_preflight_failure_is_not_regular_calculation_no_decision",
+          "file": "tests/test_fb_preparer.py",
+          "line": 456
+        },
+        {
+          "name": "test_prep1_host_records_preflight_failure_reason_field_and_no_regular_issue",
+          "file": "tests/test_fb_preparer.py",
+          "line": 570
+        },
+        {
+          "name": "test_prep1_host_keeps_no_decision_as_outputs_and_never_draws",
+          "file": "tests/test_fb_preparer.py",
+          "line": 558
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_17",
+      "paper_line": 4679,
+      "condition": "Matching null budget accepted; swapped int budget / foreign registry held",
+      "tests": [
+        {
+          "name": "test_prep1_host_saves_requested_budget_and_live_problem_then_offers_draw",
+          "file": "tests/test_fb_preparer.py",
+          "line": 537
+        },
+        {
+          "name": "test_prep1_host_rejects_real_issue_with_changed_budget_or_registry",
+          "file": "tests/test_fb_preparer.py",
+          "line": 587
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_18",
+      "paper_line": 4680,
+      "condition": "Reuse native worker across different inputs and budgets",
+      "tests": [
+        {
+          "name": "test_prep1_same_native_worker_uses_two_current_inputs_and_budgets",
+          "file": "tests/test_fb_preparer.py",
+          "line": 469
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_19",
+      "paper_line": 4681,
+      "condition": "Native M/U/Cg/Ep, test D/Ee, two adoptions and three selections",
+      "tests": [
+        {
+          "name": "test_prep1_main_loop_native_source_update_candidate_preparation_and_three_selections",
+          "file": "tests/test_fb_preparer.py",
+          "line": 635
+        }
+      ],
+      "mode": "native_worker_public_port",
+      "note": null
+    },
+    {
+      "section": "scene_12_rate_refinement_subcondition",
+      "paper_line": 4674,
+      "condition": "An input guaranteed to traverse rate.py refinement while avoiding S4 unbounded entry",
+      "tests": [],
+      "mode": "excluded_by_spec",
+      "cg": "CG-K32-RATE-REFINEMENT",
+      "note": "K32-a excludes this S4-only loop from K32 tests. No production test hook and no S4 None case are added. F-a two-loop coverage stays in scene_12.",
+      "status": "closed",
+      "resolution_source": "specs/関所F_Fb_今の約束.md:3555"
+    },
+    {
+      "section": "scene_11_preflight",
+      "paper_line": 4624,
+      "condition": "A None terms/refinement limit must not remove the integer cell limit at preparation reader intake",
+      "tests": [
+        {
+          "name": "test_prep1_preflight_retains_cell_limit_when_another_limit_is_unbounded",
+          "file": "tests/test_fb_preparer.py",
+          "line": 658
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": "Two cases; max_cells=1 must fail at /reader both with all integers and with another cap None. Adequate cells and no cell cap are positive contrasts. Request 71 clarifies: this row covers reader intake only; the separate public audit entry is covered by scene_11_preflight_audit."
+    },
+    {
+      "section": "scene_13_verification",
+      "paper_line": 4624,
+      "condition": "A small integer verification cap stops replay after reader intake fits, independently of saved execution budget",
+      "tests": [
+        {
+          "name": "test_prep1_replay_integer_cap_stops_verification_after_reader_intake_fits",
+          "file": "tests/test_fb_preparer.py",
+          "line": 685
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": "Four cases: verify/restore x cells/terms. Evaluated multi-step issue; cells=input reader entry count, terms=1. A genuine preparation issue proves the same reader and verification budget pass intake. Bounded execution supplies an executable control before the K32-only unbounded execution case."
+    },
+    {
+      "section": "scene_12_integer_refinement_boundary",
+      "paper_line": 4674,
+      "condition": "Integer max_refinements includes the last permitted attempt",
+      "tests": [
+        {
+          "name": "test_prep1_integer_refinement_cap_includes_the_last_required_attempt",
+          "file": "tests/test_fb_preparer.py",
+          "line": 745
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": "Two cases: evaluate_f and evaluate_f_from_draw. FA13 prefix information is 3/8 ln2 after one step, 9/16 ln2 after two; alternative A gives 1/2 ln2. Cap 1 gives budget_exhausted; cap 2 selects W. Direct fixed-prefix evaluation with cap 1 must also return its result (no illegal cap=0 test)."
+    },
+    {
+      "section": "scene_11_integer_policy_cells",
+      "paper_line": 4673,
+      "condition": "Recursive policy-cell integer limit is enforced on a finite identity chain",
+      "tests": [
+        {
+          "name": "test_prep1_integer_policy_cell_cap_limits_a_zero_information_finite_chain",
+          "file": "tests/test_fb_preparer.py",
+          "line": 782
+        }
+      ],
+      "mode": "public_mathematics",
+      "note": "One candidate Q, deterministic zero-time/zero-cost identity kernel. Length 1 and 40 have the same exact cost=0, additional information=0, q*=1. Short chain passes cells=40; long chain has 40 execute nodes plus end, fails cells=40 and passes 41. Prepare both roots first with large integer budgets; do not freeze free exception detail."
+    },
+    {
+      "section": "scene_11_preflight_audit",
+      "paper_line": 4624,
+      "condition": "The public check_f_preflight_from_facts audit retains an integer cell cap when another cap is None",
+      "tests": [
+        {
+          "name": "test_prep1_facts_preflight_retains_cell_limit_after_reader_intake",
+          "file": "tests/test_fb_preparer.py",
+          "line": 830
+        }
+      ],
+      "mode": "public_mathematics",
+      "public_api": "src/sui/f_facts.py:365",
+      "note": "Two cases: terms/refinements None. Eight reader records fit cells=8, while model + seven other records + one capability require nine audit checks. All-int and mixed budgets must raise budget_exhausted at /preflight. Large integer cells and no cell cap must issue PreflightReady. The /reader case from request 69 remains unchanged."
+    }
+  ],
+  "migration_audit": {
+    "scope": "all tests/*.py: AST RateBudget calls containing None plus invalid_budget text search",
+    "explicit_Fa_None_invalid_expectations_found": 0,
+    "unchanged_S4_exception_vocabulary": "test_s4b_action_contracts.py:40",
+    "retained_fixture": "Existing fault/negative fixtures retain Workers.prepare. New PreparationLoopRig extends BundleLoopRig for the native main path; no bulk migration is required."
+  },
+  "limitations": [
+    "Missing native name prevents 58 native assertions from progressing; later assertions are not claimed executed.",
+    "38 tests stop at current RateBudget rejection of None; their bounded controls preceding that point have executed where reached.",
+    "No implementation mutation run. Discrimination is reasoned from public behavior and documented in test docstring.",
+    "No full test suite run. No production code, paper, Obsidian, or files outside the authorized tests directory written.",
+    "The six request-69 K32 unbounded branches are blocked by the old RateBudget constructor. Their bounded controls ran; no implemented-K32 or mutant result is claimed.",
+    "The two request-71 mixed-budget audit cases stop at the pre-K32 None rejection. Their integer /preflight and ready controls ran, but mixed-budget audit/positive assertions remain unexecuted in this copy."
+  ],
+  "work_record": {
+    "date": "2026-11-19",
+    "tool": "codex",
+    "session_id": "01a1aeda-b48f-7622-9bbf-6084d8289457",
+    "reused_knowledge": "Applied existing K30/K31 BundleLoopRig main path, source-side event gating and distinct public clock reads; validated nondefault FFactsRequest fields through public prepare.",
+    "next": "Claude verifies the new two cases against K32 and the remaining audit-counter mutant in the implementation copy. No open CG.",
+    "request_68": "Closed rate-loop CG from K32-a; corrected the choice check to use the root-bound draw (u=1/2 -> M); removed execution XML from tests. No production implementation body read or source changed.",
+    "reused_knowledge_request_68": "Verified the bound helper default draw u=1/2 and the public root DrawRecord. Reused the declared FA01 weights 1:2; all three bounded evaluation entries select M for that same draw.",
+    "request_69": "Added preflight mixed-cap contrasts and verification-cap contrasts with enough reader-intake capacity. The replay issue includes actual evaluation. Existing tests and src are unchanged; no implementation body or mutant is inspected or patched.",
+    "request_70": "2026-11-20: Added inclusive integer refinement boundaries and recursive policy-cell boundaries. New three cases pass with the pre-K32 src. No source body inspected or patched, and no mutant run.",
+    "reused_knowledge_request_70": "FA13 declaration gives reveal probability 3/4*(1-2^-n), so prefix 1 remains unresolved and prefix 2 separates W at u=1/2. A deterministic identity quiet chain changes policy-cell count while keeping cost=0, information=0 and one-candidate q*=1. Both were verified through public evaluation APIs.",
+    "request_71": "2026-11-20: Distinguished reader intake from the public preflight audit. Added a genuine FPreflightFacts request with nine checks on an eight-record reader, exact /preflight failure, mixed-budget cases and positive PreflightReady contrasts. Retained request-69 reader tests unchanged.",
+    "reused_knowledge_request_71": "Used the public preflight signature/full docstring and existing FPreflightFacts examples. Reader has 8 records; model + 7 other records + implemented finite_kernel capability require 9 checks. Checked /preflight exactly to avoid masking by /reader or later phases."
+  },
+  "cg": [],
+  "closed_cg": [
+    {
+      "id": "CG-K32-RATE-REFINEMENT",
+      "paper_line": 4673,
+      "question": "Specify a public F-a input that reaches rate.py refinement without passing None through S4, or assign that internal-loop check to the implementation-reading reviewer. No new production test hook is proposed.",
+      "evidence": [
+        "src/sui/rate.py:1",
+        "src/sui/rate.py:202",
+        "src/sui/rate.py:529",
+        "src/sui/rate.py:1159",
+        "specs/関所F_Fb_今の約束.md:4624",
+        "specs/関所F_Fb_今の約束.md:4673"
+      ],
+      "gut_check": "Types 1/6: retain Z59 and request existing public reproduction information; do not reopen the S4 decision or add a production hook for testing.",
+      "status": "closed",
+      "resolution": "K32-a: rate.py C1 refinement is reachable only through S4, not the new preparation path. No None/S4 case is required. K32 scene 12 is limited to the two F-a evaluation loops; implementation-line checks belong to Claude.",
+      "resolved_by": "specs/関所F_Fb_今の約束.md:3555",
+      "original_reference_scope": "request 67, before insertion of K32-a"
+    }
+  ],
+  "files_removed": [],
+  "verification_history": [
+    {
+      "request": 67,
+      "command": "../../../.venv/Scripts/python -B -m pytest tests/test_fb_preparer.py tests/test_fb_skeleton.py -q -p no:cacheprovider -n 2 -o pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/work32/src --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/bt_tests67 --tb=no --junitxml=tests/k32_test_results.xml",
+      "result": "89 failed, 205 passed in 19.08s",
+      "failure_reasons": {
+        "missing_EvaluationPreparer": 58,
+        "None_limit_still_invalid_budget": 30,
+        "missing_EvaluationPreparer_export": 1
+      },
+      "other_failure_reasons": 0,
+      "process_state": "all four pytest invocations completed with exit code 1; no yielded command remains running"
+    },
+    {
+      "request": 68,
+      "runner": "python -B - with pytest.main and an in-memory result hook",
+      "pytest_arguments": [
+        "-ra",
+        "--strict-markers",
+        "tests/test_fb_preparer.py",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-n",
+        "2",
+        "-o",
+        "pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/work32/src",
+        "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/bt_tests68",
+        "--tb=no",
+        "-rN"
+      ],
+      "exit_code": 1,
+      "result": {
+        "failed": 88,
+        "passed": 31
+      },
+      "failure_reasons": {
+        "missing_EvaluationPreparer": 58,
+        "None_limit_still_invalid_budget": 30
+      },
+      "other_failures": [],
+      "xml_output": false,
+      "bounded_draw_controls": [
+        {
+          "method": "recursive",
+          "draw": [
+            1,
+            2
+          ],
+          "choice": "M",
+          "q_star": [
+            [
+              1,
+              3
+            ],
+            [
+              2,
+              3
+            ]
+          ],
+          "result": "passed"
+        },
+        {
+          "method": "enumerated",
+          "draw": [
+            1,
+            2
+          ],
+          "choice": "M",
+          "q_star": [
+            [
+              1,
+              3
+            ],
+            [
+              2,
+              3
+            ]
+          ],
+          "result": "passed"
+        },
+        {
+          "method": "prefix",
+          "draw": [
+            1,
+            2
+          ],
+          "choice": "M",
+          "q_star": [
+            [
+              1,
+              3
+            ],
+            [
+              2,
+              3
+            ]
+          ],
+          "result": "passed"
+        }
+      ],
+      "process_state": "pytest process and bounded public-API verification completed; no command remains running",
+      "scope": "test_fb_preparer.py only; skeleton results are retained as request-67 history, not rerun in request 68",
+      "result_summary": "88 failed, 31 passed in 13.03s; missing native API 58, None limit rejected 30, other failures 0"
+    },
+    {
+      "request": 69,
+      "state": "failed",
+      "runner": "python -B - with pytest.main and an in-memory result hook",
+      "pytest_arguments": [
+        "tests/test_fb_preparer.py",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-n",
+        "2",
+        "-o",
+        "pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/work32/src",
+        "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/bt_tests69",
+        "--tb=no",
+        "-rN"
+      ],
+      "exit_code": 1,
+      "result": {
+        "failed": 94,
+        "passed": 31
+      },
+      "failure_reasons": {
+        "missing_EvaluationPreparer": 58,
+        "None_limit_still_invalid_budget": 36
+      },
+      "other_failures": [],
+      "xml_output": false,
+      "scope": "test_fb_preparer.py only; skeleton not rerun",
+      "result_summary": "94 failed, 31 passed in 18.39s; missing native API 58, None limit rejected 36, other failures 0",
+      "added_cases": {
+        "test_prep1_preflight_retains_cell_limit_when_another_limit_is_unbounded": {
+          "failed": 2,
+          "passed": 0
+        },
+        "test_prep1_replay_integer_cap_stops_verification_after_reader_intake_fits": {
+          "failed": 4,
+          "passed": 0
+        }
+      },
+      "executed_bounded_controls": "Both new preflight cases passed their all-int /reader cutoff. All four new replay cases passed real reader-intake issue generation, large-int replay, and small-int verification cutoff before reaching the unsupported None execution budget.",
+      "process_state": "pytest and all public-API probes completed; no command remains running",
+      "mutation_check": "not_run; no production implementation was patched"
+    },
+    {
+      "request": 70,
+      "state": "failed",
+      "targeted": {
+        "command": "../../../.venv/Scripts/python -B -m pytest tests/test_fb_preparer.py -q -p no:cacheprovider -n 0 -o pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/work32/src --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/bt_tests70 -k \"integer_refinement_cap_includes or integer_policy_cell_cap_limits\" --tb=line",
+        "result": "3 passed, 125 deselected in 17.64s"
+      },
+      "runner": "python -B - with pytest.main and an in-memory result hook",
+      "pytest_arguments": [
+        "tests/test_fb_preparer.py",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "-n",
+        "2",
+        "-o",
+        "pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/work32/src",
+        "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/bt_tests70",
+        "--tb=no",
+        "-rN"
+      ],
+      "exit_code": 1,
+      "result": {
+        "failed": 94,
+        "passed": 34
+      },
+      "failure_reasons": {
+        "missing_EvaluationPreparer": 58,
+        "None_limit_still_invalid_budget": 36
+      },
+      "other_failures": [],
+      "xml_output": false,
+      "scope": "test_fb_preparer.py only; skeleton not rerun",
+      "result_summary": "94 failed, 34 passed in 29.16s; missing native API 58, None limit rejected 36, other failures 0; request-70 new cases 3 passed",
+      "mutation_check": "not_run; no implementation or private counter patched",
+      "process_state": "all probes, targeted pytest and full-file pytest completed; no command remains running",
+      "added_cases": {
+        "test_prep1_integer_refinement_cap_includes_the_last_required_attempt": {
+          "passed": 2,
+          "failed": 0
+        },
+        "test_prep1_integer_policy_cell_cap_limits_a_zero_information_finite_chain": {
+          "passed": 1,
+          "failed": 0
+        }
+      }
+    }
+  ],
+  "previous_request_test_counts": {
+    "tests.test_fb_preparer": {
+      "failed": 88,
+      "passed": 31
+    },
+    "tests.test_fb_skeleton": {
+      "passed": 174,
+      "failed": 1
+    }
+  },
+  "test_counts": {
+    "tests.test_fb_preparer": {
+      "failed": 96,
+      "passed": 34
+    }
+  },
+  "verification": {
+    "request": 71,
+    "state": "failed",
+    "runner": "python -B - with pytest.main and an in-memory result hook",
+    "pytest_arguments": [
+      "tests/test_fb_preparer.py",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "-n",
+      "2",
+      "-o",
+      "pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/work32/src",
+      "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/bt_tests71",
+      "--tb=no",
+      "-rN"
+    ],
+    "exit_code": 1,
+    "result": {
+      "failed": 96,
+      "passed": 34
+    },
+    "failure_reasons": {
+      "missing_EvaluationPreparer": 58,
+      "None_limit_still_invalid_budget": 38
+    },
+    "other_failures": [],
+    "xml_output": false,
+    "scope": "test_fb_preparer.py only; skeleton not rerun",
+    "result_summary": "96 failed, 34 passed in 29.06s; missing native API 58, None limit rejected 38, other failures 0; request-71 new cases fail only on unsupported None limits",
+    "bounded_controls": "Both new cases passed the all-int cells=8 /preflight failure and cells=4096 PreflightReady before the None constructor rejection. Independent bounded public probe confirmed exact preflight request/call JSON.",
+    "mutation_check": "not_run; no implementation or private counter patched",
+    "process_state": "all public probes and pytest completed; no command remains running",
+    "added_cases": {
+      "test_prep1_facts_preflight_retains_cell_limit_after_reader_intake": {
+        "passed": 0,
+        "failed": 2,
+        "failure_reasons": {
+          "None_limit_still_invalid_budget": 2
+        }
+      }
+    }
+  }
+}

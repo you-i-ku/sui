@@ -869,7 +869,7 @@ FA_ALIAS_SPEC = {
 def test_public_export_names_are_exact():
     expected = set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
         "FbInputError", "FbHostFault", "FHalted", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost",
-        "FSource", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "WorkerBundle", "read_acquisition_sequence", "BeliefUpdateStatus"}
+        "FSource", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "WorkerBundle", "read_acquisition_sequence", "BeliefUpdateStatus"}
     missing = expected - set(fb.__all__)
     assert not missing, "K28 public export names missing: " + ", ".join(sorted(missing))
     assert set(fb.__all__) == expected

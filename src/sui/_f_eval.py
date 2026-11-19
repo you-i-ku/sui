@@ -1,5 +1,6 @@
 """Finite mathematics over issued worlds only; no model or registry resolution."""
 from __future__ import annotations
+from .rate import _over, _rounds   # 上限を置かない予算 (紙 F-b K32)
 from ._f_handles import world_state
 from .f import (
     ChooseNode,
@@ -313,7 +314,7 @@ def evaluate_f(root: FRoot, *, budget: RateBudget,
         u = _decode(root.selection_draw.value["u"], _Fraction)
         if _finite_tree(work) or root.scope.name == "finite_horizon":
             precision = _Fraction(1, 10**24)
-            for _ in range(budget.max_refinements):
+            for _ in _rounds(budget.max_refinements):
                 from ._f_handles import charge_verification
                 charge_verification('refinements')
                 progress = _evaluate_recursive(root, budget, precision)
@@ -324,7 +325,7 @@ def evaluate_f(root: FRoot, *, budget: RateBudget,
                 precision /= 2**16
             return _no_decision(root, FIncomplete("selection_boundary"), progress=progress)
         # The execution budget bounds refinement; depth never changes the scope.
-        for steps in range(1, budget.max_refinements+1):
+        for steps in _rounds(None if budget.max_refinements is None else budget.max_refinements + 1, 1):
             from ._f_handles import charge_verification
             charge_verification('refinements')
             progress = evaluate_f_prefix(root, steps=steps, budget=budget)
@@ -490,7 +491,7 @@ class _FiniteWork:
         from ._f_handles import charge_verification
         charge_verification()
         self.cells += 1
-        if self.cells > self.budget.max_cells:
+        if _over(self.cells, self.budget.max_cells):
             raise FIncomplete("budget_exhausted", "policy cells")
         if len(active) > 256:
             raise FIncomplete("budget_exhausted", "recursive policy stack")

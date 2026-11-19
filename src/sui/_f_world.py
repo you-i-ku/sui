@@ -4,6 +4,7 @@ Only this boundary reads model declarations or resolves capabilities by name.
 The mathematical engine receives WorldData, containing immutable resolved values.
 """
 from __future__ import annotations
+from .rate import _over   # 上限を置かない予算 (紙 F-b K32)
 
 from dataclasses import dataclass, replace, fields, is_dataclass
 from types import MappingProxyType
@@ -125,7 +126,7 @@ def capture_reader(reader, budget):
     for number, supplied in enumerate(reader.entries(), 1):
         from ._f_handles import charge_verification
         charge_verification()
-        if number > budget.max_cells:
+        if _over(number, budget.max_cells):
             raise core.FIncomplete('budget_exhausted', 'reader capture', '/reader')
         try:
             actual = reader.entry(supplied.cid)
@@ -425,7 +426,7 @@ class _WorldCompiler:
         from ._f_handles import charge_verification
         charge_verification()
         self.cells += 1
-        if self.cells > self.budget.max_cells:
+        if _over(self.cells, self.budget.max_cells):
             raise core.FIncomplete('budget_exhausted', 'world graph', '/world')
 
     def point(self,cid):

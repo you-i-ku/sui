@@ -3390,7 +3390,8 @@ class _ExpressionWork:
         from ._f_handles import charge_verification
         charge_verification()
         self.cells += 1
-        if self.cells > self.budget.max_cells:
+        from .rate import _over
+        if _over(self.cells, self.budget.max_cells):
             raise FIncomplete("budget_exhausted", "expression cells")
         try:
             if expr.op == "rational":
