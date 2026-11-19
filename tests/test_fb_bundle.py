@@ -393,12 +393,15 @@ class BundleLoopRig(BeliefRig):
     Reconnect before accepting them; the new host receives the declarations.
     Keep test-worker telemetry separate from the actual host workers=bundle.
     """
-    def __init__(self, cls):
+    def __init__(self, cls, *, candidate_worker=None):
         super().__init__(symbols=(T, E), matrices=MATRICES, targets=("x0", "x1"),
             continuation=True, worker_type=Workers, defer_boot=True)
         self.native_measurer = fb.SourceMeasurer()
         self.native_updater = fb.FiniteUpdater(registry=self.registry)
         self.bundle_workers = {stage: self.workers for stage in THINKING}
+        self.native_candidate = candidate_worker
+        if candidate_worker is not None:
+            self.bundle_workers["candidate_generation"] = candidate_worker
         self.bundle_workers.update(measure_segment=self.native_measurer, belief_update=self.native_updater)
         self.bundle = cls(self.bundle_workers)
         assert not self.requests("candidate_generation") and not self.requests("measure_segment")
@@ -420,6 +423,16 @@ class BundleLoopRig(BeliefRig):
             if key == request.value["desc"]["work_id"]]
         assert len(callbacks) == 1
         return request, callbacks[0]
+
+    def run_stage(self, stage):
+        if stage != "candidate_generation" or self.native_candidate is None:
+            return super().run_stage(stage)
+        request, body = self.callback(stage)
+        work_id = request.value["desc"]["work_id"]
+        self.executed.add(work_id)
+        body()
+        self.drive(lambda: any(item.value["work"] == work_id for item in self.facts(c.WORK_REPORT)))
+        self.settle_steps()
 
     def start(self):
         request, body = self.callback("measure_segment")

@@ -42,7 +42,7 @@ __all__ = [
     "Unsaved", "Held", "StatusBasis", "SlotStatus", "ReceiptStatus", "WorkStatus",
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
     "PurposeStatus", "BeliefUpdateStatus", "FStatus", "FWorkContext", "FWorkers", "LaunchResult", "FLauncher", "FWindow",
-    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater", "WorkerBundle",
+    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "WorkerBundle",
     "AcquisitionControl", "AcquisitionObservationModel", "AcquisitionReadItem", "AcquisitionReadResult",
     "read_acquisition_sequence",
 ]
@@ -1083,3 +1083,69 @@ class WorkerBundle:
 
     def run(self, work: "FWork", ctx: FWorkContext) -> None:
         return self._workers[work.desc.purpose].run(work, ctx)
+
+
+class CandidateGenerator:
+    """`FWorkers` の「候補を並べる」仕事の本体 (紙 F-b §6-10 K31、Z51 ②・Z58)。
+
+    ホストが出した候補の生成の仕事 (`Compute`、`desc.purpose == "candidate_generation"`) を受ける。知っている並べ方は
+    `sui.fb.model_operations/1` (args は空の対応) の 1 つだけ (紙 F-b H9): モデルの記録を仕事の口の `read` で読み、
+    `document.operations` の `id` をその順で候補の宣言 (`FCandidateDeclaration`、measure = counting/1、draws なし、
+    continuation は全候補 policy なし) にして `WorkFinished` で返す。操作が 0 個なら no_candidates。
+    知らない並べ方は `WorkFailure` (`unsupported_method`)、モデルが読めない・形が違う時は `WorkFailure` (`execution_error`、
+    例外の型の名前だけ)。空の一覧や no_candidates にしない。始めと終わりの読みは別々に取る (時計の出どころを名指せない時は
+    Unavailable)。候補の宣言を作り直して比べるのはホストの仕事ではない (Z58)。
+    候補を並べる仕事以外を渡されたら TypeError (束ねるのは `WorkerBundle`)。"""
+
+    def run(self, work: "FWork", ctx: FWorkContext) -> None:
+        import json
+        from . import f as _f
+        from . import fb_contracts as c
+        if not isinstance(work, Compute) or work.desc.purpose != "candidate_generation":
+            raise TypeError("CandidateGenerator runs candidate_generation works only")
+        if not ctx.enter():
+            return
+
+        def reading() -> ReadingEvidence:
+            try:
+                return ctx.now()
+            except RuntimeError:   # 時計の出どころを名指せない: 読みを作らず、理由を残して続ける (K24 と同じ)
+                return Unavailable(reason="clock_source_unavailable", basis=())
+
+        desc, args = work.desc, work.desc.args
+        started = reading()
+        value, failure = None, None   # failure = (failure_kind, content)
+        if desc.method != c.MODEL_OPERATIONS or not isinstance(args.generator_args, _Mapping) or args.generator_args:
+            failure = ("unsupported_method", {"method": {"name": desc.method.name, "version": desc.method.version}})
+        else:
+            # モデルの取得・解析・宣言を作る所の例外は型を問わず失敗にする (K31-DC-02。係の run の中では本体が
+            # 戻っていないので K29 の断りは起きず、read の RuntimeError は台帳や時計から来うる)
+            try:
+                data = ctx.read(args.model)
+            except Exception as exc:   # 帳面から読めない
+                failure = ("execution_error", {"error_type": type(exc).__name__})
+            if failure is None:
+                try:
+                    operations = json.loads(data)["document"]["operations"]
+                    if not isinstance(operations, list):   # {} や "" を「操作 0 個」と読まない (K31-R1)
+                        raise TypeError("model operations is not a list")
+                    order = tuple(op["id"] for op in operations)
+                    if any(not isinstance(name, str) for name in order) or len(set(order)) != len(order):
+                        raise ValueError("model operations are not distinct names")
+                    value = {"kind": "no_candidates", "value": {}} if not order else {
+                        "kind": "candidates", "value": _f._encode(_f.FCandidateDeclaration(
+                            model=args.model, input_order=order,
+                            measure=_f.CandidateMeasureRef(name="counting", version="1", args={}),
+                            generation=_f.FCandidateGeneration(generator=desc.method, args=args.generator_args,
+                                                               basis=args.basis, draws=()),
+                            continuation=_f.FContinuation(after=tuple(
+                                _f.ContinuationAfter(candidate=name, policy=None) for name in order))))}
+                except Exception as exc:   # 形が違う: 偽りの一覧を作らず失敗として返す
+                    failure = ("execution_error", {"error_type": type(exc).__name__})
+        finished = reading()
+        if failure is None:
+            outcome: WorkOutcome = WorkOutputs(outputs=ContractValue(contract=desc.output_contract, value=value))
+        else:
+            outcome = WorkFailure(failure=FailureInfo(failure_kind=failure[0], content=failure[1],
+                                                      readings=(started, finished), basis=()))
+        ctx.post(WorkFinished(work=desc.work_id, started=started, finished=finished, outcome=outcome))

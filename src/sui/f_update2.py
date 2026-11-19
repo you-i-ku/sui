@@ -69,8 +69,28 @@ def fb_registry_v1() -> FRegistry:
     implementations = tuple(CapabilityImplementation(kind=kind, ref=ref, implementation=_ExecutedByEntrance(),
                                                      identity="sui.fb.first_loop/1:" + ref.name + "/" + ref.version)
                             for kind, ref, *_ in rows)
+    # K31: 最初の並べ方 (H9) の手順。F-a が候補の宣言を読む時に呼び直す (Z58 (2))。受け取った入力をそのまま返す
+    candidate_input = ContractRef("sui.f.schema.candidate_input", "1")
+    declarations += (CapabilityDeclaration(kind="generator", ref=c.MODEL_OPERATIONS, args_contract=empty,
+                                           input_contract=candidate_input, output_contract=candidate_input,
+                                           dependencies=(), conditions=()),)
+    implementations += (CapabilityImplementation(
+        kind="generator", ref=c.MODEL_OPERATIONS, implementation=_ModelOperations(),
+        identity="sui.fb.first_loop/1:" + c.MODEL_OPERATIONS.name + "/" + c.MODEL_OPERATIONS.version),)
     return make_f_registry(declarations=old.declarations + declarations,
                            implementations=old.implementations + implementations)
+
+
+class _ModelOperations:
+    """並べ方 `sui.fb.model_operations/1` の手順 (紙 F-b H9・K31 決定 6)。受け取った候補の入力をそのまま返す。
+    並べる中身は本体の係 `fb.CandidateGenerator` が持つ。args が空でない・入力の欄が違う時は FInputError (shape)。"""
+
+    def __call__(self, *, args, input, context):
+        if not hasattr(args, "keys") or dict(args) != {}:
+            raise FInputError("shape", "model_operations takes no arguments", "/args")
+        if not hasattr(input, "keys") or set(input) != {"actions", "basis", "draws"}:
+            raise FInputError("shape", "not a candidate input", "/input")
+        return input
 
 
 class _ExecutedByEntrance:

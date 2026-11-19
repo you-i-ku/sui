@@ -23,7 +23,6 @@ from .records import Decided as _Decided, Observed as _Observed, Payload as _Pay
     Prediction as _Prediction, Role as _Role
 
 _UNIFORM_UNIT = _ContractRef("uniform_unit", "1")
-_COUNTING = _f.CandidateMeasureRef(name="counting", version="1", args={})
 _FINITE_EVALUATION = _ContractRef("sui.f.finite_evaluation", "1")
 # 白紙の評価の範囲 (約束の紙 §5-0 の 2026-10-07〜08、F-a P-04、§6-9 H2)
 _BLANK_SCOPE = _f.EvaluationScope(name="unbounded_total", version="1", H_ns=None, source=None)
@@ -252,11 +251,6 @@ def _request_step(name, contract, kind, desc_of, parents_of):
 
 # --- Wg の返答 → CG (H6・H9) ---
 
-def _model_operations(state, model):
-    document = state.ledger.record(model).body.content.as_json()["document"]
-    return tuple(op["id"] for op in document["operations"])
-
-
 def _candidates(state, plan, row, outcome):
     """Wg の出力を Qgen・Desc と全照合した候補の宣言。NoCandidates は "none"、照合できなければ
     理由を返す (CG を作らない)。Qgen に input_order は無いので、その欄と比べない (H6)。"""
@@ -290,13 +284,8 @@ def _candidates(state, plan, row, outcome):
     order = declaration.input_order
     if not order or len(set(order)) != len(order):
         return "cg:input_order"
-    # 生成方法の契約 (H9)。意味を知らない方法の出力は信じない
-    if desc.method != _c.MODEL_OPERATIONS:
-        return "cg:method_semantics"
-    if order != _model_operations(state, args.model) or declaration.measure != _COUNTING \
-            or tuple(a.candidate for a in declaration.continuation.after) != order \
-            or any(a.policy is not None for a in declaration.continuation.after):
-        return "cg:method_semantics"
+    # 並べ方の中身 (順・measure・continuation) は並べる係が持ち、ここで作り直して比べない (紙 F-b Z58・K31 決定 5)。
+    # モデルに無い候補・continuation の順の食い違いは F-a が断る
     return declaration
 
 

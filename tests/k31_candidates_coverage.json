@@ -1,0 +1,933 @@
+{
+  "problem": "K31",
+  "spec": "specs/関所F_Fb_今の約束.md",
+  "spec_version": "1.16",
+  "source_copy": "work31 master 53cf3cb; K31 absent",
+  "new_tests": [
+    {
+      "name": "test_cand1_public_constructor_run_and_export",
+      "file": "tests/test_fb_candidates.py",
+      "line": 134,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_native_declaration_uses_model_order_public_read_and_distinct_clock_reads",
+      "file": "tests/test_fb_candidates.py",
+      "line": 141,
+      "cases": 3,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_output_uses_the_requested_contract",
+      "file": "tests/test_fb_candidates.py",
+      "line": 155,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_unsupported_method_is_failure_not_empty_or_no_candidates",
+      "file": "tests/test_fb_candidates.py",
+      "line": 165,
+      "cases": 5,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_model_read_exception_is_reported_not_raised_and_preserves_error_type",
+      "file": "tests/test_fb_candidates.py",
+      "line": 181,
+      "cases": 5,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_malformed_model_is_execution_failure_not_a_fictitious_candidate_result",
+      "file": "tests/test_fb_candidates.py",
+      "line": 195,
+      "cases": 8,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_success_and_failures_read_two_clocks_and_only_replace_unavailable_side",
+      "file": "tests/test_fb_candidates.py",
+      "line": 205,
+      "cases": 12,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_wrong_work_is_type_error_before_admission",
+      "file": "tests/test_fb_candidates.py",
+      "line": 218,
+      "cases": 6,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_failed_admission_has_no_read_clock_or_report",
+      "file": "tests/test_fb_candidates.py",
+      "line": 227,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_same_worker_reads_each_new_model_from_its_current_port",
+      "file": "tests/test_fb_candidates.py",
+      "line": 234,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_post_failure_escapes_without_a_second_failure_report",
+      "file": "tests/test_fb_candidates.py",
+      "line": 245,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_native_registry_declares_and_preserves_the_candidate_input",
+      "file": "tests/test_fb_candidates.py",
+      "line": 253,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K31 native registration absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_native_generator_rejects_bad_args_and_input_fields_with_shape",
+      "file": "tests/test_fb_candidates.py",
+      "line": 270,
+      "cases": 5,
+      "result": "failed",
+      "reason": "K31 native registration absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_host_records_native_model_use_and_advances_to_evaluation_request",
+      "file": "tests/test_fb_candidates.py",
+      "line": 343,
+      "cases": 2,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_host_preserves_native_non_success_terminal_and_display_without_CG_or_EQ",
+      "file": "tests/test_fb_candidates.py",
+      "line": 358,
+      "cases": 3,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_host_saves_declaration_without_reconstructing_its_semantics",
+      "file": "tests/test_fb_candidates.py",
+      "line": 440,
+      "cases": 8,
+      "result": "failed",
+      "reason": "K31 native registration absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_host_keeps_shape_association_and_D6_rejection",
+      "file": "tests/test_fb_candidates.py",
+      "line": 464,
+      "cases": 9,
+      "result": "failed",
+      "reason": "K31 native registration absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_Fa_keeps_model_membership_and_continuation_checks_but_not_completeness",
+      "file": "tests/test_fb_candidates.py",
+      "line": 486,
+      "cases": 4,
+      "result": "failed",
+      "reason": "K31 native registration absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_main_loop_uses_native_candidates_and_native_generator_registration",
+      "file": "tests/test_fb_candidates.py",
+      "line": 510,
+      "cases": 1,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached because K31 CandidateGenerator/native registration is absent",
+      "verification_request": 66
+    },
+    {
+      "name": "test_cand1_host_distinguishes_empty_operations_array_from_non_array_failure",
+      "file": "tests/test_fb_candidates.py",
+      "line": 385,
+      "cases": 3,
+      "result": "failed",
+      "reason": "K31 CandidateGenerator absent",
+      "later_assertions": "not reached; saved-model read, worker outcome, T and display checks await implementation",
+      "verification_request": 66
+    }
+  ],
+  "core": [
+    {
+      "id": "acceptance-worker",
+      "paper": "4534-4535;4546",
+      "condition": "Current model order, H9 fields, NoCandidates and requested output contract",
+      "tests": [
+        "test_cand1_native_declaration_uses_model_order_public_read_and_distinct_clock_reads",
+        "test_cand1_output_uses_the_requested_contract",
+        "test_cand1_same_worker_reads_each_new_model_from_its_current_port",
+        "test_cand1_host_records_native_model_use_and_advances_to_evaluation_request"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "acceptance-port-read",
+      "paper": "4535;4577",
+      "condition": "Only ctx.read supplies model bytes; actual host uses names model Point and work",
+      "tests": [
+        "test_cand1_native_declaration_uses_model_order_public_read_and_distinct_clock_reads",
+        "test_cand1_host_records_native_model_use_and_advances_to_evaluation_request",
+        "test_cand1_main_loop_uses_native_candidates_and_native_generator_registration"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "acceptance-clocks",
+      "paper": "4537;4578;4585-4586",
+      "condition": "Clock before read and after success/failure; two independent readings; replace only unavailable side",
+      "tests": [
+        "test_cand1_native_declaration_uses_model_order_public_read_and_distinct_clock_reads",
+        "test_cand1_model_read_exception_is_reported_not_raised_and_preserves_error_type",
+        "test_cand1_success_and_failures_read_two_clocks_and_only_replace_unavailable_side"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "acceptance-failures",
+      "paper": "4536;4579;4590",
+      "condition": "Unknown method/args -> unsupported_method; read/model errors including RuntimeError/MemoryError -> execution_error, not fictitious results",
+      "tests": [
+        "test_cand1_unsupported_method_is_failure_not_empty_or_no_candidates",
+        "test_cand1_model_read_exception_is_reported_not_raised_and_preserves_error_type",
+        "test_cand1_malformed_model_is_execution_failure_not_a_fictitious_candidate_result",
+        "test_cand1_success_and_failures_read_two_clocks_and_only_replace_unavailable_side",
+        "test_cand1_host_preserves_native_non_success_terminal_and_display_without_CG_or_EQ",
+        "test_cand1_host_distinguishes_empty_operations_array_from_non_array_failure"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "acceptance-native-registry",
+      "paper": "4539;4582",
+      "condition": "Exact native ref/contracts/identity; no dependencies/conditions; preserve input; reject bad fields/args with FInputError(shape)",
+      "tests": [
+        "test_cand1_native_registry_declares_and_preserves_the_candidate_input",
+        "test_cand1_native_generator_rejects_bad_args_and_input_fields_with_shape"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "acceptance-no-host-reconstruction",
+      "paper": "4538;4546;4583;4588",
+      "condition": "Save reordered/subset/noncounting/policy/continuation-order/other-method/unknown-candidate declarations, with retained checks satisfied",
+      "tests": [
+        "test_cand1_host_saves_declaration_without_reconstructing_its_semantics"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "host-retained-checks",
+      "paper": "4538;4583",
+      "condition": "Preserve cg:output_contract/shape/model/generator/args/basis/draws/input_order separately",
+      "tests": [
+        "test_cand1_host_keeps_shape_association_and_D6_rejection"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "public-shape",
+      "paper": "4551-4554",
+      "condition": "No-arg CandidateGenerator, run(work,ctx), export; existing workers/host/bundle shape unchanged",
+      "tests": [
+        "test_cand1_public_constructor_run_and_export"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "unchanged-Fa",
+      "paper": "4559;4584;4588",
+      "condition": "Fa rejects unknown model candidate and continuation mismatch, accepts legal subset without completeness reconstruction",
+      "tests": [
+        "test_cand1_Fa_keeps_model_membership_and_continuation_checks_but_not_completeness"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "unchanged-non-success",
+      "paper": "4561;4589; GenerationPair :2207; TerminalReturned :2215; TerminalBasis :2216; work_terminal :2301; K31-a :3552",
+      "condition": "NoCandidates/failure T and display branches, no CG/EQ; Post failure escapes",
+      "tests": [
+        "test_cand1_post_failure_escapes_without_a_second_failure_report",
+        "test_cand1_host_preserves_native_non_success_terminal_and_display_without_CG_or_EQ"
+      ],
+      "status": "test_written_missing_implementation",
+      "note": "T Compute success returned={kind:output,value:ContractValue}; failure returned=null, basis.failure matches reported FailureInfo; both have basis.generation and null basis.unknown. NoCandidates has null basis.failure."
+    },
+    {
+      "id": "unchanged-workers-context",
+      "paper": "4562",
+      "condition": "Native source/updater and K30 bundle continue; other three thinking workers remain TEST",
+      "tests": [
+        "test_cand1_main_loop_uses_native_candidates_and_native_generator_registration"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "unchanged-continuation",
+      "paper": "4560",
+      "condition": "Current MODEL_OPERATIONS continuation path remains; no new arbitrary-method continuation promise",
+      "tests": [
+        "test_cand1_main_loop_uses_native_candidates_and_native_generator_registration"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-01",
+      "paper": "4576",
+      "condition": "Two declared orders and zero operations",
+      "tests": [
+        "test_cand1_native_declaration_uses_model_order_public_read_and_distinct_clock_reads"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-02",
+      "paper": "4577",
+      "condition": "Read and actual uses evidence",
+      "tests": [
+        "test_cand1_native_declaration_uses_model_order_public_read_and_distinct_clock_reads",
+        "test_cand1_host_records_native_model_use_and_advances_to_evaluation_request"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-03",
+      "paper": "4578",
+      "condition": "Separate clocks; both unavailable",
+      "tests": [
+        "test_cand1_success_and_failures_read_two_clocks_and_only_replace_unavailable_side"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-04",
+      "paper": "4579",
+      "condition": "Unknown methods/args and all listed model-shape failures",
+      "tests": [
+        "test_cand1_unsupported_method_is_failure_not_empty_or_no_candidates",
+        "test_cand1_model_read_exception_is_reported_not_raised_and_preserves_error_type",
+        "test_cand1_malformed_model_is_execution_failure_not_a_fictitious_candidate_result",
+        "test_cand1_host_distinguishes_empty_operations_array_from_non_array_failure"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-05",
+      "paper": "4580",
+      "condition": "Wrong purpose/class TypeError before entry",
+      "tests": [
+        "test_cand1_wrong_work_is_type_error_before_admission"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-06",
+      "paper": "4581",
+      "condition": "False enter has no further operation",
+      "tests": [
+        "test_cand1_failed_admission_has_no_read_clock_or_report"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-07",
+      "paper": "4582",
+      "condition": "Registry declaration/implementation, input preservation and shape errors",
+      "tests": [
+        "test_cand1_native_registry_declares_and_preserves_the_candidate_input",
+        "test_cand1_native_generator_rejects_bad_args_and_input_fields_with_shape"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-08",
+      "paper": "4583",
+      "condition": "Removed semantic checks; retained association/shape/D6 reasons",
+      "tests": [
+        "test_cand1_host_saves_declaration_without_reconstructing_its_semantics",
+        "test_cand1_host_keeps_shape_association_and_D6_rejection"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-09",
+      "paper": "4584",
+      "condition": "Fa boundary rejects membership/continuation mismatch",
+      "tests": [
+        "test_cand1_Fa_keeps_model_membership_and_continuation_checks_but_not_completeness"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-10",
+      "paper": "4585",
+      "condition": "Both clock reads on failure too",
+      "tests": [
+        "test_cand1_unsupported_method_is_failure_not_empty_or_no_candidates",
+        "test_cand1_model_read_exception_is_reported_not_raised_and_preserves_error_type",
+        "test_cand1_success_and_failures_read_two_clocks_and_only_replace_unavailable_side"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-11",
+      "paper": "4586",
+      "condition": "Only missing clock side replaced",
+      "tests": [
+        "test_cand1_success_and_failures_read_two_clocks_and_only_replace_unavailable_side"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-12",
+      "paper": "4587",
+      "condition": "One worker reused with two models/ports",
+      "tests": [
+        "test_cand1_same_worker_reads_each_new_model_from_its_current_port"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-13",
+      "paper": "4588",
+      "condition": "Subset saved by host and accepted by Fa",
+      "tests": [
+        "test_cand1_host_saves_declaration_without_reconstructing_its_semantics",
+        "test_cand1_Fa_keeps_model_membership_and_continuation_checks_but_not_completeness"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-14",
+      "paper": "4589; GenerationPair :2207; TerminalReturned :2215; TerminalBasis :2216; work_terminal :2301; K31-a :3552",
+      "condition": "Native NoCandidates/failures via host: T/display/no CG or EQ",
+      "tests": [
+        "test_cand1_host_preserves_native_non_success_terminal_and_display_without_CG_or_EQ",
+        "test_cand1_host_distinguishes_empty_operations_array_from_non_array_failure"
+      ],
+      "status": "test_written_missing_implementation",
+      "note": "T Compute success returned={kind:output,value:ContractValue}; failure returned=null, basis.failure matches reported FailureInfo; both have basis.generation and null basis.unknown. NoCandidates has null basis.failure."
+    },
+    {
+      "id": "scene-15",
+      "paper": "4590",
+      "condition": "Read RuntimeError reported, not escaped",
+      "tests": [
+        "test_cand1_model_read_exception_is_reported_not_raised_and_preserves_error_type",
+        "test_cand1_host_preserves_native_non_success_terminal_and_display_without_CG_or_EQ"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "scene-16",
+      "paper": "4591",
+      "condition": "Native candidate/source/updater main path with unrelated TEST capabilities retained",
+      "tests": [
+        "test_cand1_main_loop_uses_native_candidates_and_native_generator_registration"
+      ],
+      "status": "test_written_missing_implementation"
+    },
+    {
+      "id": "unsupported-method-value",
+      "paper": "4536; K31-a :3552",
+      "condition": "Exact unsupported_method content is {method:{name:str,version:str}} for the requested method; no extra fields",
+      "tests": [
+        "test_cand1_unsupported_method_is_failure_not_empty_or_no_candidates"
+      ],
+      "status": "test_written_missing_implementation",
+      "note": "CG-K31-METHOD-CONTENT closed; helper receives actual requested method for unit, clock-failure and host paths."
+    },
+    {
+      "id": "native-generator-registration-only",
+      "paper": "4591; K31-a :3552",
+      "condition": "Only model_operations pair must be native; unrelated TEST capabilities may augment the registry",
+      "tests": [
+        "test_cand1_main_loop_uses_native_candidates_and_native_generator_registration"
+      ],
+      "status": "test_written_missing_implementation",
+      "note": "CG-K31-REGISTRY-ONLY closed by scope clarification; an unaugmented registry profile is not required."
+    },
+    {
+      "id": "model-operations-array-shape-K31-R1",
+      "paper": "K31 decision 3 :4536; K31 (6) model/NoCandidates/failure scenes; request 66 K31-R1",
+      "condition": "document.operations must be an array. [] is legitimate zero operations -> NoCandidates; {} and empty string are malformed -> WorkFailure execution_error. Preserve the distinction in saved T and public display.",
+      "tests": [
+        "test_cand1_malformed_model_is_execution_failure_not_a_fictitious_candidate_result[operations-object]",
+        "test_cand1_malformed_model_is_execution_failure_not_a_fictitious_candidate_result[operations-string]",
+        "test_cand1_native_declaration_uses_model_order_public_read_and_distinct_clock_reads[empty]",
+        "test_cand1_host_distinguishes_empty_operations_array_from_non_array_failure[empty-array]",
+        "test_cand1_host_distinguishes_empty_operations_array_from_non_array_failure[empty-object]",
+        "test_cand1_host_distinguishes_empty_operations_array_from_non_array_failure[empty-string]"
+      ],
+      "status": "test_written_missing_implementation",
+      "note": "5 added cases: 2 unit failures + 3 host cases (including [] control). The existing unit [] control also remains. Host fixture saves a new immutable model with only operations changed and Boot names it; it does not replace read or inspect host internals. Shape-error exception type is not fixed."
+    }
+  ],
+  "cg": [],
+  "migration": {
+    "existing_changes": [
+      {
+        "file": "tests/test_fb_stage2.py",
+        "line": 77,
+        "name": "registry"
+      },
+      {
+        "file": "tests/test_fb_stage2.py",
+        "line": 588,
+        "name": "test_registry_preserves_builtin_and_model_operations_round_trip"
+      },
+      {
+        "file": "tests/test_fb_stage2.py",
+        "line": 640,
+        "name": "test_model_operations_follow_original_model_order"
+      },
+      {
+        "file": "tests/test_fb_stage2.py",
+        "line": 896,
+        "name": "test_wg_whole_declaration_matching"
+      },
+      {
+        "file": "tests/test_fb_stage2.py",
+        "line": 1688,
+        "name": "test_model_operations_host_preserves_worker_order_and_subset_with_matching_continuation"
+      },
+      {
+        "file": "tests/test_fb_skeleton.py",
+        "line": 869,
+        "name": "test_public_export_names_are_exact"
+      }
+    ],
+    "removed": "ModelOperations class and same-ref TEST generator registration in test_fb_stage2.py; no Python references to that class remain.",
+    "registry": "Start with u2.fb_registry_v1, require native model_operations, merge unrelated fixtures by kind/ref preserving identities, add only unrelated test execution/draw markers. No fallback TEST model_operations.",
+    "test_registry_preserves_builtin_and_model_operations_round_trip": "Call native public CapabilityImplementation.implementation and assert native identity, contracts, input order/preservation.",
+    "test_wg_whole_declaration_matching": "legal/input_order/measure/continuation now save CG/EQ. model/generator/args/basis/draws still reject.",
+    "renamed": "test_model_operations_require_the_whole_model_order_with_matching_continuation -> test_model_operations_host_preserves_worker_order_and_subset_with_matching_continuation: all original/subset/reordered responses save returned CG and open EQ.",
+    "positive_fixture_ordering": "test_model_operations_follow_original_model_order remains a positive test-worker behavior check; docstring no longer implies host rejection of reordered replies.",
+    "skeleton": "Add CandidateGenerator to exact export set.",
+    "bundle_rig": "BundleLoopRig accepts optional candidate_worker; directly registers it in WorkerBundle and executes native candidate callback without TEST worker telemetry. Default K30 composition unchanged.",
+    "new_main_path": "Native CandidateGenerator/SourceMeasurer/FiniteUpdater; other three workers and unrelated Need/execution/draw capabilities remain TEST. Native generator identity checked. Real T then E gives FIRST joint4/5,1/5 mass5/32 and SECOND joint8/9,1/9 mass9/128; 3 selections. K31-a allows the unrelated TEST capabilities; this is the required native-generator-only profile."
+  },
+  "verification": {
+    "request": 66,
+    "source": "sui.fb.__file__ verified under work31/src; explicit -o pythonpath points to same source as pyproject pythonpath=[src]",
+    "command": "In work31: python -B - / pytest.main tests/test_fb_candidates.py -q -p no:cacheprovider -n 0 -o pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/work31/src --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/bt_tests66 --tb=no -r \"\"; PYTHONDONTWRITEBYTECODE=1",
+    "failed": 80,
+    "passed": 0,
+    "seconds": 3.35,
+    "CandidateGenerator_absent": 53,
+    "native_registration_absent": 27,
+    "added_cases": {
+      "failed": 5,
+      "reason": "CandidateGenerator absent"
+    },
+    "malformed_model_function": {
+      "cases": 8,
+      "failed": 8
+    },
+    "new_host_function": {
+      "cases": 3,
+      "failed": 3
+    },
+    "other_failure_reasons": 0,
+    "collection_errors": 0,
+    "unreachable_assertions": "All behavior after API/registration guards, including the new operations-kind and worker/T/display checks, is not executed in pre-K31 source.",
+    "full_suite": "not run",
+    "mutations": "not run",
+    "processes": "Request 66 pytest session completed; no background command left.",
+    "static_checks": "AST and UTF-8 JSON valid; 20 functions/80 cases; current CG=0; every core row names tests; src unchanged against 53cf3cb after LF normalization."
+  },
+  "discrimination": [
+    {
+      "mistake": "reuse finished as started / read clocks after model access",
+      "tests": [
+        "test_cand1_native_declaration_uses_model_order_public_read_and_distinct_clock_reads",
+        "test_cand1_model_read_exception_is_reported_not_raised_and_preserves_error_type",
+        "test_cand1_success_and_failures_read_two_clocks_and_only_replace_unavailable_side"
+      ],
+      "basis": "Captured actual now results and ordering around public read"
+    },
+    {
+      "mistake": "read model through another path or stale cache",
+      "tests": [
+        "test_cand1_native_declaration_uses_model_order_public_read_and_distinct_clock_reads",
+        "test_cand1_same_worker_reads_each_new_model_from_its_current_port",
+        "test_cand1_host_records_native_model_use_and_advances_to_evaluation_request"
+      ],
+      "basis": "Caller-owned bytes only via read; reader access forbidden in port probe; real host uses must name model Point"
+    },
+    {
+      "mistake": "unsupported method returns empty/NoCandidates",
+      "tests": [
+        "test_cand1_unsupported_method_is_failure_not_empty_or_no_candidates"
+      ],
+      "basis": "Require WorkFailure unsupported_method"
+    },
+    {
+      "mistake": "read exception escapes worker",
+      "tests": [
+        "test_cand1_model_read_exception_is_reported_not_raised_and_preserves_error_type"
+      ],
+      "basis": "Require exactly one failure report and exact injected type, not free message"
+    },
+    {
+      "mistake": "host retains semantic reconstruction",
+      "tests": [
+        "test_cand1_host_saves_declaration_without_reconstructing_its_semantics"
+      ],
+      "basis": "Require saved CG and EQ for changed declarations"
+    },
+    {
+      "mistake": "generator registry implementation changes input",
+      "tests": [
+        "test_cand1_native_registry_declares_and_preserves_the_candidate_input"
+      ],
+      "basis": "Independent pre-call JSON compared with unchanged caller input and output, preserving reverse action order"
+    },
+    {
+      "mistake": "Interpret falsey non-array operations {} or empty string as zero operations and return NoCandidates",
+      "tests": [
+        "test_cand1_malformed_model_is_execution_failure_not_a_fictitious_candidate_result[operations-object]",
+        "test_cand1_malformed_model_is_execution_failure_not_a_fictitious_candidate_result[operations-string]",
+        "test_cand1_host_distinguishes_empty_operations_array_from_non_array_failure[empty-object]",
+        "test_cand1_host_distinguishes_empty_operations_array_from_non_array_failure[empty-string]"
+      ],
+      "basis": "Require WorkFailure execution_error at the worker plus failure/null-return/failure-basis T and failure display. [] must produce NoCandidates/outputs/output-return and no_candidates display.",
+      "mutation_execution": "not run"
+    }
+  ],
+  "read_scope": {
+    "paper": "K31 :3551 full summary; full body :4514-4595; full Z58 :3792, H6 :3442,H9 :3445,Z51 :3784,Z55 :3789,K24 :3525,K30 :3549. M3 :1950-1985 relevant section including branch table. K30 body read fully in request 63.",
+    "source": "Public fields/signatures/docstrings in copy f.py/fb.py only; native registry queried through public API. No implementation bodies/private modules read.",
+    "tests": "Relevant copied Stage2/Bundle/Belief/Updater fixtures; no withdrawn drafts.",
+    "request65_paper": "K31-a :3552 full line; complete GenerationPair :2207, TerminalReturned :2215, TerminalBasis :2216 and work_terminal/1 :2301 table rows. K31 body starts at :4515 and ends :4596 in current paper; prior full reading recorded in request 64 history.",
+    "request66_paper": "K31 body heading :4515 and decision 3 :4536 read in full; K31-a :3552 and TerminalReturned :2215/TerminalBasis :2216 complete rows read. Review facts are from the explicit request, not implementation inspection."
+  },
+  "recording": "Durable result is this JSON inside authorized tests scope; no external vault write.",
+  "history": [
+    {
+      "request": 64,
+      "spec_version": "1.15",
+      "cg": [
+        {
+          "id": "CG-K31-REGISTRY-ONLY",
+          "paper": "4590; public FThreadHost docstring src/sui/fb.py:876; ResourceScope.need :146",
+          "question": "May the native registry be augmented with unrelated TEST Need/preparation/evaluation/scripted-draw capabilities while model_operations is exclusively native? Otherwise which native declarations should Boot use?",
+          "evidence": {
+            "native_Need_declaration_count": 0,
+            "native_method_generator_declarations": [
+              {
+                "kind": "method",
+                "ref": {
+                  "name": "sui.f.finite_evaluation",
+                  "version": "1"
+                },
+                "input": {
+                  "name": "sui.f.schema.evaluation_input",
+                  "version": "2"
+                },
+                "output": {
+                  "name": "sui.f.schema.f_evaluation",
+                  "version": "2"
+                }
+              },
+              {
+                "kind": "method",
+                "ref": {
+                  "name": "sui.f.computation_information",
+                  "version": "1"
+                },
+                "input": {
+                  "name": "sui.f.schema.computation_input",
+                  "version": "2"
+                },
+                "output": {
+                  "name": "sui.f.schema.information_parts",
+                  "version": "1"
+                }
+              },
+              {
+                "kind": "generator",
+                "ref": {
+                  "name": "sui.f.explicit_candidates",
+                  "version": "1"
+                },
+                "input": {
+                  "name": "sui.f.schema.candidate_input",
+                  "version": "1"
+                },
+                "output": {
+                  "name": "sui.f.schema.candidate_input",
+                  "version": "1"
+                }
+              },
+              {
+                "kind": "method",
+                "ref": {
+                  "name": "sui.fb.saved_segment_update",
+                  "version": "1"
+                },
+                "input": {
+                  "name": "sui.fb.segment_binding",
+                  "version": "1"
+                },
+                "output": {
+                  "name": "sui.fb.work_requested",
+                  "version": "1"
+                }
+              },
+              {
+                "kind": "method",
+                "ref": {
+                  "name": "sui.f.finite_update_compute",
+                  "version": "1"
+                },
+                "input": {
+                  "name": "sui.fb.work_requested",
+                  "version": "1"
+                },
+                "output": {
+                  "name": "sui.fb.update_response",
+                  "version": "1"
+                }
+              },
+              {
+                "kind": "method",
+                "ref": {
+                  "name": "sui.fb.reuse_candidates",
+                  "version": "1"
+                },
+                "input": {
+                  "name": "sui.fb.belief_adopted",
+                  "version": "1"
+                },
+                "output": {
+                  "name": "sui.fb.evaluation_requested",
+                  "version": "1"
+                }
+              },
+              {
+                "kind": "method",
+                "ref": {
+                  "name": "sui.f.observation_plan",
+                  "version": "2"
+                },
+                "input": {
+                  "name": "sui.fb.segment_binding",
+                  "version": "1"
+                },
+                "output": {
+                  "name": "sui.fb.finite_segment_projection",
+                  "version": "1"
+                }
+              },
+              {
+                "kind": "method",
+                "ref": {
+                  "name": "sui.fb.saved_acquisition_update",
+                  "version": "1"
+                },
+                "input": {
+                  "name": "sui.fb.segment_binding",
+                  "version": "1"
+                },
+                "output": {
+                  "name": "sui.fb.work_requested",
+                  "version": "1"
+                }
+              }
+            ]
+          },
+          "current_scope": "Native CandidateGenerator and native model_operations row required; stricter unaugmented profile remains untested."
+        },
+        {
+          "id": "CG-K31-METHOD-CONTENT",
+          "paper": "4535",
+          "question": "What exact JSON shape represents method name/version in unsupported_method content[method]?",
+          "current_scope": "failure_kind and exact content key {method} are tested; value representation is not fixed.",
+          "proposal": {
+            "name": "method.name",
+            "version": "method.version"
+          }
+        }
+      ],
+      "verification": {
+        "source": "work31/src/sui/fb.py verified; pyproject.toml:11 pythonpath=[src] and explicit -o pythonpath point to that copy",
+        "basetemp": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/bt_tests64",
+        "parallelism": 0,
+        "four_file_run": {
+          "files": [
+            "test_fb_candidates.py",
+            "test_fb_stage2.py",
+            "test_fb_bundle.py",
+            "test_fb_skeleton.py"
+          ],
+          "passed": 240,
+          "failed": 405,
+          "seconds": 22.96,
+          "candidates_at_that_time": {
+            "failed": 72,
+            "CandidateGenerator_absent": 45,
+            "registration_absent": 27
+          },
+          "stage2": {
+            "failed": 323,
+            "registration_absent": 323
+          },
+          "bundle": {
+            "passed": 68,
+            "failed": 7,
+            "registration_absent": 7
+          },
+          "skeleton": {
+            "passed": 172,
+            "failed": 3,
+            "registration_absent": 2,
+            "new_export_absent": 1
+          }
+        },
+        "latest_candidates": {
+          "failed": 75,
+          "passed": 0,
+          "CandidateGenerator_absent": 48,
+          "registration_absent": 27,
+          "seconds": 2.97,
+          "note": "Added empty-list/null args and MemoryError read cases after combined run. Last registry input refinement uses legal FA01 operations and remains behind the same missing-registration assertion."
+        },
+        "latest_per_file_aggregate": {
+          "failed": 408,
+          "passed": 240,
+          "CandidateGenerator_absent": 48,
+          "registration_absent": 359,
+          "new_export_absent": 1,
+          "qualification": "Aggregate of latest candidate-only run and other files from combined run, not a second combined execution."
+        },
+        "other_failure_reasons": 0,
+        "collection_errors": 0,
+        "full_suite": "not run",
+        "mutations": "not run",
+        "unreachable_assertions": "Worker/host behavior after missing API/registration guards is not exercised in this source. No fake CandidateGenerator/registration installed.",
+        "processes": "All started exec/pytest sessions completed; no background command left.",
+        "static_checks": "AST and UTF-8 JSON parsed. Hash comparison to 53cf3cb after LF normalization found only modified test_fb_stage2.py/test_fb_bundle.py/test_fb_skeleton.py plus new candidate test and coverage JSON; all src unchanged."
+      },
+      "correction": "Request 65/K31-a fixes test-side T expectation: Compute success uses returned.kind=output, failure returned=null with failure in basis; K31 never changed T."
+    },
+    {
+      "request": 65,
+      "verification": {
+        "request": 65,
+        "source": "Verified sui.fb.__file__ under work31/src; explicit -o pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/work31/src matches pyproject pythonpath=[src]",
+        "command": "In work31: python -B - / pytest.main tests/test_fb_candidates.py -q -p no:cacheprovider -n 0 -o pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/work31/src --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1619/bt_tests65 --tb=no -r \"\"; PYTHONDONTWRITEBYTECODE=1",
+        "failed": 75,
+        "passed": 0,
+        "seconds": 3.12,
+        "CandidateGenerator_absent": 48,
+        "native_registration_absent": 27,
+        "other_failure_reasons": 0,
+        "collection_errors": 0,
+        "unreachable_assertions": "All behavior assertions after the API/registration guards, including the corrected T comparisons, remain unexecuted against this pre-K31 source.",
+        "full_suite": "not run",
+        "mutations": "not run",
+        "processes": "Request 65 pytest process completed; no background process left.",
+        "static_checks": "AST/UTF-8 JSON valid; current CG=0; every core row names tests; src matches 53cf3cb after LF normalization."
+      },
+      "cg_count": 0
+    }
+  ],
+  "cg_resolutions": [
+    {
+      "id": "CG-K31-REGISTRY-ONLY",
+      "status": "closed",
+      "paper": "K31-a :3552",
+      "resolution": "Only the model_operations declaration/implementation must exclusively originate from native fb_registry_v1; unrelated TEST Need/preparation/evaluation/draw capabilities are allowed. The existing main-loop test already uses this assembly."
+    },
+    {
+      "id": "CG-K31-METHOD-CONTENT",
+      "status": "closed",
+      "paper": "K31-a :3552",
+      "resolution": "Exact content is {method:{name:method.name,version:method.version}}, with no other fields. assert_failure now compares this value for every unsupported-method case."
+    }
+  ],
+  "request65_changes": {
+    "files": [
+      "tests/test_fb_candidates.py",
+      "tests/k31_candidates_coverage.json"
+    ],
+    "failure_content": "assert_failure checks exact requested method name/version under content.method and no additional fields.",
+    "terminal_expectation": "Three native non-success host cases corrected to unchanged T contract: output singular on NoCandidates, failure returned null with FailureInfo in basis.failure; generation pair and null unknown checked.",
+    "test_side_error": "The prior outputs/failure returned wrappers were incorrect test expectations, not an implementation change.",
+    "assertion_count": "No cases added or removed; 19 functions / 75 cases retained.",
+    "no_scope_expansion": "No src or other existing test file edited in request 65."
+  },
+  "request66_changes": {
+    "files": [
+      "tests/test_fb_candidates.py",
+      "tests/k31_candidates_coverage.json"
+    ],
+    "unit": "Add document.operations={} and document.operations=empty string to the existing malformed model parameterization (6 -> 8 cases).",
+    "host": "New 3-case parameterization for [],{},empty string: verify saved input kind, read uses/new model Point, actual worker reply, T kind/returned/basis, display response, no CG/EQ/preparation/draw and no host halt.",
+    "fixture": "CandidateHostRig has an optional operations override; copy the legal FA01 document, change only operations, save it as a new Prediction via public ledger, update Boot model Point before posting.",
+    "input_roundtrip_check": "Public Payload.json/as_json preserves list/dict/string distinctions for these three inputs; verified separately before pytest.",
+    "new_cases": 5,
+    "functions_total": 20,
+    "cases_total": 80,
+    "limits": "Worker reply and host T/display assertions cannot execute until K31 exists in the allowed source; the review implementation was not read or tested."
+  }
+}

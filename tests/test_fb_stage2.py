@@ -23,7 +23,7 @@ from threading import Event, Thread
 
 import pytest
 
-from sui import f, fb, fb_contracts as c, f_facts as ff
+from sui import f, fb, fb_contracts as c, f_facts as ff, f_update2 as u2
 from sui.contracts import ContractRef
 from sui.ids import RefKind
 from sui.ledger import entry_from_header
@@ -67,16 +67,6 @@ def canonical(value):
                       separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
-class ModelOperations:
-    """H9 / F-a:136,138: preserve CandidateInput, including its actions."""
-
-    def __call__(self, *, args, input, context):
-        assert plain(args) == {}
-        assert set(input) == {"actions", "basis", "draws"}
-        # No independent candidate list is supplied by the test capability.
-        return input
-
-
 class ExecutionMarker:
     """Explicit test execution declaration; its actual body is FWorkers.run."""
 
@@ -85,26 +75,34 @@ class ExecutionMarker:
 
 
 def registry(*, omit_implementation=None):
-    """Paper:3432; retain every builtin declaration/identity in a new registry."""
+    """K31: native model-operations registration plus unrelated test capabilities."""
     from test_fb_skeleton import test_registry as stage1_registry
-    old, fixture = f.builtin_f_registry(), stage1_registry()
-    declarations = list(old.declarations) + list(fixture.declarations)
-    implementations = list(old.implementations) + list(fixture.implementations)
-    generator_schema = contract("sui.f.schema.candidate_input")
+    old, fixture = u2.fb_registry_v1(), stage1_registry()
+    assert any(d.kind == "generator" and d.ref == GENERATOR for d in old.declarations), (
+        "K31 public registry missing: sui.fb.model_operations/1")
+    declarations, implementations = {}, {}
+    for reg in (old, fixture):
+        for declaration in reg.declarations:
+            key = declaration.kind, declaration.ref
+            if key in declarations: assert declarations[key] == declaration
+            declarations[key] = declaration
+        for implementation in reg.implementations:
+            key = implementation.kind, implementation.ref
+            if key in implementations: assert implementations[key].identity == implementation.identity
+            else: implementations[key] = implementation
     for kind, ref, input_contract, output_contract, callback in (
-        ("generator", GENERATOR, generator_schema, generator_schema, ModelOperations()),
         ("method", c.EVALUATION_PREPARE, c.EVALUATION_REQUESTED, MATH, ExecutionMarker()),
         ("method", c.EVALUATE_FROM_DRAW, c.WORK_REQUESTED, MATH, ExecutionMarker()),
         ("generator", DRAW_GENERATOR, c.DRAW_REQUESTED, c.DRAW_REPORT, ExecutionMarker()),
     ):
-        declarations.append(f.CapabilityDeclaration(kind=kind, ref=ref,
+        declarations[kind, ref] = f.CapabilityDeclaration(kind=kind, ref=ref,
             args_contract=contract("sui.f.args.empty"), input_contract=input_contract,
-            output_contract=output_contract, dependencies=(), conditions=()))
-        implementations.append(f.CapabilityImplementation(kind=kind, ref=ref,
-            implementation=callback, identity="sui.tests.fb.stage2/1:" + ref.name))
+            output_contract=output_contract, dependencies=(), conditions=())
+        implementations[kind, ref] = f.CapabilityImplementation(kind=kind, ref=ref,
+            implementation=callback, identity="sui.tests.fb.stage2/1:" + ref.name)
     if omit_implementation is not None:
-        implementations = [i for i in implementations if i.ref != omit_implementation]
-    return f.make_f_registry(declarations=tuple(declarations), implementations=tuple(implementations))
+        implementations = {key: i for key, i in implementations.items() if i.ref != omit_implementation}
+    return f.make_f_registry(declarations=tuple(declarations.values()), implementations=tuple(implementations.values()))
 
 
 class LaunchCut:
@@ -601,7 +599,9 @@ def test_registry_preserves_builtin_and_model_operations_round_trip():
     assert declaration.input_contract == declaration.output_contract == contract("sui.f.schema.candidate_input")
     document, _ = finite_world("FA01")
     value = {"actions": document["operations"], "basis": [], "draws": []}
-    result = ModelOperations()(args={}, input=value, context=None)
+    implementation, = (i for i in new.implementations if i.kind == "generator" and i.ref == GENERATOR)
+    assert implementation.identity == "sui.fb.first_loop/1:sui.fb.model_operations/1"
+    result = implementation.implementation(args={}, input=value, context=None)
     assert result == value and [op["id"] for op in result["actions"]] == ["Q", "M"]
 
 
@@ -640,8 +640,9 @@ def test_fa_worker_fixture_really_issues_the_requested_branch(branch):
 def test_model_operations_follow_original_model_order(make_rig, reverse, expected):
     """Paper:3429,3432 H6/H9. Bug: substitute a universal hardcoded Q,M list.
 
-    Reversed model order is the legal contrast to a Wg reply that alone reverses
-    its input_order while the saved model still says Q,M.
+    This retains the test worker's declared ordering behavior. K31 also allows
+    a worker's different order through the host; native worker ordering is
+    separately checked in test_fb_candidates.py.
     """
     rig = make_rig(reverse_operations=reverse)
     rig.through("candidate_generation")
@@ -893,7 +894,7 @@ def test_work_finished_cannot_end_a_draw(make_rig):
 @pytest.mark.parametrize("field", ("legal", "model", "generator", "args", "basis", "draws",
                                    "input_order", "measure", "continuation"))
 def test_wg_whole_declaration_matching(make_rig, field):
-    """Paper:1947,2204,2332,2340,3429,3432. Bug: ignore exactly the parameterized CG field."""
+    """K31: preserve shape/association/D6 checks, delegate candidate semantics."""
     rig = make_rig()
     def action(work, ctx):
         candidate = rig.workers.candidate(work)
@@ -921,9 +922,10 @@ def test_wg_whole_declaration_matching(make_rig, field):
     work = rig.run_stage("candidate_generation")
     raw = raw_for(rig, work.desc.work_id)[0]
     assert raw.value == wire(rig.workers.sent[-1][0])
-    if field == "legal":
+    if field in ("legal", "input_order", "measure", "continuation"):
         rig.drive(lambda: bool(rig.facts(c.EVALUATION_REQUESTED)))
         assert rig.one(CG).value == raw.value["outcome"]["value"]["value"]["value"]
+        assert not any(p.reason == "cg:method_semantics" for p in rig.host.window.status().pending)
     else:
         assert_absent(rig, (CG, c.EVALUATION_REQUESTED, c.PREPARED, c.DRAW_REQUESTED))
 
@@ -1683,12 +1685,11 @@ def test_k1_equal_notices_keep_two_receipts_without_a_false_clock_conflict(make_
 
 @pytest.mark.parametrize("order", (("Q", "M"), ("Q",), ("M", "Q")),
                          ids=("model_order", "proper_subset", "reordered"))
-def test_model_operations_require_the_whole_model_order_with_matching_continuation(make_rig, order):
-    """Paper:1947,3429,3432 H6/H9. Bug: omit the model-operations meaning check.
+def test_model_operations_host_preserves_worker_order_and_subset_with_matching_continuation(make_rig, order):
+    """K31/Z58: original order, proper subset and reordered results all become CG.
 
-    Both input_order and continuation follow the returned order. A continuation
-    mismatch must not reject the negative before the omitted H9 check is used.
-    The saved model itself remains Q,M in every case.
+    Both input_order and continuation follow the returned order. The host does
+    not reconstruct a complete candidate set from the saved Q,M model.
     """
     rig = make_rig()
     sent = []
@@ -1709,12 +1710,10 @@ def test_model_operations_require_the_whole_model_order_with_matching_continuati
     raw = raw_for(rig, work.desc.work_id)
     assert len(raw) == 1 and raw[0].value == wire(sent[0])
     assert terminal(rig, work).value["terminal_kind"] == "outputs"
-    if order == ("Q", "M"):
-        rig.drive(lambda: bool(rig.facts(c.EVALUATION_REQUESTED)))
-        assert rig.one(CG).value == raw[0].value["outcome"]["value"]["value"]["value"]
-        assert rig.one(c.EVALUATION_REQUESTED).value["desc"]["args"]["input"]["candidates"] == rig.one(CG).cid
-    else:
-        assert_absent(rig, (CG, c.EVALUATION_REQUESTED, c.PREPARED, c.DRAW_REQUESTED))
+    rig.drive(lambda: bool(rig.facts(c.EVALUATION_REQUESTED)))
+    assert rig.one(CG).value == raw[0].value["outcome"]["value"]["value"]["value"]
+    assert rig.one(c.EVALUATION_REQUESTED).value["desc"]["args"]["input"]["candidates"] == rig.one(CG).cid
+    assert not any(p.reason == "cg:method_semantics" for p in rig.host.window.status().pending)
 
 
 @pytest.mark.parametrize("changed_input", (False, True), ids=("requested_input", "different_method"))
