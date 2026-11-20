@@ -2356,10 +2356,14 @@ def read_draw(reader,point,*,budget,parents,purpose,context_key,context=None,cer
         order = certified_order
     value = order.validate(point, '/draw')['value']
     request=value.request
-    draw=core.DrawRecord(id=core._digest({'domain':'sui.f.draw/1','generator':value.generator,'stream_id':value.stream_id,
-        'purpose':request.purpose,'context_key':request.context_key,'ordinal':request.ordinal}),purpose=request.purpose,
-        generator=value.generator,stream_id=value.stream_id,request=request,context_key=request.context_key,ordinal=request.ordinal,value=value.value)
-    core._validate_draw(draw)
+    try:
+        draw=core.DrawRecord(id=core._draw_id(value.generator,value.stream_id,request),purpose=request.purpose,
+            generator=value.generator,stream_id=value.stream_id,request=request,context_key=request.context_key,ordinal=request.ordinal,value=value.value)
+        core._validate_draw(draw)
+    except core.FInputError as exc:
+        if purpose!='selection' or exc.reason!='shape': raise
+        # 選ぶくじの形の破れは名前のある断りに (紙 F-b K35 決定 3)
+        raise core.FInputError('invalid_draw',exc.detail,field='/draw'+(exc.field or '')) from exc
     if request.purpose!=purpose or request.context_key!=context_key: raise core.FInputError('invalid_draw',field='/draw/request')
     return draw
 

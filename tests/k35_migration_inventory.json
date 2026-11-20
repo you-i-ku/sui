@@ -1,0 +1,355 @@
+{
+  "problem": "K35",
+  "request": 82,
+  "active_shared_migrations": [
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "normal",
+      "line": 261,
+      "action": "migrate",
+      "reason": "Shared host worker returns bits=2^126,length=128; all inheriting rigs retain the real host."
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "test_boot_to_selected_actual_records_and_parent_equations",
+      "line": 657,
+      "action": "migrate",
+      "reason": "Request law/offset/after, DF value and Selected.prefix migrate; parent equations retained."
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "test_first_terminal_follows_post_order_not_acceptance_or_value",
+      "line": 1016,
+      "action": "migrate",
+      "reason": "Different returned values are bit blocks; post/accept-order assertions retained."
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "test_ee_reader_allows_requested_df_and_rejects_saved_df_outside_closure",
+      "line": 1815,
+      "action": "migrate",
+      "reason": "Alternate out-of-closure fact is a valid bit block."
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "test_draw_value_contract_is_checked_before_saving_df",
+      "line": 1883,
+      "action": "migrate",
+      "reason": "Zero/half legal blocks and invalid bits/length replace rational-u cases; raw/T/DF assertions retained."
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "test_fb2_r01_deferred_draw_rechecks_upstream_clash_at_entry",
+      "line": 1948,
+      "action": "migrate",
+      "reason": "Wire value migrates to bits/length; deferred admission/clash assertions retained."
+    },
+    {
+      "file": "tests/test_fb_skeleton.py",
+      "function": "args_by_stage",
+      "line": 399,
+      "action": "migrate",
+      "reason": "DrawArgs example uses uniform_bits and offset=0,after=None."
+    },
+    {
+      "file": "tests/test_fb_evaluator.py",
+      "function": "test_eval1_host_accepts_matching_bind_and_evaluation_budgets_and_selects",
+      "line": 360,
+      "action": "migrate",
+      "reason": "Host Selected uses u=None and prefix (2^126,128); budget/artifact checks retained."
+    }
+  ],
+  "draw_tests": [
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_public_constructor_run_and_exports",
+      "line": 141,
+      "cases": 1,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_public_generator_bits_and_guarantee_contracts",
+      "line": 151,
+      "cases": 1,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_public_guarantee_value_matches_the_six_field_v2_contract",
+      "line": 159,
+      "cases": 1,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_exact_bit_block_uses_one_source_call",
+      "line": 166,
+      "cases": 7,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_out_of_range_integer_is_execution_failure_without_retry",
+      "line": 177,
+      "cases": 3,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_rejection_does_not_consume_source_or_read_port_dependencies",
+      "line": 186,
+      "cases": 7,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_source_exception_is_exact_execution_failure_without_retry",
+      "line": 214,
+      "cases": 6,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_wrong_work_purpose_is_type_error_before_enter",
+      "line": 222,
+      "cases": 5,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_non_draw_is_type_error_before_enter",
+      "line": 230,
+      "cases": 2,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_false_admission_has_no_source_or_other_port_operation",
+      "line": 237,
+      "cases": 1,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_post_failure_escapes_and_no_second_post_or_draw_occurs",
+      "line": 244,
+      "cases": 3,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_same_worker_uses_two_current_jobs_and_two_fresh_values",
+      "line": 255,
+      "cases": 1,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_registry_declares_one_generator_and_one_guarantee_condition",
+      "line": 266,
+      "cases": 1,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_exact1_native_worker_takes_one_new_block_without_reading_after",
+      "line": 284,
+      "cases": 2,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_exact1_native_worker_rejects_invalid_offset_after_without_drawing",
+      "line": 298,
+      "cases": 8,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_exact1_native_worker_rejects_non_integer_source_value_without_retry",
+      "line": 308,
+      "cases": 5,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_default_source_calls_public_secrets_randbits_once_with_N",
+      "line": 382,
+      "cases": 1,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_changing_the_single_public_N_changes_worker_and_registry_declaration",
+      "line": 389,
+      "cases": 1,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_small_blocks_preserve_all_bits_and_leading_zero_length",
+      "line": 406,
+      "cases": 2,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_host_saves_native_draw_fact_and_selects_the_determined_candidate",
+      "line": 461,
+      "cases": 2,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_host_persists_failure_without_draw_fact_evaluation_or_retry",
+      "line": 475,
+      "cases": 2,
+      "action": "migrated or extended"
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "name": "test_draw1_main_loop_uses_all_six_native_workers_and_preserves_the_adoption",
+      "line": 532,
+      "cases": 1,
+      "action": "migrated or extended"
+    }
+  ],
+  "retired_old_expectations": [
+    {
+      "old": "test_draw1_public_guarantee_value_matches_the_seven_field_contract",
+      "replacement": "test_draw1_public_guarantee_value_matches_the_six_field_v2_contract",
+      "reason": "Old guarantee/1 grid schema removed; K35-a now fixes the six-field guarantee/2 schema, including completion instead of proposed stopping."
+    },
+    {
+      "old": "test_draw1_exact_reduced_grid_value_uses_one_source_call",
+      "replacement": "test_draw1_exact_bit_block_uses_one_source_call",
+      "reason": "A block is not a reduced rational point."
+    },
+    {
+      "old": "test_draw1_small_actual_grid_obeys_strict_interval_error_bound_and_can_miss_a_positive_cell",
+      "replacement": "test_draw1_small_blocks_preserve_all_bits_and_leading_zero_length",
+      "reason": "Fixed-grid deviation/missed-cell claims retired; K35 tiny-cell/whole-interval tests replace them."
+    },
+    {
+      "old": "test_draw1_main_loop... [default-OS] fixed-two-round case",
+      "replacement": "Fresh-import default-source observer plus a deterministic all-six-native loop",
+      "reason": "K35 may legitimately need more blocks and does not guarantee completion rate. No statistical or fixed-round OS promise is asserted (paper :4946-4952). Only the nondeterministic case is retired; native source binding and main-loop coverage remain."
+    }
+  ],
+  "unchanged_point_path": [
+    {
+      "file": "tests/gate_f_cases.py",
+      "scope": "Public F-a point-root declarations",
+      "action": "unchanged",
+      "reason": "K35 (3) preserves the public uniform_unit/1 path, or this is historical/excluded model data."
+    },
+    {
+      "file": "tests/gate_f_facts_cases.py",
+      "scope": "add_draw, bound, prepare_bridge; uniform_unit mathematical and legacy facts",
+      "action": "unchanged",
+      "reason": "K35 (3) preserves the public uniform_unit/1 path, or this is historical/excluded model data."
+    },
+    {
+      "file": "tests/test_fb_preparer.py",
+      "scope": "Direct F-a bounded/unbounded evaluations with point roots",
+      "action": "unchanged",
+      "reason": "K35 (3) preserves the public uniform_unit/1 path, or this is historical/excluded model data."
+    },
+    {
+      "file": "tests/test_fb_evaluator.py",
+      "scope": "Native evaluator inputs(), direct mathematical and depth tests using uniform_unit facts; only host Selected assertion changed",
+      "action": "unchanged",
+      "reason": "K35 (3) preserves the public uniform_unit/1 path, or this is historical/excluded model data."
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "scope": "test_fa_worker_fixture_really_issues_the_requested_branch: directly assembled F-a draw",
+      "action": "unchanged",
+      "reason": "K35 (3) preserves the public uniform_unit/1 path, or this is historical/excluded model data."
+    },
+    {
+      "file": "tests/test_gate_f_facts.py",
+      "scope": "Existing uniform_unit mathematical/old-bridge path",
+      "action": "unchanged",
+      "reason": "K35 (3) preserves the public uniform_unit/1 path, or this is historical/excluded model data."
+    },
+    {
+      "file": "tests/fb_targets.py",
+      "scope": "Historical specification/declaration snapshot strings",
+      "action": "unchanged",
+      "reason": "K35 (3) preserves the public uniform_unit/1 path, or this is historical/excluded model data."
+    },
+    {
+      "file": "tests/test_fb_machine.py",
+      "scope": "Excluded legacy model; not run",
+      "action": "unchanged",
+      "reason": "K35 (3) preserves the public uniform_unit/1 path, or this is historical/excluded model data."
+    }
+  ],
+  "registry_key": "No fixed numeric FB hash copied or updated. FB tests read keys through public artifacts; builtin F-a/S4 golden data remain unchanged.",
+  "shared_consumers": "Loop/bundle/candidates/preparer/evaluator workers inherit the stage2 normal() bit-block response. No production host was replaced by a model.",
+  "run_scope": "Request 82: two added structural-decoder functions and existing old-point artifact replay function only (6 cases), impl35 and master source comparison. Full files/suite and mutation table not rerun.",
+  "historical_table": "tests/k34_draw_coverage.json marked historical and superseded by K35.",
+  "request_history": [
+    78,
+    79,
+    80,
+    81,
+    82
+  ],
+  "revision_79": "All previous CGs answered by K35-a; current test names/lines updated. No further migration behavior changed.",
+  "revision_80": {
+    "file": "tests/test_fb_exact.py",
+    "shared_fixture": "ExactHostRig:480",
+    "corrections": {
+      "T12": "Install an observer before imports to retain alias coverage; allow dependency/import/setup randomness, then forbid source calls only during mathematical replay.",
+      "T15": "Bind/authenticate the reader with an adequate budget, then apply the small finite cap only to f.evaluate_f; keep an all-unbounded control.",
+      "T22": "Admit queued Posts and wait for each public terminal; choose a fresh continuation by unexecuted WorkId, not ledger enumeration order; same ordinal and exact block counts retained.",
+      "T25": "Admit returned draw reports and wait for the actual terminal/pG; rejection/failure/Unknown still ends the continuation without redraw.",
+      "T26": "Use the captured original FWorkContext.post for the ancestor WorkId (B6); admit before holding its save; invoke only the unexecuted offered callback; preserve pending-conflict gate and old facts.",
+      "T27": "Post through the original public work port, then await confirmed clash/pG after selection; retain the existing Selected record unchanged.",
+      "T28": "Use the public host runner to admit the evaluation report and reach the held publication, instead of settling an unaccepted queue.",
+      "T29": "Shared rig admits every queued report and waits for the terminal; original save/retry and one-source-call-per-position expectations retained.",
+      "T30": "Admit the native/test evaluation report, await terminal/pG, and retain no-redraw expectation for nonboundary NoDecision/failure/Unknown."
+    },
+    "native_validation": "147 passed across exact/draw; corresponding 147 master failures are only absent K35 public API",
+    "expectations": "Paper probabilities, terminal retention, inherited clash gate, no-redraw and pG conditions unchanged. No further migration required."
+  },
+  "revision_81": {
+    "file": "tests/test_fb_exact.py",
+    "added_tests": [
+      {
+        "name": "test_exact1_ancestor_clash_before_continuation_request_prevents_its_publication",
+        "line": 865,
+        "cases": 8
+      },
+      {
+        "name": "test_exact1_host_checks_bit_value_before_draw_fact_or_evaluation",
+        "line": 956,
+        "cases": 12
+      }
+    ],
+    "shared_helper": "post_late_report forwards optional issued for identical-report controls.",
+    "validation": "Exact 104 + draw 63 = 167 passed on impl35; corresponding 167 master failures are exclusively missing K35 API.",
+    "expectations": "No probability, selection, terminal-retention, conflict, or budget expectation changed."
+  },
+  "revision_82": {
+    "file": "tests/test_fb_exact.py",
+    "added_tests": [
+      {
+        "name": "test_exact1_structural_value_decoder_rejects_explicit_legacy_defaults",
+        "line": 639,
+        "cases": 3
+      },
+      {
+        "name": "test_exact1_structural_root_decoder_rejects_explicit_empty_selection_prefix",
+        "line": 667,
+        "cases": 1
+      }
+    ],
+    "public_entry": "f_entry.f_from_json(data, contract=VALUE_FACTS/ROOT_FACTS)",
+    "migration_change": "None. Existing fixture bytes and replay assertions remain unchanged; direct structural coverage added.",
+    "validation": "Only 6 cases rerun: 4 new structural + 2 existing replay. Native green/master absent-API red. Other results retain their original request provenance."
+  }
+}

@@ -271,9 +271,9 @@ class Workers:
                 contract=c.CANDIDATE_GENERATION, value=value))), None
         if stage == "selection_draw":
             assert ctx.prepared() is None
-            # A scripted test value, not a claim of continuous uniform sampling.
+            # A fixed 128-bit prefix near 1/4, not a point or a random source.
             return fb.DrawReturned(work=work.desc.work_id,
-                outcome=fb.DrawValue(value={"u": [1, 4]})), None
+                outcome=fb.DrawValue(value={"bits": 1 << 126, "length": 128})), None
         if stage == "evaluation_prepare":
             artifact = self.prepare(work, ctx)
         elif stage == "evaluation":
@@ -714,9 +714,9 @@ def test_boot_to_selected_actual_records_and_parent_equations(make_rig):
     problem = rig.workers.issued["evaluation_prepare"]
     assert isinstance(problem.value, f.FProblem)
     assert request == {"purpose": "selection", "context_key": problem.value.problem_key,
-        "ordinal": 0, "law": {"name": "uniform_unit", "version": "1"}, "args": {}}
+        "ordinal": 0, "law": {"name": "uniform_bits", "version": "1"}, "args": {"offset": 0, "after": None}}
     assert df.value == {"generator": plain(DRAW_GENERATOR),
-        "stream_id": draw.value["desc"]["args"]["stream_id"], "request": request, "value": {"u": [1, 4]}}
+        "stream_id": draw.value["desc"]["args"]["stream_id"], "request": request, "value": {"bits": 1 << 126, "length": 128}}
     assert df.value["stream_id"] and df.value["stream_id"] != "selection"
     d_work = next(w for w in rig.workers.entries if w.desc.purpose == "selection_draw")
     d_raw = raw_for(rig, d_work.desc.work_id)[0]
@@ -758,8 +758,9 @@ def test_boot_to_selected_actual_records_and_parent_equations(make_rig):
     selected = rig.workers.issued["evaluation"].value
     assert isinstance(selected, f.Selected)
     # FA01: blank preference, Q has no information, M perfectly reveals one bit;
-    # masses are 1 and 2, respectively. u=1/4 selects Q in declared Q,M order.
-    assert selected.choice.id == "Q" and selected.index == 0 and selected.u == Fraction(1, 4)
+    # masses are 1 and 2. The whole 128-bit prefix interval near 1/4 fits Q.
+    assert selected.choice.id == "Q" and selected.index == 0 and selected.u is None
+    assert selected.prefix.bits == 1 << 126 and selected.prefix.length == 128
     assert selected.root.K.belief is None and selected.root.K.incorporated == ()
     assert selection.value == {"evaluated": ev.cid}
     assert_parents(rig, selection, (ev.cid,), reduce=False)
@@ -1037,7 +1038,7 @@ def test_first_terminal_follows_post_order_not_acceptance_or_value(make_rig, sta
             posts = [(event, issue), (event, issue)]
         else:
             if isinstance(event, fb.DrawReturned):
-                changed = replace(event, outcome=fb.DrawValue(value={"u": [3, 4]}))
+                changed = replace(event, outcome=fb.DrawValue(value={"bits": 3 << 126, "length": 128}))
             elif stage == "candidate_generation":
                 candidate = rig.workers.candidate(work)
                 order = ("M", "Q")
@@ -1827,7 +1828,7 @@ def test_ee_reader_allows_requested_df_and_rejects_saved_df_outside_closure(make
     if draw_case == "other_saved_fact":
         value = dict(requested_df.value)
         value["stream_id"] += ":independent-test-draw"
-        value["value"] = {"u": [3, 4]}
+        value["value"] = {"bits": 3 << 126, "length": 128}
         record = rig.record(Observed(route="draw", content=Payload.json(value), contract=DF,
             caused_by=None, source_id=None, source_time_ns=None, received_ns=rig.clock.mono_ns()))
         alternate = rig.ledger.append(record, requested_df.parents).cid
@@ -1869,18 +1870,18 @@ def test_ee_reader_allows_requested_df_and_rejects_saved_df_outside_closure(make
 
 
 DRAW_VALUE_CASES = (
-    ("zero", {"u": [0, 1]}, True),
-    ("half", {"u": [1, 2]}, True),
-    ("one", {"u": [1, 1]}, False),
-    ("negative", {"u": [-1, 2]}, False),
-    ("wrong_key", {"v": [1, 2]}, False),
-    ("not_rational", {"u": "x"}, False),
+    ("zero", {"bits": 0, "length": 128}, True),
+    ("half", {"bits": 1 << 127, "length": 128}, True),
+    ("one", {"bits": 1 << 128, "length": 128}, False),
+    ("negative", {"bits": -1, "length": 128}, False),
+    ("wrong_key", {"v": 1, "length": 128}, False),
+    ("not_integer", {"bits": "x", "length": 128}, False),
 )
 
 
 @pytest.mark.parametrize("label,value,legal", DRAW_VALUE_CASES, ids=[row[0] for row in DRAW_VALUE_CASES])
 def test_draw_value_contract_is_checked_before_saving_df(make_rig, label, value, legal):
-    """Paper:344,799,2333,2339,3427; F-a:388. Bug: persist DF before validating {u}, 0<=u<1.
+    """Paper:344,799,2333,2339,3427; F-a:388. Bug: persist DF before validating bits/length and their strict integer ranges.
 
     Check DF absence immediately after D, before Ee or F-a can reject a bad draw.
     Raw value and T remain exact. Both boundary zero and interior half are legal.
@@ -1984,9 +1985,9 @@ def test_fb2_r01_deferred_draw_rechecks_upstream_clash_at_entry(make_rig, clash)
         assert all(w.desc.work_id != wid for w in rig.host.window.drain())
     else:
         assert len(sent_draws) == 1 and wire(sent_draws[0].outcome) == {
-            "kind": "value", "value": {"u": [1, 4]}}
+            "kind": "value", "value": {"bits": 1 << 126, "length": 128}}
         rig.drive(lambda: bool(rig.facts(DF)))
-        assert rig.one(DF).value["value"] == {"u": [1, 4]}
+        assert rig.one(DF).value["value"] == {"bits": 1 << 126, "length": 128}
         rig.run_stage("evaluation")
         rig.drive(lambda: bool(rig.facts(c.SELECTION)))
     assert rig.one(c.PREPARED) == pr and rig.one(c.DRAW_REQUESTED) == draw

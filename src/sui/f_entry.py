@@ -669,7 +669,7 @@ def _wire_types():
         fc.EVALUATION: core.FEvaluation, fc.BELIEF: core.FBeliefContent,
         fc.ROUTE_CONFIG: RouteApplied,
         fc.LIMIT_PROBLEM: core.FLimitProblem, fc.LIMIT_CERTIFICATE: core.LimitCertificate}
-    table.update({fc.ROOT_FACTS: core.FRoot,fc.PROBLEM_FACTS: core.FProblem,
+    table.update({fc.ROOT_FACTS: core.FRoot,fc.ROOT_PREFIX_FACTS: core.FRoot,fc.PROBLEM_FACTS: core.FProblem,
         fc.KNOWLEDGE_ORIGIN: core.KnowledgeOrigin,
         fc.CONTENT_ACQUIRED: core.ContentAcquired,
         fc.COMPUTATION_REQUESTED: core.ComputationRequested,

@@ -632,5 +632,7 @@
     "coverage_change": "No semantic coverage row changed; T14/T15/T16 retain their mapping. No active CG.",
     "processes": "All pytest and child Python invocations completed; subprocess.run uses its existing 30-second timeout.",
     "vault": "Not written: explicit write scope is work34/tests only. This coverage file holds the work record."
-  }
+  },
+  "record_status": "Historical requests 75-77 only; not a current K35 acceptance table.",
+  "superseded_by": "tests/k35_draw_coverage.json"
 }

@@ -22,7 +22,6 @@ from .ids import RefKind as _RefKind
 from .records import Decided as _Decided, Observed as _Observed, Payload as _Payload, \
     Prediction as _Prediction, Role as _Role
 
-_UNIFORM_UNIT = _ContractRef("uniform_unit", "1")
 _FINITE_EVALUATION = _ContractRef("sui.f.finite_evaluation", "1")
 # 白紙の評価の範囲 (約束の紙 §5-0 の 2026-10-07〜08、F-a P-04、§6-9 H2)
 _BLANK_SCOPE = _f.EvaluationScope(name="unbounded_total", version="1", H_ns=None, source=None)
@@ -48,6 +47,13 @@ class ThinkPlan:
     prepared: object = None      # Ep の生きた発行物 (保存しない、§2-5-2)
     problem: object = None       # その FProblem
     round: str = ""              # 採用の後の継続の識別 (§6-10 K10)。最初の過程は ""
+    # くじの続きの計画 (紙 F-b K35 決定 9): 親の計画・このかたまりの offset と after (前のかたまりの DF)・
+    # 同じくじの ordinal・このかたまりの length。最初の計画は parent=None・offset=0・after=None
+    parent: object = None
+    offset: int = 0
+    after: object = None
+    ordinal: object = None
+    block_length: object = None
 
 
 def open_continuation(state, boot, adopted) -> bool:
@@ -101,19 +107,25 @@ def _clash(ends, *, unconfirmed=False) -> bool:
     return len(known) > 1
 
 
-def _rows(state, plan):
-    """その考える過程の、要求が解決した仕事の行 (Wg と、Publish した EQ・D・Ee の行)。"""
-    for wid in (plan.wg, *(desc.work_id for desc in plan.descs.values())):
-        row = state.works.get(wid)
-        if row is not None and isinstance(row.work, (_fb.Compute, _fb.Draw)):
-            yield row
+def _rows(state, plan, *, chain=False):
+    """その考える過程の、要求が解決した仕事の行 (Wg と、Publish した EQ・D・Ee の行)。chain=True はくじの続きの
+    計画の親たち (最初までの全部) の行も含める (紙 F-b K35 決定 9 (h))。"""
+    seen = set()
+    while plan is not None:
+        for wid in (plan.wg, *(desc.work_id for desc in plan.descs.values())):
+            row = state.works.get(wid)
+            if wid not in seen and row is not None and isinstance(row.work, (_fb.Compute, _fb.Draw)):
+                seen.add(wid)
+                yield row
+        plan = plan.parent if chain else None
 
 
-def conflicts(state, plan, *, unconfirmed=False) -> list:
+def conflicts(state, plan, *, unconfirmed=False, chain=False) -> list:
     """その考える過程の食い違いの用途。印を見ず、その都度、保存済みの終わりの報告から導く (§2-4-3「食い違いの
     判定は状態の関数。記録がまだ無いことを安全の根拠にしない」、review FB2-R01-R2 の 4 点)。unconfirmed=True は
-    確認待ちの報告も数える (許可の判定用、FB2-R01-R3)。"""
-    return [row.work.desc.purpose for row in _rows(state, plan)
+    確認待ちの報告も数える (許可の判定用、FB2-R01-R3)。chain=True は続きの計画の親たちの仕事も数える
+    (後続を作る・入場の判定用、紙 F-b K35 決定 9 (h))。"""
+    return [row.work.desc.purpose for row in _rows(state, plan, chain=chain)
             if _clash(_ends(state, row), unconfirmed=unconfirmed)]
 
 
@@ -516,29 +528,60 @@ def _stream_id(plan) -> str:
 def _draw_steps(state, plan):
     def d_desc(state, plan):
         pr = plan.points["PR"]
-        # 同じ問題への別の発火 (採用の後の継続) は新しい ordinal (§6-10 J6)。保存の再試行では作り直さない
-        ordinal = sum(1 for other in state.thinking.values() if other is not plan and other.problem is not None
-                      and other.problem.problem_key == plan.problem.problem_key and "D" in other.descs)
-        request = _f.DrawRequest(purpose="selection", context_key=plan.problem.problem_key, ordinal=ordinal,
-                                 law=_UNIFORM_UNIT, args={})
+        if plan.ordinal is None:
+            # 同じ問題への別の発火 (採用の後の継続) は新しい ordinal (§6-10 J6)。保存の再試行では作り直さない。
+            # 数えるのは論理的なくじ (くじの続きの計画は数えない、紙 F-b K35 決定 9 (f))
+            plan.ordinal = sum(1 for other in state.thinking.values()
+                               if other is not plan and other.parent is None and other.problem is not None
+                               and other.problem.problem_key == plan.problem.problem_key and "D" in other.descs)
+        # 法則 uniform_bits/1 のかたまり (紙 F-b K35 決定 1・9 (a))。続きは前のかたまりの DF を after に
+        request = _f.DrawRequest(purpose="selection", context_key=plan.problem.problem_key, ordinal=plan.ordinal,
+                                 law=_f.UNIFORM_BITS, args={"offset": plan.offset, "after": plan.after})
+        inputs = {pr} | ({plan.after} if plan.after is not None else set())
         return _desc(plan, "selection_draw", "draw:" + plan.slot, _fb.Trigger(point=pr, slot="prepared"),
                      plan.boot.points["origin"], plan.initial.draw.contract, _c.DRAW_REPORT,
                      _fb.DrawArgs(prepared=pr, stream_id=_stream_id(plan), request=request),
-                     {pr}, plan.points["Xnum"])
+                     inputs, plan.points["Xnum"])
 
-    return [_request_step("D", _c.DRAW_REQUESTED, _fb.Draw, d_desc, lambda plan, desc: {plan.points["PR"]})]
+    def parents(plan, desc):
+        return {plan.points["PR"]} | ({plan.after} if plan.after is not None else set())
+
+    return [_request_step("D", _c.DRAW_REQUESTED, _fb.Draw, d_desc, parents)]
+
+
+# 続きの計画が親から引き継がない記録の名前 (このかたまりのくじ・評価・選択と、表示の段の生成物)
+_BLOCK_POINTS = frozenset({"cg", "D", "DF", "DU", "Ee", "EV", "artifact:EV", "S"})
+
+
+def _continue(parent):
+    """親の EV (selection_boundary の NoDecision) を Publish する歩で、同じくじの続きの計画とその D の仕事の行を
+    置く (紙 F-b K35 決定 9 (c)・(i))。保存の再試行では同じ続きの計画を使い、同じかたまりを 2 回頼まない。"""
+    def on_prepared(state, plan, cid):
+        from ._fb_core import plan_work
+        offset = parent.offset + parent.block_length
+        child = ThinkPlan(boot=parent.boot, initial=parent.initial, slot=parent.slot, qgen=parent.qgen,
+                          wg=parent.wg, round=parent.round + ":bits:" + str(offset), done={parent.wg},
+                          points={k: v for k, v in parent.points.items()
+                                  if k not in _BLOCK_POINTS and not k.startswith("T:")},
+                          prepared=parent.prepared, problem=parent.problem, parent=parent, offset=offset,
+                          after=parent.points["DF"], ordinal=parent.ordinal)
+        key = child.wg + child.round
+        if key not in state.thinking:
+            child.steps = _draw_steps(state, child)
+            state.thinking[key] = child
+        plan_work(state, _work_id(child.boot.d, child.slot, "selection_draw", "draw:" + child.slot + child.round),
+                  "selection_draw", child.boot.declaration.scope.value)
+    return on_prepared
 
 
 def _draw_value(outcome):
-    """selection の値 {u}、0 ≤ u < 1 (F-a `_validate_draw`)。合わなければ None。"""
+    """selection の値 {bits, length} (法則 uniform_bits/1、F-a `_validate_draw`)。合わなければ None。"""
     value = outcome.value
     try:
-        if not isinstance(value, _Mapping) or set(value) != {"u"}:
-            return None
-        u = _f._decode(value["u"], _f._Fraction)
+        _f._bits_value(value)
     except (_f.FInputError, TypeError, ValueError):
         return None
-    return value if 0 <= u < 1 else None
+    return value
 
 
 def _df_step(row, first, value):
@@ -634,7 +677,8 @@ def _plan_end(state, plan, row, number, receipt):
     plan.steps.append(_terminal_step(state, plan, row, number, receipt))
     # 食い違いが見えていても、最初の終わりの確定返答の判定 (意味 3) と不足の記録は全部やり、後続の記録を足す
     # 所だけ止める (FB2-R08: NoCandidates・NoDecision が先でも意味 3 に出す)
-    clash = _clash(_ends(state, row), unconfirmed=True)
+    clash = _clash(_ends(state, row), unconfirmed=True) \
+        or plan.parent is not None and bool(conflicts(state, plan.parent, unconfirmed=True, chain=True))
 
     def follow(*steps):
         if not clash:
@@ -678,10 +722,16 @@ def _plan_end(state, plan, row, number, receipt):
         steps = _product_steps(row, first, raw, value, name, _c.PREPARED if name == "PR" else _c.EVALUATED)
         if name == "PR" and isinstance(value, _f.FProblem):
             steps[1].on_prepared = _promise("selection_draw", "draw:")
+        # くじの区間が境目にかかっているかもしれない = 同じくじの続き (紙 F-b K35 決定 9 (c))。ふつうの後続で pG ではない
+        more = (name == "EV" and isinstance(value, _f.NoDecision) and value.outcome == "incomplete"
+                and value.reason == "selection_boundary" and plan.descs["D"].args.request.law == _f.UNIFORM_BITS)
+        if more:
+            steps[1].on_prepared = _continue(plan)
         follow(*steps)
         if isinstance(value, _f.NoDecision):
-            plan.responses[purpose] = "no_decision"   # 正規の返答。D・selection を作らない
-            plan.unmet.append(f"{purpose}:no_decision")
+            plan.responses[purpose] = "no_decision"   # 正規の返答 (この評価の仕事の確定返答、決定 9 (d))
+            if not more:
+                plan.unmet.append(f"{purpose}:no_decision")
         elif name == "PR" and not clash:
             plan.prepared, plan.problem = issued, value
             follow(*_draw_steps(state, plan))
@@ -693,6 +743,7 @@ def _plan_end(state, plan, row, number, receipt):
             _hold(plan, "draw:value")
             plan.unmet.append("selection_draw:draw:value")
             return
+        plan.block_length = value["length"]
         df = _df_step(row, first, value)
         df.on_prepared = _promise("evaluation", "evaluate:")
         follow(df, *_ee_steps(state, plan))
@@ -704,14 +755,14 @@ def advance(state) -> None:
     from ._fb_bind import clashed_reports
     from ._fb_boot import advance as _advance
     bad = clashed_reports(state)
-    for plan in state.thinking.values():
+    for plan in list(state.thinking.values()):   # 続きの計画は EV の Publish の歩で足される (K35 決定 9 (i))
         for name in ("wg", "EQ", "D", "Ee"):
             wid = plan.wg if name == "wg" else (plan.descs[name].work_id if name in plan.descs else None)
             row = state.works.get(wid) if wid is not None else None
             if row is None or not isinstance(row.work, (_fb.Compute, _fb.Draw)) or not _saved_request(state, row):
                 continue
             _finish(state, plan, row)
-        clash = bool(conflicts(state, plan, unconfirmed=True))
+        clash = bool(conflicts(state, plan, unconfirmed=True, chain=True))
         # 見立ての依存の食い違いは、見立てを読む歩 (文脈 o から先) を止める。候補の宣言 CG は見立てを読まない
         stale = _belief_blocked(state, plan, bad)
         _advance(state, plan, build=lambda step: step.name.startswith("T:")
@@ -729,7 +780,7 @@ def blocked(state, row) -> bool:
             # 印でなく保存済みの報告から (FB2-R01-R2)。確認待ち・未保存の受け付けた報告も止める側に (FB2-R01-R3)
             # 評価の仕事 (EQ・D・Ee) は、読む見立ての依存の食い違いでも止める。候補を作る Wg は見立てを読まない
             from ._fb_bind import clashed_reports
-            return bool(conflicts(state, plan, unconfirmed=True)) \
+            return bool(conflicts(state, plan, unconfirmed=True, chain=True)) \
                 or wid != plan.wg and _belief_blocked(state, plan, clashed_reports(state))
     return False
 
@@ -780,6 +831,8 @@ def reading_statuses(state) -> tuple:
     for plan in state.thinking.values():
         origin = plan.boot.points.get("origin")
         for purpose, name, reached in _STAGE_PRODUCT:
+            if plan.parent is not None and purpose != "evaluation":
+                continue   # 続きの計画は自分のかたまりの評価だけを出す (準備・候補は親の計画、K35 決定 9 (d))
             target = _held(state, plan, name)
             response = plan.responses.get(purpose, "none")
             wid = _stage_work(plan, purpose)

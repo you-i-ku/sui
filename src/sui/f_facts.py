@@ -95,17 +95,73 @@ def bind_f_draw(
         context=problem.context,purpose='selection',context_key=problem.problem_key)
     _,_,binding=point(image,draw_record_ref)
     values={field.name:getattr(problem,field.name) for field in core._fields(problem)}
-    values['contract']=fc.ROOT_FACTS  # 今の約束 E-05 root/3
-    root=issue(core._handle(core.FRoot,authority=world,**values,selection_draw=draw,
-        draw_point=draw_record_ref,draw_record_digest=binding.digest,
+    if draw.request.law==core.UNIFORM_BITS:
+        # 紙 F-b K35 決定 3・4: 最後のかたまりから after を最初までたどり、1 本の鎖を確かめて root/4 に結ぶ
+        blocks=_bits_chain(image,draw_record_ref,draw,problem,request,budget)
+        prefix=tuple(d for _,d,_ in blocks)
+        values['contract']=fc.ROOT_PREFIX_FACTS
+        root_key=core._digest({'domain':'sui.f.root/4','problem_key':problem.problem_key,
+            'prefix':[{'point':p,'digest':g} for p,_,g in blocks],'selection_prefix':prefix})
+    else:
+        prefix=()
+        values['contract']=fc.ROOT_FACTS  # 今の約束 E-05 root/3
         root_key=core._digest({'domain':'sui.f.root/3','problem_key':problem.problem_key,
-            'draw_point':draw_record_ref,'draw_record_digest':binding.digest,'selection_draw':draw})))
+            'draw_point':draw_record_ref,'draw_record_digest':binding.digest,'selection_draw':draw})
+    root=issue(core._handle(core.FRoot,authority=world,**values,selection_draw=draw,
+        draw_point=draw_record_ref,draw_record_digest=binding.digest,selection_prefix=prefix,root_key=root_key))
     source=math_source(problem)
     node={'op':'bind_draw','args':{'draw':draw_record_ref,'budget':budget},
         'inputs':{'problem_step':source},'value':root}
     node['environment']=dict(_base(source)['environment'],reader=image)
     seed_math(root,node)
     return _wrap(root)
+
+
+def _bits_chain(image,last_ref,last,problem,request,budget):
+    """uniform_bits/1 のくじの鎖 (紙 F-b K35 決定 3)。最後のかたまりから after を最初までたどり、各かたまりを
+    read_draw の認証で読む。全部のかたまりの generator・stream_id・law・ordinal (purpose・context_key は read_draw が
+    見る) が同じ・offset が前までの length の和・前のかたまりが次のかたまりの祖先・最初は offset 0 で after null。
+    確かめるのはこの 1 本の鎖だけで、同じくじの別の枝が無いことは言わない。返すのは (Point, DrawRecord, 本文の
+    digest) の最初から順の組。"""
+    from ._f_world import read_draw
+    from ._f_identity import point
+    blocks=[(last_ref,last,point(image,last_ref)[2].digest)]
+    cur_ref,cur=last_ref,last
+    offset,after=core._bits_args(cur.request)
+    while after is not None:
+        prev=read_draw(image,after,budget=budget,parents=problem.parents,
+            additional_roots=(request.model,request.context,request.candidates,*request.preferences),
+            context=problem.context,purpose='selection',context_key=problem.problem_key)
+        if (prev.generator,prev.stream_id,prev.request.law,prev.ordinal)!=(cur.generator,cur.stream_id,cur.request.law,cur.ordinal):
+            raise core.FInputError('invalid_draw','not the same selection draw',field='/draw/after')
+        previous_offset,previous_after=core._bits_args(prev.request)
+        _,length=core._bits_value(prev.value)
+        if previous_offset+length!=offset:
+            raise core.FInputError('invalid_draw','blocks are not contiguous',field='/draw/args/offset')
+        entry,_,_=point(image,cur_ref)
+        if after not in image.ancestors(entry.parents):
+            raise core.FInputError('invalid_draw','the previous block is not an ancestor',field='/draw/after')
+        blocks.append((after,prev,point(image,after)[2].digest))
+        cur_ref,cur,offset,after=after,prev,previous_offset,previous_after
+    blocks.reverse()
+    return blocks
+
+
+def _versioned_old_values(kind,value):
+    """版で足した欄 (FRoot.selection_prefix・Selected.prefix) を旧い値のまま書いた claim は正準でない (紙 F-b K35
+    決定 4)。根と Selected が入る所 (根・Selected とその根と評価の根・評価の根・NoDecision の途中の評価の根) を見る。
+    欄の有無だけを見て、ほかの構造は最後の照合に任せる。"""
+    def at(obj,*keys):
+        for key in keys:
+            obj=obj.get(key) if isinstance(obj,dict) else None
+        return obj
+    roots={'FRoot':[('',value)],'Selected':[('/root',at(value,'root')),('/evaluation/root',at(value,'evaluation','root'))],
+        'FEvaluation':[('/root',at(value,'root'))],'NoDecision':[('/progress/root',at(value,'progress','root'))]}.get(kind,[])
+    for path,root in roots:
+        if isinstance(root,dict) and 'selection_prefix' in root and root['selection_prefix']==[]:
+            raise core.FInputError('noncanonical','versioned field at its old value','/claim/value'+path+'/selection_prefix')
+    if kind=='Selected' and isinstance(value,dict) and 'prefix' in value and value['prefix'] is None:
+        raise core.FInputError('noncanonical','versioned field at its old value','/claim/value/prefix')
 
 
 def evaluate_f_from_draw(
@@ -577,6 +633,8 @@ def evaluate_legacy_bridge_from_draw(
     draw=read_draw(image,draw_record_ref,budget=budget,parents=request.fixed_parents,
         additional_roots=(request.model,request.context,*request.preferences),
         context=compiler.context,purpose='selection',context_key=problem.problem_key)
+    if draw.request.law!=core.UNIFORM_UNIT:   # 旧の橋は点の u だけ (紙 F-b K35 決定 8)
+        raise core.FInputError('invalid_draw','the legacy bridge reads uniform_unit/1 draws only',field='/draw/request')
     u=core._decode(draw.value['u'],core._Fraction)
     def evaluator(model,actions,oldview,actual,unused_u,execution_budget,bit):
         finite=BridgeCompiler(compiler,request,model,actions,actual,execution_budget,bit).compile()
@@ -585,7 +643,7 @@ def evaluate_legacy_bridge_from_draw(
         values['contract']=fc.ROOT_FACTS
         draw_digest=point(image,draw_record_ref)[2].digest
         root=issue(core._handle(core.FRoot,authority=attached_world(finite),**values,selection_draw=draw,
-            draw_point=draw_record_ref,draw_record_digest=draw_digest,
+            draw_point=draw_record_ref,draw_record_digest=draw_digest,selection_prefix=(),
             root_key=core._digest({'problem_key':problem.problem_key,'world_key':finite.world_key,
                 'draw':draw_record_ref,'record_digest':point(image,draw_record_ref)[2].digest})))
         return core.evaluate_f_recursive(root,budget=execution_budget)
@@ -842,9 +900,10 @@ def _replay_saved(data,*,reader,registry,budget):
     # V-08 / E-05: the claim's own contract must be the registered version
     # before any reconstruction (compiler/1-2, problem/root/1-2 are unpublished).
     if raw['claim']['type'] in ('FProblem','FRoot'):
-        expected=fc.PROBLEM_FACTS if raw['claim']['type']=='FProblem' else fc.ROOT_FACTS
-        if type(claimed) is not dict or core._decode(claimed.get('contract'),ContractRef,'/claim/value/contract')!=expected:
+        expected=(fc.PROBLEM_FACTS,) if raw['claim']['type']=='FProblem' else (fc.ROOT_FACTS,fc.ROOT_PREFIX_FACTS)
+        if type(claimed) is not dict or core._decode(claimed.get('contract'),ContractRef,'/claim/value/contract') not in expected:
             raise core.FInputError('unknown_version',field='/claim/value/contract')
+    _versioned_old_values(raw['claim']['type'],claimed)
     negative=(raw['claim']['type']=='NoDecision' and type(claimed) is dict and
         (claimed.get('reason') in ('algorithm_unavailable','missing_contract','prerequisite_unavailable')
          or (raw['input']['kind']=='limit' and claimed.get('reason')=='certificate_incomplete'
@@ -902,7 +961,9 @@ def _replay_saved(data,*,reader,registry,budget):
             value=evaluate_legacy_bridge_from_draw(_wrap(problem),args.draw,reader=image,budget=saved).value
         elif op=='choice':
             result=prior(args.evaluation_step,core.FEvaluation)
-            value=core.certify_f_choice(result,u=core._decode(result.root.selection_draw.value['u'],core._Fraction))
+            # uniform_bits/1 の根は保存した接頭部だけで (紙 F-b K35 決定 7)。u を渡さない
+            value=(core.certify_f_choice(result) if result.root.selection_prefix else
+                core.certify_f_choice(result,u=core._decode(result.root.selection_draw.value['u'],core._Fraction)))
         else:
             root=prior(args.root_step,core.FRoot)
             if op=='scope':value=core.certify_f_scope(root,budget=saved)

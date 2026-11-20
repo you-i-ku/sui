@@ -270,15 +270,31 @@ def _certify_tail_unchecked(root, *, candidate, prefix, budget):
 
 
 def certify_f_choice(evaluation: FEvaluation, *,
-                      u: _Fraction | float) -> Selected | NoDecision:
+                      u: _Fraction | float | None = None) -> Selected | NoDecision:
     """F-aで入力・版・根と累積保証を検査してSelectedを返す。
     previous.upper<=u<current.lower、厳密等値は半開区間。未分離は
     NoDecision(incomplete,selection_boundary)で同uを保持。
     floatは二進有理数へ正確に移す。不正入力FInputError、改ざんFReplayMismatch。
     未完了/型の外はNoDecision。中点や引き直しで選ばない。
+    uniform_bits/1 の根 (紙 F-b K35 決定 5) では u を渡さず、根の接頭部 K・L の区間 [K/2^L,(K+1)/2^L)
+    全体が previous.upper<=K/2^L かつ (K+1)/2^L<=current.lower に入る時だけ選ぶ。左端・中点で選ばない。
     """
     _require(evaluation.root, FRoot)
     _validate_evaluation(evaluation)
+    root = evaluation.root
+    if root.selection_prefix:
+        if u is not None:
+            raise FInputError("shape", "u is not used for a uniform_bits root", "/u")
+        prefix = _prefix(root)
+        a, b = _prefix_interval(prefix)
+        for i, (previous, current) in enumerate(zip(evaluation.cumulative, evaluation.cumulative[1:])):
+            if previous.upper <= a and b <= current.lower:
+                return Selected(root=root, evaluation=evaluation, index=i,
+                    choice=root.candidates.candidates[i], u=None,
+                    previous=previous, current=current, certificate=evaluation.certificate, prefix=prefix)
+        return _no_decision(root, FIncomplete("selection_boundary"), progress=evaluation)
+    if u is None:
+        raise FInputError("shape", "u must be Fraction or finite float in [0,1)")
     if type(u) is float and _math.isfinite(u):
         u = _Fraction(u)
     if type(u) is not _Fraction or not 0 <= u < 1:
@@ -293,6 +309,28 @@ def certify_f_choice(evaluation: FEvaluation, *,
     return _no_decision(evaluation.root, FIncomplete("selection_boundary"), progress=evaluation)
 
 
+def _prefix(root):
+    """根の接頭部 (紙 F-b K35 決定 3): かたまりを最初から順につないだ K と L。"""
+    from .f import DrawPrefix, _bits_value
+    bits, length = 0, 0
+    for draw in root.selection_prefix:
+        b, n = _bits_value(draw.value)
+        bits, length = (bits << n) | b, length + n
+    return DrawPrefix(bits=bits, length=length)
+
+
+def _prefix_interval(prefix):
+    return _Fraction(prefix.bits, 1 << prefix.length), _Fraction(prefix.bits + 1, 1 << prefix.length)
+
+
+def _needs_bits(evaluation, a, b):
+    """紙 F-b K35 決定 6 ②: 区間 I の閉区間 [a, b] と重なる累積の囲みが 1 つ以上あり、それが全部幅 (b − a)/4 以下。
+    今の精度は区間に見合う細かさに届いていて、区間が境目にかかっているかもしれない = 続きのビットが要る
+    (本当の境目が I の中にあることの証明ではない)。"""
+    touching = [c for c in evaluation.cumulative if c.upper >= a and c.lower <= b]
+    return bool(touching) and all(c.upper - c.lower <= (b - a) / 4 for c in touching)
+
+
 def evaluate_f(root: FRoot, *, budget: RateBudget,
                 resume: ResumePoint | None = None) -> Selected | NoDecision:
     """F-a で検査済み根から選択保証が確定した時点で Selected を返す。
@@ -302,7 +340,10 @@ def evaluate_f(root: FRoot, *, budget: RateBudget,
     数値範囲は failed/NumericalRange。情報発散・無限差は証明に応じ負の理由を保つ。
     実行未認証は incomplete/runtime_unverified。完了しない one_step の detail は
     nonterminating_one_step。形不正 FInputError、改ざん FReplayMismatch と予期しない
-    Python/I/O 例外を数学の結論へ薄めず、同 u を保持し tolerance を待って遅らせない。"""
+    Python/I/O 例外を数学の結論へ薄めず、同 u を保持し tolerance を待って遅らせない。
+    uniform_bits/1 の根 (紙 F-b K35 決定 6) では、各回の評価の後に ① 区間全体で認証できれば Selected /
+    ② 区間と重なる累積の囲みが全部 (b−a)/4 以下なら NoDecision(incomplete, selection_boundary) (続きのビット) /
+    ③ 予算があれば精度を上げる / ④ 精度を上げる予算 (max_refinements) が無ければ budget_exhausted。"""
     _require(root, FRoot)
     if resume is not None:
         if resume.root_key != root.root_key or resume.method != root.method or resume.state_digest != _digest(resume.state_payload):
@@ -311,7 +352,9 @@ def evaluate_f(root: FRoot, *, budget: RateBudget,
     try:
         work = _FiniteWork(root, budget)
         _check_evaluation_contract(work)
-        u = _decode(root.selection_draw.value["u"], _Fraction)
+        bits = bool(root.selection_prefix)
+        u = None if bits else _decode(root.selection_draw.value["u"], _Fraction)
+        interval = _prefix_interval(_prefix(root)) if bits else None
         if _finite_tree(work) or root.scope.name == "finite_horizon":
             precision = _Fraction(1, 10**24)
             for _ in _rounds(budget.max_refinements):
@@ -321,9 +364,12 @@ def evaluate_f(root: FRoot, *, budget: RateBudget,
                 result = certify_f_choice(progress, u=u)
                 if isinstance(result, Selected):
                     return result
+                if bits and _needs_bits(progress, *interval):
+                    return result   # ② 続きのビット (予算の最後の回でもこちら)
                 # Refine only the numerical enclosure; J and the frozen u stay fixed.
                 precision /= 2**16
-            return _no_decision(root, FIncomplete("selection_boundary"), progress=progress)
+            # ④ uniform_bits/1 は精度を上げる予算が尽きた。uniform_unit/1 は今のまま
+            return _no_decision(root, FIncomplete("budget_exhausted" if bits else "selection_boundary"), progress=progress)
         # The execution budget bounds refinement; depth never changes the scope.
         for steps in _rounds(None if budget.max_refinements is None else budget.max_refinements + 1, 1):
             from ._f_handles import charge_verification
@@ -332,6 +378,8 @@ def evaluate_f(root: FRoot, *, budget: RateBudget,
             result = certify_f_choice(progress, u=u)
             if isinstance(result, Selected):
                 return result
+            if bits and _needs_bits(progress, *interval):
+                return result   # ② 続きのビット
         return _no_decision(root, FIncomplete("budget_exhausted"), progress=progress)
     except (FIncomplete, FSpecificationMissing, FModelFalsified, FOutsideEvaluationType, FNumericalRange) as exc:
         return _no_decision(root, exc, progress=progress)

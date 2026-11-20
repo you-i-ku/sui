@@ -1,0 +1,1826 @@
+{
+  "problem": "K35",
+  "request": 82,
+  "base_master": "ccdeea0",
+  "specification": {
+    "file": "specs/関所F_Fb_今の約束.md",
+    "K35": 3563,
+    "body": [
+      4884,
+      4994
+    ],
+    "body_read": "full",
+    "Z60": 3807,
+    "Z60_a": 3808,
+    "Z60_b": 3809,
+    "previous_originals_read": [
+      "H4 :3440",
+      "Z57 :3804",
+      "K34 :3560",
+      "K34-a :3561"
+    ],
+    "K35_a": 3564,
+    "version": "v1.40",
+    "read_update_79": "K35-a line 3564 read in full; K35 body unchanged apart from shifted line numbers.",
+    "read_update_81": "K35 decision 9 full line 4919 and K35-a full line 3564 read. Public work35 declarations/docstrings inspected through AST only.",
+    "read_update_82": "K35 decision 4 line 4914 and K35-a line 3564 read in full. Public f_entry signatures/docstrings at 597/623 and VALUE_FACTS declaration at f_contracts:302 read through AST. Existing test helpers and old artifact fixtures inspected."
+  },
+  "read_boundary": {
+    "basis": "specification, public AST declarations/docstrings and permitted test helpers",
+    "incident": "A search for public measure names also emitted f.py function-body lines around 2403-2451. Acknowledged in commentary; not used as the expected-value source. Subsequent source inspection used AST declarations/docstrings only.",
+    "incident_request": 78,
+    "request_79": "Only specification and test files inspected semantically; no production implementation body read.",
+    "request_80": "Specification plus permitted tests and work35 public AST signatures/docstrings only. impl35 source executed, not opened; runtime __file__ used solely to confirm selected source.",
+    "request_81": "Specification, permitted test helpers, and public work35 AST declarations/docstrings only. impl35 was executed with source overrides, not read. Runtime module path checked; child source propagation retained.",
+    "request_82": "Public work35 declarations/docstrings and permitted test files only. No implementation function body read. impl35 executed with source override, not inspected."
+  },
+  "acceptance": [
+    {
+      "property": "Same logical draw, arbitrary saved prefix; whole-interval certification",
+      "tests": [
+        "T22",
+        "T02",
+        "T03",
+        "T05"
+      ],
+      "CG": [],
+      "native_validation": "passed: all referenced cases on impl35, request 81"
+    },
+    {
+      "property": "Bit and arithmetic refinement progress together; honest finite-budget NoDecision",
+      "tests": [
+        "T16",
+        "T19",
+        "T14",
+        "T18"
+      ],
+      "CG": [],
+      "native_validation": "passed: all referenced cases on impl35, request 81"
+    },
+    {
+      "property": "Persisted prefixes reconstruct without OS source consumption",
+      "tests": [
+        "T11",
+        "T12"
+      ],
+      "CG": [],
+      "native_validation": "passed: all referenced cases on impl35, request 81"
+    },
+    {
+      "property": "Grid implementation retired; bits worker and registry are native",
+      "tests": [
+        "T31",
+        "D22",
+        "D02",
+        "D13",
+        "D18"
+      ],
+      "CG": [],
+      "native_validation": "passed: all referenced cases on impl35, request 81"
+    },
+    {
+      "property": "Guarantee declares ideal law plus OS/completion limits",
+      "tests": [
+        "D03",
+        "D13",
+        "D18"
+      ],
+      "CG": [],
+      "status": "written",
+      "assertion_scope": "K35-a exact JSON shape/values/types and sole-condition equality; descriptions are nonempty strings without fixed wording.",
+      "native_validation": "passed: all referenced cases on impl35, request 81"
+    }
+  ],
+  "unchanged": [
+    {
+      "scope": "uniform_unit/1 draw ID/root/3/point Selected and old bytes",
+      "tests": [
+        "T13",
+        "T34",
+        "T35"
+      ],
+      "existing_controls": "test_eval1_native_selected_uses_only_current_port_issue_reader_draw_and_budget (2 passed); stage2 direct F-a worker fixture (3 passed)",
+      "native_validation": "All six mapped cases passed on impl35 in request 82; historical controls outside this selection were not rerun."
+    },
+    {
+      "scope": "S4",
+      "status": "untouched; existing S4 tests not run"
+    },
+    {
+      "scope": "Other workers/bundle/clock/public ports",
+      "tests": [
+        "T31",
+        "D22",
+        "D08",
+        "D11"
+      ],
+      "existing_controls": "175 skeleton cases passed",
+      "native_validation": "passed: referenced cases on impl35, request 81; historical controls outside exact/draw were not rerun"
+    },
+    {
+      "scope": "q arithmetic and recursive evaluation",
+      "status": "No production changes; existing finite F-a point path retained. Analytic public-fixture qualification performed."
+    }
+  ],
+  "scenes": [
+    {
+      "scene": 1,
+      "spec_line": 4959,
+      "condition": "Tiny last candidate, positive q below 2^-128",
+      "tests": [
+        "T05"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 2,
+      "spec_line": 4960,
+      "condition": "Last interval has right endpoint one",
+      "tests": [
+        "T02",
+        "T05"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 3,
+      "spec_line": 4961,
+      "condition": "Exact left boundary, no extra block",
+      "tests": [
+        "T02",
+        "T23"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 4,
+      "spec_line": 4962,
+      "condition": "Nonzero enclosure across true left boundary needs further bits",
+      "tests": [
+        "T19"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 5,
+      "spec_line": 4963,
+      "condition": "Both numerical and bit refinement",
+      "tests": [
+        "T19",
+        "T16",
+        "T22"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 6,
+      "spec_line": 4964,
+      "condition": "One block and one evaluation finish",
+      "tests": [
+        "T23"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 7,
+      "spec_line": 4965,
+      "condition": "Selected.u=None/full DrawPrefix; old point u retained",
+      "tests": [
+        "T02",
+        "T06",
+        "T13"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 8,
+      "spec_line": 4966,
+      "condition": "Chain identity/offset/ancestry/initial position violations",
+      "tests": [
+        "T09"
+      ],
+      "status": "written_with_specified_exclusion",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run",
+      "excluded_subcase": {
+        "condition": "authenticated sealed cycle",
+        "verification": "not_run",
+        "reason": "Public construction excluded: after references saved Points, and preceding offsets strictly decrease because length >= 1. No test-only production entry is added; no cycle test is counted as passed.",
+        "spec_line": 3564
+      }
+    },
+    {
+      "scene": 9,
+      "spec_line": 4967,
+      "condition": "Authenticated saved-body modification, not a search for other branches",
+      "tests": [
+        "T11"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 10,
+      "spec_line": 4968,
+      "condition": "Retry never consumes the same block twice",
+      "tests": [
+        "T29"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 11,
+      "spec_line": 4969,
+      "condition": "Replay Selected and NoDecision; no OS use including import aliases",
+      "tests": [
+        "T11",
+        "T12"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run",
+      "request_80_fixture_correction": true
+    },
+    {
+      "scene": 12,
+      "spec_line": 4970,
+      "condition": "Continuation terminals, fixed ordinal, multiple rounds, independent ordinals",
+      "tests": [
+        "T22",
+        "T25",
+        "T21"
+      ],
+      "status": "written_with_explicit_unverified_host_subcase",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run",
+      "unverified_subcase": {
+        "condition": "second host firing with the same stream and problem_key",
+        "verification": "not_run",
+        "reason": "Same-(stream,problem_key) second firing through the host remains unverified. Decision 9(f) is assigned to review and mutation checks. Add a public-host test if a reproducible case is found; do not infer one from adoption continuation.",
+        "assigned_to": "review and mutation checks (not executed by this test-author task)",
+        "spec_line": 3564
+      },
+      "request_80_fixture_correction": true
+    },
+    {
+      "scene": 13,
+      "spec_line": 4971,
+      "condition": "Refinement limit versus more bits; other int caps remain; None supported",
+      "tests": [
+        "T14",
+        "T15",
+        "T16"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run",
+      "request_80_fixture_correction": true
+    },
+    {
+      "scene": 14,
+      "spec_line": 4972,
+      "condition": "Nonfinite branch away/near boundary; no endless host redraw",
+      "tests": [
+        "T17",
+        "T18",
+        "T24"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 15,
+      "spec_line": 4973,
+      "condition": "Variable lengths and leading zeroes; missing versus malformed chain",
+      "tests": [
+        "T06",
+        "T09",
+        "T11"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 16,
+      "spec_line": 4974,
+      "condition": "Old root/3 and Selected bytes; explicit default fields noncanonical",
+      "tests": [
+        "T13",
+        "T34",
+        "T35"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "Six mapped cases passed on impl35, request 82. T13 checks replay; T34/T35 separately check public structural decoding.",
+      "request_82": "Decision 4 has an independent structural-decoder gate: VALUE/3 typed root, Selected, nested root, and fixed ROOT/3. Omitted defaults are legal controls; explicit defaults are noncanonical."
+    },
+    {
+      "scene": 17,
+      "spec_line": 4975,
+      "condition": "Immutable prior root; new root key; missing/changed prefix; both replay ops",
+      "tests": [
+        "T06",
+        "T08",
+        "T11"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 18,
+      "spec_line": 4976,
+      "condition": "Clash in Wg/EQ/first D/first Ee blocks continuation, including unsaved report",
+      "tests": [
+        "T26",
+        "T32"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run",
+      "request_80_fixture_correction": true,
+      "request_81": "T26 covers entry after D is saved; T32 independently covers no successor request publication while the parent EV is awaiting storage, for all four ancestor stages, with equal-report controls."
+    },
+    {
+      "scene": 19,
+      "spec_line": 4977,
+      "condition": "Per-work NoDecision persists, next D row visible pending/held/after selection",
+      "tests": [
+        "T22",
+        "T28",
+        "T29"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run",
+      "request_80_fixture_correction": true
+    },
+    {
+      "scene": 20,
+      "spec_line": 4978,
+      "condition": "Normal continuation creates no pG; terminal/clash pG remains after selection",
+      "tests": [
+        "T22",
+        "T25",
+        "T30",
+        "T27"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run",
+      "request_80_fixture_correction": true
+    },
+    {
+      "scene": 21,
+      "spec_line": 4979,
+      "condition": "D, DF, intermediate math, EV, next-D write failures retain obligations",
+      "tests": [
+        "T29",
+        "T28"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run",
+      "request_80_fixture_correction": true
+    },
+    {
+      "scene": 22,
+      "spec_line": 4980,
+      "condition": "Nonboundary evaluation NoDecision/failure/Unknown end the process",
+      "tests": [
+        "T30"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run",
+      "request_80_fixture_correction": true
+    },
+    {
+      "scene": 23,
+      "spec_line": 4981,
+      "condition": "Guarantee/2: exact six fields, ideal-selection/OS-limits/completion texts are nonempty strings",
+      "tests": [
+        "D03",
+        "D13"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 24,
+      "spec_line": 4982,
+      "condition": "Admission/purpose/Post errors, all forbidden port reads, bool/range/extra fields",
+      "tests": [
+        "D08",
+        "D09",
+        "D10",
+        "D11",
+        "D15",
+        "D16",
+        "T10",
+        "T33"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run",
+      "request_81": "T33 covers the householder DrawValue JSON gate before DF/Ee, independently of UniformDraw own validation."
+    },
+    {
+      "scene": 25,
+      "spec_line": 4983,
+      "condition": "Native first/continuation blocks, rejected requests, execution errors, no clock",
+      "tests": [
+        "D04",
+        "D14",
+        "D06",
+        "D05",
+        "D07"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 26,
+      "spec_line": 4984,
+      "condition": "Single bits generator, guarantee/2, shared block source, old names removed",
+      "tests": [
+        "D02",
+        "D03",
+        "D13",
+        "D18"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 27,
+      "spec_line": 4985,
+      "condition": "Legacy bridge explicitly rejects bit law",
+      "tests": [
+        "T20"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    },
+    {
+      "scene": 28,
+      "spec_line": 4986,
+      "condition": "All six native workers through the real host",
+      "tests": [
+        "T31",
+        "D22"
+      ],
+      "status": "validated",
+      "CG": [],
+      "native_validation": "passed on impl35: all mapped cases, request 81; specified excluded/unverified subcases remain not_run"
+    }
+  ],
+  "tests": [
+    {
+      "id": "T01",
+      "file": "tests/test_fb_exact.py",
+      "line": 129,
+      "name": "test_exact1_public_prefix_and_optional_u_shape",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T02",
+      "file": "tests/test_fb_exact.py",
+      "line": 140,
+      "name": "test_exact1_closed_enclosure_fits_half_open_selection_interval",
+      "cases": 5,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T03",
+      "file": "tests/test_fb_exact.py",
+      "line": 150,
+      "name": "test_exact1_straddling_interval_is_not_its_left_midpoint_or_rounded_point",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T04",
+      "file": "tests/test_fb_exact.py",
+      "line": 162,
+      "name": "test_exact1_partial_one_bit_completion_is_not_the_conditioned_q_distribution",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T05",
+      "file": "tests/test_fb_exact.py",
+      "line": 172,
+      "name": "test_exact1_tiny_last_cell_and_right_endpoint_one_are_reachable",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T06",
+      "file": "tests/test_fb_exact.py",
+      "line": 195,
+      "name": "test_exact1_variable_lengths_leading_zeroes_extend_without_mutating_prior_root",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T07",
+      "file": "tests/test_fb_exact.py",
+      "line": 210,
+      "name": "test_exact1_draw_id_separates_positions_but_not_after_reference_or_value",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T08",
+      "file": "tests/test_fb_exact.py",
+      "line": 226,
+      "name": "test_exact1_root_key_binds_block_points_even_when_prefix_bits_and_draw_ids_match",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T09",
+      "file": "tests/test_fb_exact.py",
+      "line": 239,
+      "name": "test_exact1_one_broken_chain_condition_is_invalid_draw",
+      "cases": 9,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T10",
+      "file": "tests/test_fb_exact.py",
+      "line": 262,
+      "name": "test_exact1_invalid_bit_values_are_named_input_errors",
+      "cases": 6,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T11",
+      "file": "tests/test_fb_exact.py",
+      "line": 276,
+      "name": "test_exact1_replay_authenticates_every_saved_block_without_randomness",
+      "cases": 8,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T12",
+      "file": "tests/test_fb_exact.py",
+      "line": 312,
+      "name": "test_exact1_fresh_import_replay_never_calls_OS_even_through_import_time_aliases",
+      "cases": 4,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "request_80_checks": "Install an observer before imports to retain alias coverage; allow dependency/import/setup randomness, then forbid source calls only during mathematical replay.",
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T13",
+      "file": "tests/test_fb_exact.py",
+      "line": 351,
+      "name": "test_exact1_old_point_artifact_bytes_remain_identical_and_default_fields_omitted",
+      "cases": 2,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 82
+      },
+      "structural_guard_scope": "Artifact replay checks only; not counted as proof of the structural decoder default-field guard. T34/T35 independently exercise that public entry."
+    },
+    {
+      "id": "T14",
+      "file": "tests/test_fb_exact.py",
+      "line": 377,
+      "name": "test_exact1_exact_boundary_requests_bits_even_on_last_refinement",
+      "cases": 3,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T15",
+      "file": "tests/test_fb_exact.py",
+      "line": 384,
+      "name": "test_exact1_unbounded_refinements_preserve_other_finite_limits",
+      "cases": 2,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "request_80_checks": "Bind/authenticate the reader with an adequate budget, then apply the small finite cap only to f.evaluate_f; keep an all-unbounded control.",
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T16",
+      "file": "tests/test_fb_exact.py",
+      "line": 399,
+      "name": "test_exact1_finite_numerical_precision_exhaustion_is_not_a_bit_request",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T17",
+      "file": "tests/test_fb_exact.py",
+      "line": 412,
+      "name": "test_exact1_nonfinite_branch_selects_away_from_boundary",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T18",
+      "file": "tests/test_fb_exact.py",
+      "line": 418,
+      "name": "test_exact1_nonfinite_fixed_arithmetic_precision_is_not_replaced_by_endless_bit_requests",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T19",
+      "file": "tests/test_fb_exact.py",
+      "line": 433,
+      "name": "test_exact1_left_boundary_with_nonzero_enclosure_width_needs_bits_not_an_invented_point",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T20",
+      "file": "tests/test_fb_exact.py",
+      "line": 452,
+      "name": "test_exact1_old_bridge_rejects_bit_law_at_named_draw_boundary",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T21",
+      "file": "tests/test_fb_exact.py",
+      "line": 462,
+      "name": "test_exact1_independent_draw_ordinals_are_distinct_from_same_draw_offsets",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T22",
+      "file": "tests/test_fb_exact.py",
+      "line": 598,
+      "name": "test_exact1_host_continues_same_draw_preserves_all_terminal_outputs_and_no_pG",
+      "cases": 2,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "request_80_checks": "Admit queued Posts and wait for each public terminal; choose a fresh continuation by unexecuted WorkId, not ledger enumeration order; same ordinal and exact block counts retained.",
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T23",
+      "file": "tests/test_fb_exact.py",
+      "line": 684,
+      "name": "test_exact1_host_single_round_including_exact_left_boundary_never_requests_more_bits",
+      "cases": 3,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T24",
+      "file": "tests/test_fb_exact.py",
+      "line": 693,
+      "name": "test_exact1_host_nonfinite_precision_exhaustion_ends_without_drawing_more_bits",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T25",
+      "file": "tests/test_fb_exact.py",
+      "line": 705,
+      "name": "test_exact1_continuation_draw_terminal_ends_without_retry_and_retains_pG",
+      "cases": 3,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "request_80_checks": "Admit returned draw reports and wait for the actual terminal/pG; rejection/failure/Unknown still ends the continuation without redraw.",
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T26",
+      "file": "tests/test_fb_exact.py",
+      "line": 730,
+      "name": "test_exact1_late_ancestor_clash_blocks_unentered_continuation_even_before_conflict_save",
+      "cases": 8,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "request_80_checks": "Use the captured original FWorkContext.post for the ancestor WorkId (B6); admit before holding its save; invoke only the unexecuted offered callback; preserve pending-conflict gate and old facts.",
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T27",
+      "file": "tests/test_fb_exact.py",
+      "line": 771,
+      "name": "test_exact1_clash_after_selection_adds_unmet_without_erasing_selected_fact",
+      "cases": 4,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "request_80_checks": "Post through the original public work port, then await confirmed clash/pG after selection; retain the existing Selected record unchanged.",
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T28",
+      "file": "tests/test_fb_exact.py",
+      "line": 790,
+      "name": "test_exact1_next_draw_work_is_visible_while_continuation_publication_is_pending",
+      "cases": 2,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "request_80_checks": "Use the public host runner to admit the evaluation report and reach the held publication, instead of settling an unaccepted queue.",
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T29",
+      "file": "tests/test_fb_exact.py",
+      "line": 848,
+      "name": "test_exact1_continuation_save_retry_keeps_one_block_per_position_and_visible_obligation",
+      "cases": 5,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "request_80_checks": "Shared rig admits every queued report and waits for the terminal; original save/retry and one-source-call-per-position expectations retained.",
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T30",
+      "file": "tests/test_fb_exact.py",
+      "line": 871,
+      "name": "test_exact1_nonboundary_evaluation_terminal_stops_continuation_without_redraw",
+      "cases": 3,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "request_80_checks": "Admit the native/test evaluation report, await terminal/pG, and retain no-redraw expectation for nonboundary NoDecision/failure/Unknown.",
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T31",
+      "file": "tests/test_fb_exact.py",
+      "line": 898,
+      "name": "test_exact1_main_loop_all_six_native_workers_keep_fixed_prefix_and_adoption",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T32",
+      "file": "tests/test_fb_exact.py",
+      "name": "test_exact1_ancestor_clash_before_continuation_request_prevents_its_publication",
+      "cases": 8,
+      "checks": "First-round Wg/EQ/D/Ee contradiction accepted while second EV storage is held, before third D request publication. Each retains all saved facts and suppresses third D; equal-redelivery controls publish it and reach Selected.",
+      "line": 914,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T33",
+      "file": "tests/test_fb_exact.py",
+      "name": "test_exact1_host_checks_bit_value_before_draw_fact_or_evaluation",
+      "cases": 12,
+      "checks": "Test draw worker bypasses UniformDraw validation: ten invalid JSON values retain raw report/value terminal but produce no DF/Ee/EV/S; local draw:value is tied to the original unmet comparison purpose and selection_draw stage. Legal zero/maximum controls select Q/M.",
+      "line": 1005,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "T34",
+      "file": "tests/test_fb_exact.py",
+      "name": "test_exact1_structural_value_decoder_rejects_explicit_legacy_defaults",
+      "cases": 3,
+      "checks": "Public f_entry.f_from_json through VALUE_FACTS (sui.f.value/3): FRoot.selection_prefix=[], Selected.prefix=null, and Selected.root.selection_prefix=[]. Omitted-field controls decode to legacy defaults; one explicit default must raise FInputError(noncanonical). No replay or issuance entry used.",
+      "line": 639,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 82
+      }
+    },
+    {
+      "id": "T35",
+      "file": "tests/test_fb_exact.py",
+      "name": "test_exact1_structural_root_decoder_rejects_explicit_empty_selection_prefix",
+      "cases": 1,
+      "checks": "Public fixed ROOT_FACTS (sui.f.root/3) structural entry. Omitted selection_prefix gives (); explicit [] raises FInputError(noncanonical), independently of restore_f_root/math replay.",
+      "line": 667,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 82
+      }
+    },
+    {
+      "id": "D01",
+      "file": "tests/test_fb_draw.py",
+      "line": 141,
+      "name": "test_draw1_public_constructor_run_and_exports",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D02",
+      "file": "tests/test_fb_draw.py",
+      "line": 151,
+      "name": "test_draw1_public_generator_bits_and_guarantee_contracts",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D03",
+      "file": "tests/test_fb_draw.py",
+      "line": 159,
+      "name": "test_draw1_public_guarantee_value_matches_the_six_field_v2_contract",
+      "cases": 1,
+      "result": "passed",
+      "checks": "Direct public ContractValue guarantee/2 with exact six-field K35-a JSON; fixed law/source, strict integer block_bits, three nonempty strings, no extra/provisional field.",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D04",
+      "file": "tests/test_fb_draw.py",
+      "line": 166,
+      "name": "test_draw1_exact_bit_block_uses_one_source_call",
+      "cases": 7,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D05",
+      "file": "tests/test_fb_draw.py",
+      "line": 177,
+      "name": "test_draw1_out_of_range_integer_is_execution_failure_without_retry",
+      "cases": 3,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D06",
+      "file": "tests/test_fb_draw.py",
+      "line": 186,
+      "name": "test_draw1_rejection_does_not_consume_source_or_read_port_dependencies",
+      "cases": 7,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D07",
+      "file": "tests/test_fb_draw.py",
+      "line": 214,
+      "name": "test_draw1_source_exception_is_exact_execution_failure_without_retry",
+      "cases": 6,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D08",
+      "file": "tests/test_fb_draw.py",
+      "line": 222,
+      "name": "test_draw1_wrong_work_purpose_is_type_error_before_enter",
+      "cases": 5,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D09",
+      "file": "tests/test_fb_draw.py",
+      "line": 230,
+      "name": "test_draw1_non_draw_is_type_error_before_enter",
+      "cases": 2,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D10",
+      "file": "tests/test_fb_draw.py",
+      "line": 237,
+      "name": "test_draw1_false_admission_has_no_source_or_other_port_operation",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D11",
+      "file": "tests/test_fb_draw.py",
+      "line": 244,
+      "name": "test_draw1_post_failure_escapes_and_no_second_post_or_draw_occurs",
+      "cases": 3,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D12",
+      "file": "tests/test_fb_draw.py",
+      "line": 255,
+      "name": "test_draw1_same_worker_uses_two_current_jobs_and_two_fresh_values",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D13",
+      "file": "tests/test_fb_draw.py",
+      "line": 266,
+      "name": "test_draw1_registry_declares_one_generator_and_one_guarantee_condition",
+      "cases": 1,
+      "result": "passed",
+      "checks": "Sole generator condition equals the public value, and both values independently satisfy K35-a including strict scalar types.",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D14",
+      "file": "tests/test_fb_draw.py",
+      "line": 284,
+      "name": "test_exact1_native_worker_takes_one_new_block_without_reading_after",
+      "cases": 2,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D15",
+      "file": "tests/test_fb_draw.py",
+      "line": 298,
+      "name": "test_exact1_native_worker_rejects_invalid_offset_after_without_drawing",
+      "cases": 8,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D16",
+      "file": "tests/test_fb_draw.py",
+      "line": 308,
+      "name": "test_exact1_native_worker_rejects_non_integer_source_value_without_retry",
+      "cases": 5,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D17",
+      "file": "tests/test_fb_draw.py",
+      "line": 382,
+      "name": "test_draw1_default_source_calls_public_secrets_randbits_once_with_N",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D18",
+      "file": "tests/test_fb_draw.py",
+      "line": 389,
+      "name": "test_draw1_changing_the_single_public_N_changes_worker_and_registry_declaration",
+      "cases": 1,
+      "result": "passed",
+      "checks": "B=2/3 changes the worker, declaration and registry key; directly check raw block_bits and sole-condition equality, plus full K35-a validation in each child.",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D19",
+      "file": "tests/test_fb_draw.py",
+      "line": 406,
+      "name": "test_draw1_small_blocks_preserve_all_bits_and_leading_zero_length",
+      "cases": 2,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D20",
+      "file": "tests/test_fb_draw.py",
+      "line": 461,
+      "name": "test_draw1_host_saves_native_draw_fact_and_selects_the_determined_candidate",
+      "cases": 2,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D21",
+      "file": "tests/test_fb_draw.py",
+      "line": 475,
+      "name": "test_draw1_host_persists_failure_without_draw_fact_evaluation_or_retry",
+      "cases": 2,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    },
+    {
+      "id": "D22",
+      "file": "tests/test_fb_draw.py",
+      "line": 532,
+      "name": "test_draw1_main_loop_uses_all_six_native_workers_and_preserves_the_adoption",
+      "cases": 1,
+      "result": "passed",
+      "validation": {
+        "impl35": "passed",
+        "work35_master": "failed: K35 public API absent",
+        "request": 81
+      },
+      "not_rerun_request_82": true
+    }
+  ],
+  "CG": [],
+  "display_scope": "The existence of the next D row is asserted. The exact Unsaved-vs-prepared-CID subtype is not fixed because paper :4993 explicitly defers that existing display defect.",
+  "results": {
+    "request": 82,
+    "executed_unique_cases": 6,
+    "passed": 6,
+    "failed": 0,
+    "source": "impl35/src execution only; bodies not read",
+    "by_file": [
+      {
+        "file": "tests/test_fb_exact.py",
+        "passed": 6
+      }
+    ],
+    "added_cases": {
+      "T34": 3,
+      "T35": 1,
+      "impl35_passed": 4,
+      "work35_master_failed_api_absent": 4
+    },
+    "work35_master": {
+      "passed": 0,
+      "failed": 6,
+      "failure_reasons": {
+        "f.DrawPrefix absent": 6
+      },
+      "parent_PYTHONPATH": null
+    },
+    "case_inventory": {
+      "functions": 57,
+      "cases": 171,
+      "exact_cases": 108,
+      "draw_cases": 63,
+      "not_run_this_request": 165,
+      "previous_full_run": "Request 81: 167 passed on impl35. No claim that all 171 were rerun in request 82."
+    },
+    "failure_reasons": {},
+    "test_hashes": {
+      "tests/test_fb_exact.py": "9d829c5ac8ddee394db9e6df0d305a46882abd06a3d0de11bed8fa7c206e2e24",
+      "tests/test_fb_draw.py": "19db2e3000f37b234267db63b9846618f5894be9e694020144dc08f5439a2240"
+    }
+  },
+  "execution_records": [
+    "scratchpad/sui0958/bt_tests82/k35_impl_codec_results.json",
+    "scratchpad/sui0958/bt_tests82/k35_master_codec_results.json"
+  ],
+  "session_log": {
+    "codex_session_id": "01a1aeda-b48f-7622-9bbf-6084d8289457",
+    "vault": "Not written: latest authorization is work35/tests only. This file records work, results, limits and next steps.",
+    "reused_knowledge": "Request 77 parent-source child import propagation retained and independently qualified; uniform_unit public F-a controls retained.",
+    "next_step": "Claude can apply T34/T35 and rerun the surviving structural-decoder mutation. That mutation was not run by this task; no claim of its measured result.",
+    "gut_self_check": "yuu-gut-check own-choice exception: types 1/6 reviewed against gut book v0.44 (full, truncated ranges reread). No reconsideration of Z60/B=128/unbounded continuation and no production sync API for tests proposed.",
+    "other_agents": "No delegated agents or external Claude messages used; no other report treated as authorization.",
+    "request_79": "K35-a full line read; exact six-field guarantee added; all three CGs closed with the two specified validation limits retained. Vault/Heat not written because the authorized write scope remains work35/tests.",
+    "request_80": "Three reported fixture issues corrected without changing paper expectations; also corrected callback selection and original work-port provenance. Native 147 passed; master 147 expected API-absence failures. No new CG. Vault/Heat not written because current authorization is tests only.",
+    "request_81": "Added T32 (8 cases) and T33 (12 cases). Impl35 167 passed in 244.90 seconds; master 167 expected API-absence failures in 2.25 seconds. Current results and per-case evidence recorded here and in bt_tests81. No new CG. Vault/Heat not written because the authorized write scope remains tests only.",
+    "request_82": "Found public f_entry.f_from_json structural entry. Added 2 functions/4 cases with omitted-default controls; kept artifact replay separate. Selected native 6 passed/master 6 API-absence failures. 165 other cases not rerun. Vault/Heat not written because current write authorization is tests only."
+  },
+  "source_audit": {
+    "request": 82,
+    "base": "ccdeea0",
+    "files": 71,
+    "normalized_differences": [],
+    "method": "Hash comparison of work35/src only, without displaying or semantically inspecting contents. impl35/src not opened or hashed."
+  },
+  "migration_inventory": "tests/k35_migration_inventory.json",
+  "previous_results": [
+    {
+      "request": 78,
+      "results": {
+        "unique_cases": 375,
+        "passed": 207,
+        "failed": 168,
+        "by_file": [
+          {
+            "file": "tests/test_fb_draw.py",
+            "passed": 0,
+            "failed": 63
+          },
+          {
+            "file": "tests/test_fb_evaluator.py",
+            "passed": 2,
+            "failed": 5
+          },
+          {
+            "file": "tests/test_fb_exact.py",
+            "passed": 0,
+            "failed": 84
+          },
+          {
+            "file": "tests/test_fb_skeleton.py",
+            "passed": 175,
+            "failed": 0
+          },
+          {
+            "file": "tests/test_fb_stage2.py",
+            "passed": 30,
+            "failed": 16
+          }
+        ],
+        "new_expected_failure_reasons": {
+          "f.DrawPrefix": 84,
+          "fb_contracts.OS_UNIFORM_BITS": 62,
+          "fb_contracts.OS_UNIFORM_BITS_BLOCK": 1
+        },
+        "migration_failures": "21 cases: 19 successor/transition waits and 2 missing DF assertions. Public diagnostic shows old uniform_unit request plus bit-block response, draw:value pending, no DF. Classified as K35 absent; later migrated assertions not reached.",
+        "migration_deselected": 345,
+        "native_K35_green": "not verified; implementation absent",
+        "final_test_hashes": {
+          "tests/test_fb_exact.py": "9c3d0e8419a3490100504752a6a7dd8d89b1cb1190d1ce511369fa9fb973f236",
+          "tests/test_fb_draw.py": "bfc0c78bd19c35ebd173d535e9f1c3e99f1cac4702cb8e6242e60ebcc09f53bc",
+          "tests/test_fb_skeleton.py": "2d7ae3f02efee23daa2d588b59ad8102a66b400b01c122556f6f8ccd436c383f",
+          "tests/test_fb_stage2.py": "b146ed4a8fccee4d249ad6287e7e2812272b0380b129bcf8c8d419c2b3cf2210",
+          "tests/test_fb_evaluator.py": "a4477f8bea41d39cae948316c7ea29a3083960218f467ec3c63c783f42824796"
+        }
+      },
+      "execution_records": [
+        "scratchpad/sui0958/bt_tests78/k35_core_results.json",
+        "scratchpad/sui0958/bt_tests78/k35_exact_final_results.json",
+        "scratchpad/sui0958/bt_tests78/k35_migration_results.json",
+        "scratchpad/sui0958/bt_tests78/k35_fixture_qualification.json"
+      ]
+    },
+    {
+      "request": 79,
+      "results": {
+        "request": 79,
+        "unique_cases": 147,
+        "passed": 0,
+        "failed": 147,
+        "by_file": [
+          {
+            "file": "tests/test_fb_draw.py",
+            "passed": 0,
+            "failed": 63
+          },
+          {
+            "file": "tests/test_fb_exact.py",
+            "passed": 0,
+            "failed": 84
+          }
+        ],
+        "failure_reasons": {
+          "fb_contracts.OS_UNIFORM_BITS": 62,
+          "fb_contracts.OS_UNIFORM_BITS_BLOCK": 1,
+          "f.DrawPrefix": 84
+        },
+        "native_K35_guarantee_validation": "not reached because K35 API is absent; no claim of native pass",
+        "test_hashes": {
+          "tests/test_fb_draw.py": "19db2e3000f37b234267db63b9846618f5894be9e694020144dc08f5439a2240",
+          "tests/test_fb_exact.py": "920860b5046680cfa66f21001950a55d9d2c9fd5af2e1f1fe0902fbc0ab02279"
+        }
+      },
+      "execution_records": [
+        "scratchpad/sui0958/bt_tests79/k35a_results.json",
+        "scratchpad/sui0958/bt_tests79/k35a_guarantee_predicate_qualification.json"
+      ]
+    },
+    {
+      "request": 80,
+      "results": {
+        "request": 80,
+        "unique_cases": 147,
+        "passed": 147,
+        "failed": 0,
+        "source": "impl35/src (execution only; implementation bodies not read)",
+        "by_file": [
+          {
+            "file": "tests/test_fb_draw.py",
+            "passed": 63
+          },
+          {
+            "file": "tests/test_fb_exact.py",
+            "passed": 84
+          }
+        ],
+        "failure_reasons": {},
+        "work35_master": {
+          "passed": 0,
+          "failed": 147,
+          "by_file": [
+            {
+              "file": "tests/test_fb_draw.py",
+              "failed": 63
+            },
+            {
+              "file": "tests/test_fb_exact.py",
+              "failed": 84
+            }
+          ],
+          "failure_reasons": {
+            "f.DrawPrefix absent": 84,
+            "fb_contracts.OS_UNIFORM_BITS absent": 62,
+            "fb_contracts.OS_UNIFORM_BITS_BLOCK absent": 1
+          },
+          "parent_PYTHONPATH": null
+        },
+        "native_K35_guarantee_validation": "passed: D03/D13/D18 exact six-field value and declaration tests",
+        "test_hashes": {
+          "tests/test_fb_exact.py": "28b5f84122892c9742bd542582bddd8255649899fcb70219baf4c5450a7d6dd3",
+          "tests/test_fb_draw.py": "19db2e3000f37b234267db63b9846618f5894be9e694020144dc08f5439a2240"
+        }
+      },
+      "execution_records": [
+        "scratchpad/sui0958/bt_tests80/k35_impl_diagnostic_results.json",
+        "scratchpad/sui0958/bt_tests80/k35_impl_final_results.json",
+        "scratchpad/sui0958/bt_tests80/k35_impl_host_fixes_results.json",
+        "scratchpad/sui0958/bt_tests80/k35_master_final_results.json",
+        "scratchpad/sui0958/bt_tests80/k35_post_selection_public_probe.json"
+      ]
+    },
+    {
+      "request": 81,
+      "results": {
+        "request": 81,
+        "unique_cases": 167,
+        "passed": 167,
+        "failed": 0,
+        "source": "impl35/src (execution only; bodies not read)",
+        "by_file": [
+          {
+            "file": "tests/test_fb_draw.py",
+            "passed": 63
+          },
+          {
+            "file": "tests/test_fb_exact.py",
+            "passed": 104
+          }
+        ],
+        "failure_reasons": {},
+        "added_cases": {
+          "T32": 8,
+          "T33": 12,
+          "impl35_passed": 20,
+          "work35_master_failed_api_absent": 20
+        },
+        "work35_master": {
+          "passed": 0,
+          "failed": 167,
+          "by_file": [
+            {
+              "file": "tests/test_fb_draw.py",
+              "failed": 63
+            },
+            {
+              "file": "tests/test_fb_exact.py",
+              "failed": 104
+            }
+          ],
+          "failure_reasons": {
+            "f.DrawPrefix absent": 104,
+            "fb_contracts.OS_UNIFORM_BITS absent": 62,
+            "fb_contracts.OS_UNIFORM_BITS_BLOCK absent": 1
+          },
+          "parent_PYTHONPATH": null
+        },
+        "native_K35_guarantee_validation": "passed: existing D03/D13/D18 regression retained",
+        "test_hashes": {
+          "tests/test_fb_exact.py": "6197f62fbdbbd2d5610cbc39cb5219df10e188669b0c55320d2b0167b6d8ea68",
+          "tests/test_fb_draw.py": "19db2e3000f37b234267db63b9846618f5894be9e694020144dc08f5439a2240"
+        }
+      },
+      "execution_records": [
+        "scratchpad/sui0958/bt_tests81/k35_impl_added_results.json",
+        "scratchpad/sui0958/bt_tests81/k35_impl_final_results.json",
+        "scratchpad/sui0958/bt_tests81/k35_master_final_results.json",
+        "scratchpad/sui0958/bt_tests81/k35_public_draw_hold_probe.json"
+      ]
+    }
+  ],
+  "request_history": [
+    78,
+    79,
+    80,
+    81,
+    82
+  ],
+  "closed_CG": [
+    {
+      "id": "CG-K35-GUARANTEE-SHAPE",
+      "status": "closed_by_specification",
+      "answer": "specs/関所F_Fb_今の約束.md:3564 (K35-a), full line read",
+      "resolution": "Exact six fields law/source/block_bits/selection/not_guaranteed/completion. ContractValue guarantee/2; sole identical registry condition. Fixed law/source and strict integer block_bits; three nonempty strings only. No provisional field.",
+      "original_request_78": {
+        "id": "CG-K35-GUARANTEE-SHAPE",
+        "spec": "specs/... :4920,4934,4980,4983",
+        "status": "historical_open_question_before_K35-a",
+        "question": "Specify the exact ContractValue.value field names/types for draw_guarantee/2 in K35-a.",
+        "proposal_only": {
+          "law": "uniform_bits/1 ContractRef JSON",
+          "source": "os_cryptographic_random",
+          "block_bits": "OS_UNIFORM_BITS_BLOCK integer",
+          "selection": "nonempty ideal-conditions description",
+          "not_guaranteed": "nonempty OS limitations description",
+          "stopping": "nonempty completion/conditional-distribution description"
+        },
+        "unwritten": "Exact value fields and three texts; no invented wording/schema assertions."
+      }
+    },
+    {
+      "id": "CG-K35-CID-CYCLE",
+      "status": "closed_by_specification",
+      "answer": "specs/関所F_Fb_今の約束.md:3564 (K35-a), full line read",
+      "resolution": "Public construction excluded: after references saved Points, and preceding offsets strictly decrease because length >= 1. No test-only production entry is added; no cycle test is counted as passed.",
+      "original_request_78": {
+        "id": "CG-K35-CID-CYCLE",
+        "spec": "paper :4912,4965; f.FReader sealed_content public docstring",
+        "status": "historical_open_question_before_K35-a",
+        "question": "For cycle detection, provide an authenticated public fixture or classify the isolated sealed-cycle case as unreachable from Ledger.append.",
+        "reason": "Append uses existing content-addressed ancestor Points. Altering a saved body/parents instead fails authentication or ancestry first; it does not isolate the cycle condition.",
+        "covered": "Nine other chain violations plus genuine missing/changed authenticated records; no fake cycle guard success or skip."
+      }
+    },
+    {
+      "id": "CG-K35-HOST-SECOND-FIRING",
+      "status": "closed_by_specification",
+      "answer": "specs/関所F_Fb_今の約束.md:3564 (K35-a), full line read",
+      "resolution": "Same-(stream,problem_key) second firing through the host remains unverified. Decision 9(f) is assigned to review and mutation checks. Add a public-host test if a reproducible case is found; do not infer one from adoption continuation.",
+      "original_request_78": {
+        "id": "CG-K35-HOST-SECOND-FIRING",
+        "spec": "paper J6 :3489; K35 :4918(f),4969",
+        "status": "historical_open_question_before_K35-a",
+        "question": "Provide the public trigger for a second firing with the same (stream,problem_key), or leave that host subcase to the existing-rule review.",
+        "reason": "Boot has one initial candidate firing. Adoption continuation can change problem_key; a forged adoption or changed issue would not test this rule. No test-only production entry is requested.",
+        "covered": "Host multiple blocks retain ordinal zero; F-a independent draws with ordinals zero/one have distinct IDs; the real all-native adoption loop is present."
+      }
+    }
+  ],
+  "revision_79": {
+    "spec_answer": 3564,
+    "changed_tests": [
+      "D03 renamed and exact schema asserted",
+      "D13 and child fixture inherit full schema assertion",
+      "D18 checks each raw JSON block_bits"
+    ],
+    "active_CG": 0,
+    "still_not_run": [
+      "public sealed-cycle construction (excluded by K35-a)",
+      "same-(stream,problem_key) host second firing (review/mutation assignment)"
+    ],
+    "predicate_qualification": "4 valid controls accepted; 17 invalid controls rejected. Test-side predicate only, not native execution.",
+    "processes": "All test/qualification commands completed. No background process launched."
+  },
+  "revision_80": {
+    "paper_expectations_changed": false,
+    "diagnosis": [
+      {
+        "observation": 1,
+        "judgment": "test fixture",
+        "fix": "host.run_until admits queued Posts; wait for each matching work terminal; original public work port for late reports",
+        "evidence": [
+          "work35/src/sui/fb.py:855,861,907,912",
+          "specs B6:3425; K35 decision 9:4919"
+        ]
+      },
+      {
+        "observation": 2,
+        "judgment": "test fixture",
+        "fix": "Phased observer permits dependency setup but forbids source use throughout mathematical replay, including captured import aliases",
+        "tests": [
+          "T12"
+        ]
+      },
+      {
+        "observation": 3,
+        "judgment": "test fixture",
+        "fix": "Adequate bind/capture budget, then direct evaluator cap",
+        "tests": [
+          "T15"
+        ],
+        "evidence": [
+          "specs K35 decision 6:4916"
+        ]
+      }
+    ],
+    "additional_fixture_fixes": [
+      "Select offered, unexecuted WorkIds rather than the last ledger item (T22/T26).",
+      "Bind late contradictions through the captured original FWorkContext.post (T26/T27), as required by B6; external reports are raw-only."
+    ],
+    "changed_test_ids": [
+      "T12",
+      "T15",
+      "T22",
+      "T25",
+      "T26",
+      "T27",
+      "T28",
+      "T29",
+      "T30"
+    ],
+    "shared_fixture": "tests/test_fb_exact.py:ExactHostRig",
+    "all_results": {
+      "impl35": "147 passed in 201.11 s",
+      "work35_master": "147 failed in 2.41 s, all K35 API absent",
+      "previous_targeted_check": "14 host cases passed after the two additional fixture corrections"
+    },
+    "implementation_errors_found": [],
+    "active_CG": 0,
+    "still_not_run": [
+      "Authenticated sealed-cycle construction (excluded by K35-a).",
+      "Second host firing with same stream/problem_key (assigned to review/mutation by K35-a).",
+      "Full suite, excluded models, heavy depth-258 cases, and mutation table."
+    ],
+    "processes": "All test and audit commands completed; no background helper or pending test session remains."
+  },
+  "decision_9_coverage": {
+    "b": {
+      "spec_line": 4919,
+      "tests": [
+        "T33"
+      ],
+      "cases": 12,
+      "invalid_cases": 10,
+      "controls": 2,
+      "public_reason": "PendingStatus.reason=draw:value; combine with the returned selection_draw stage and same original comparison purpose target/reader/process. No invented stage-prefixed PendingStatus field.",
+      "native_validation": "passed"
+    },
+    "h": {
+      "spec_line": 4919,
+      "tests": [
+        "T26",
+        "T27",
+        "T32"
+      ],
+      "new_cases": 8,
+      "new_cut": "second EV prepared/not saved, third D request not saved; accept a first-round ancestor report through its original public work port",
+      "native_validation": "passed"
+    }
+  },
+  "revision_81": {
+    "added_test_ids": [
+      "T32",
+      "T33"
+    ],
+    "added_functions": 2,
+    "added_cases": 20,
+    "source_expectations": "K35 decision 9(b)/(h), paper line 4919",
+    "test_helper_change": "ExactHostRig.post_late_report now forwards optional issued through the same public context, enabling exact artifact redelivery controls. Existing default behavior retained.",
+    "expected_values_changed": false,
+    "public_shape_correction": "Local pending reason is draw:value; selection_draw:draw:value is checked from the D stage plus local reason and its original comparison purpose. The initial stage-prefixed waiting condition was a test-side error.",
+    "coverage_update": [
+      "Scene 18 adds successor-publication gate independently of entry gate.",
+      "Scene 24 adds householder DrawValue validation independently of native draw-worker validation."
+    ],
+    "result": "20 added cases green on impl35 and API-absence red on master; all 147 previous cases green on impl35.",
+    "active_CG": 0,
+    "implementation_errors_found": [],
+    "still_not_run": [
+      "Mutation table and full suite.",
+      "Authenticated sealed cycle (K35-a public construction exclusion).",
+      "Same-stream/problem_key second host firing (K35-a review/mutation assignment)."
+    ],
+    "processes": "All drivers and awaited child processes completed; no background command remains."
+  },
+  "decision_4_coverage": {
+    "spec_line": 4914,
+    "public_entry": {
+      "file": "scratchpad/sui0958/work35/src/sui/f_entry.py",
+      "line": 623,
+      "name": "f_from_json",
+      "signature": "f_from_json(data: bytes, *, contract: ContractRef) -> FPublicValue",
+      "scope": "Structure only; does not certify proof/external references/issuer and does not restore an issued handle."
+    },
+    "value_contract": {
+      "file": "scratchpad/sui0958/work35/src/sui/f_contracts.py",
+      "line": 302,
+      "ref": "sui.f.value/3"
+    },
+    "replay_gate": {
+      "tests": [
+        "T13"
+      ],
+      "cases": 2,
+      "status": "passed request 82; distinct gate"
+    },
+    "structural_gate": {
+      "tests": [
+        "T34",
+        "T35"
+      ],
+      "cases": 4,
+      "status": "passed request 82",
+      "positive_controls": "Each omitted default is decoded into () or None before its single-field mutation is rejected.",
+      "requires_new_public_api": false
+    },
+    "reachability": "Publicly reachable through the documented structural entry, without any restore/verify call or reader/registry argument."
+  },
+  "revision_82": {
+    "added_test_ids": [
+      "T34",
+      "T35"
+    ],
+    "added_functions": 2,
+    "added_cases": 4,
+    "selected_existing_tests": [
+      "T13"
+    ],
+    "selected_cases": 6,
+    "answer": "A documented public structural decoder exists: f_entry.f_from_json, with VALUE_FACTS/3 and ROOT_FACTS/3. No new test-only production entry needed.",
+    "expectations": "K35 decision 4: omitted fields decode to legacy defaults; explicit empty selection_prefix / null prefix is noncanonical.",
+    "separation": "T13 artifact replay is not counted as structural decoding guard coverage. New tests invoke only f_from_json and require no reader, registry, restore or verification step.",
+    "result": "Added 4 and existing replay 2 passed on impl35; same 6 fail on master only because f.DrawPrefix is absent.",
+    "not_run": [
+      "Remaining 165 written cases this request.",
+      "Mutation table and full suite.",
+      "Existing K35-a sealed-cycle and same-problem host-refiring exclusions."
+    ],
+    "active_CG": 0,
+    "implementation_errors_found": [],
+    "processes": "All drivers completed. No background process launched; awaited subprocesses finished."
+  }
+}

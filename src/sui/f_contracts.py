@@ -297,6 +297,8 @@ DECLARATIONS = DECLARATIONS + SUPPLEMENT_DECLARATIONS
 PREPARE_FACTS = _ContractRef("sui.f.prepare_world", "3")
 PROBLEM_FACTS = _ContractRef("sui.f.problem", "3")
 ROOT_FACTS = _ContractRef("sui.f.root", "3")
+# 紙 F-b K35 決定 4: uniform_bits/1 のくじの接頭部 (かたまりの鎖) に結んだ根
+ROOT_PREFIX_FACTS = _ContractRef("sui.f.root", "4")
 WORLD_MANIFEST_FACTS = _ContractRef("sui.f.world_manifest", "3")
 # 今の約束 E-05: VALUE/3 decodes with the compiler/3 type list ({type,value}).
 VALUE_FACTS = _ContractRef("sui.f.value", "3")
@@ -307,4 +309,5 @@ DECLARATIONS = DECLARATIONS + tuple(_Contract(ref=ref,
     cancel="none",redelivery="Rebuild from the same primary closure") for ref,meaning in (
         (PREPARE_FACTS,"Facts-only compiler; derive histories, context and canonical declarations"),
         (PROBLEM_FACTS,"Certified primary-input problem, before a selection draw"),
-        (ROOT_FACTS,"Certified primary-input problem bound to draw CID and content digest")))
+        (ROOT_FACTS,"Certified primary-input problem bound to draw CID and content digest"),
+        (ROOT_PREFIX_FACTS,"Certified primary-input problem bound to every uniform_bits block CID and content digest of one selection draw prefix")))

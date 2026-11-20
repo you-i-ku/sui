@@ -413,7 +413,7 @@ def args_by_stage(*, _for_collection=False):
             budget=budget()),
         "selection_draw": fb.DrawArgs(prepared=point("PR"), stream_id="stream-A", request=f.DrawRequest(
             purpose="selection", context_key="problem-A", ordinal=0,
-            law=contract("sui.f.uniform_unit"), args={})),
+            law=contract("uniform_bits"), args={"offset": 0, "after": None})),
         "evaluation": fb.EvaluationArgs(evaluation_request=point("EQ"), prepared=point("PR"), draw=point("DF"),
                                         budget=budget()),
     }

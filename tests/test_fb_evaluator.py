@@ -363,7 +363,8 @@ def test_eval1_host_accepts_matching_bind_and_evaluation_budgets_and_selects(rig
     rig = rigs(EvaluationRig(cls, budget=budget)); rig.through("evaluation")
     work, event, issued = rig.evaluation_posts[0]
     assert isinstance(issued.value, f.Selected) and issued.value.choice.id == "Q"
-    assert issued.value.u == Q(1, 4)
+    assert issued.value.u is None
+    assert issued.value.prefix.bits == 1 << 126 and issued.value.prefix.length == 128
     body = json.loads(issued.canonical_bytes)
     bind = next(i for i, call in enumerate(body["calls"]) if call["op"] == "bind_draw")
     assert body["calls"][bind]["args"]["budget"] == budget_json(budget)

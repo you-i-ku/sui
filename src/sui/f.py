@@ -474,6 +474,9 @@ class FRoot(_FactoryHandle):
     # 今の約束 E-05 root/3: the draw's Point and record digest (null for root/2).
     draw_point: str | None
     draw_record_digest: str | None
+    # 紙 F-b K35 root/4: uniform_bits/1 のくじの接頭部 (最初から最後までのかたまり)。selection_draw・draw_point・
+    # draw_record_digest は最後のかたまり。uniform_unit/1 の根 (root/3) では空の組で、符号化に出さない (_VERSIONED)
+    selection_prefix: tuple["DrawRecord", ...]
 
     @property
     def world(self) -> FCertifiedWorld:
@@ -485,7 +488,9 @@ class DrawRecord(_JSONDTO):
     """F-a で検査する: request と purpose/context_key/ordinal の一致、生成器・stream・値域。
     request.law は分布、generator は供給実装で別契約。
     id は正準 JSON {domain:"sui.f.draw/1",generator,stream_id,purpose,context_key,ordinal}
-    の SHA-256 に sha256: を付ける。value を ID に含めず同 ID の値衝突を検出する。"""
+    の SHA-256 に sha256: を付ける (uniform_bits/1 のくじは domain "sui.f.draw/2" に law と offset を足す、
+    紙 F-b K35 決定 2)。value を ID に含めない。同じ ID の別の記録どうしの値を比べる所は今のコードに無い
+    (紙 F-b K35 (7) の ★)。"""
     id: str
     purpose: _Literal["candidate_generation", "selection", "reservation", "algorithm"]
     generator: _ContractRef
@@ -579,20 +584,33 @@ class FEvaluation:
 class Selected:
     """F-a で検査する: 根・評価・index・操作・uと保証。静けさも本物の選択。
     previous.upper<=u<current.lowerまたは認証した境界等値を要する。
+    uniform_bits/1 の根 (紙 F-b K35) では u は None、prefix が接頭部 K・L で、
+    previous.upper<=K/2^L かつ (K+1)/2^L<=current.lower を要する (区間全体の認証)。
+    prefix は None の時は符号化に出さない (点の Selected の bytes は変わらない)。
     """
     root: FRoot
     evaluation: FEvaluation
     index: int
     choice: ActionSpec
-    u: _Fraction
+    u: _Fraction | None
     previous: RationalInterval
     current: RationalInterval
     certificate: FCertificate
+    prefix: "DrawPrefix | None" = None
 
     @property
     def chosen(self) -> ActionSpec:
         """Readable operation alias; canonical wire field remains choice."""
         return self.choice
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class DrawPrefix:
+    """uniform_bits/1 のくじの、それまでに読んだ接頭部 (紙 F-b K35 決定 5)。
+    くじ U の小数点以下 1〜length けた目を二進で書いたものが bits (0 <= bits < 2^length、length >= 1)。
+    U の在る区間は [bits/2^length, (bits+1)/2^length)。"""
+    bits: int
+    length: int
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -1472,7 +1490,8 @@ class CandidateInput:
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class DrawRequest(_JSONDTO):
-    """F-a で検査する: 用途・問題キー・ordinal と値の法則。selection は uniform_unit/1、args={}。
+    """F-a で検査する: 用途・問題キー・ordinal と値の法則。selection は uniform_unit/1・args={} か、
+    uniform_bits/1・args={offset, after} (紙 F-b K35 決定 1)。
     §3-10-13-補で採用した配置: f.py で定義する。"""
     purpose: _Literal["candidate_generation", "selection", "reservation", "algorithm"]
     context_key: str
@@ -1980,7 +1999,7 @@ _FValue: _TypeAlias = (
     | CandidateMeasureRef | CandidateSet | EvaluationScope | CandidateExclusion
     | NormalizationCertificate | MeasurementId | EvidenceLink | EvidenceHistory
     | KnowledgeHistory | FContext | FRoot | DrawRecord | FQuantity | FQuantityDefinition | TailCertificate
-    | InformationParts | FCertificate | FEvaluation | Selected | NoDecision
+    | InformationParts | FCertificate | FEvaluation | Selected | DrawPrefix | NoDecision
     | FiniteBelief | PredicateSnapshot | ComputationSpec | FScope | FPathRow
     | FPathTable | LegacyComparison | ResumePoint | C1CountFrame | C1Summary
     | ClockReading | MeasurementInterval | ContractValue | Gap
@@ -2139,7 +2158,7 @@ def certify_f_tail(root: FRoot, *, candidate: str,
 
 
 def certify_f_choice(evaluation: FEvaluation, *,
-                      u: _Fraction | float) -> Selected | NoDecision:
+                      u: _Fraction | float | None = None) -> Selected | NoDecision:
     from ._f_eval import certify_f_choice as invoke
     from ._f_handles import trace_math
     return trace_math(invoke(evaluation,u=u),'choice',inputs={'evaluation_step':evaluation},args={})
@@ -2650,6 +2669,10 @@ def _load_json(data):
     return value
 
 
+# 版で足した欄と、その旧い値 (紙 F-b K35 決定 4): 旧い値の時は符号化に出さず、無ければ旧い値で埋める
+_VERSIONED = {FRoot: {"selection_prefix": ()}, Selected: {"prefix": None}}
+
+
 def _tag(value):
     tags = {ClockReading: "clock", Unavailable: "unavailable", At: "at", When: "when",
             Selected: "selected", NoDecision: "no_decision", CoverageClaim: "claim",
@@ -2693,6 +2716,9 @@ def _encode(value):
         if isinstance(value, Run):
             raise FIncomplete("certificate_incomplete", "Run columns contract is deferred to F-b")
         result = {f.name: _encode(getattr(value, f.name)) for f in _fields(value)}
+        for name, old in _VERSIONED.get(type(value), {}).items():
+            if getattr(value, name) == old:
+                del result[name]   # 旧い形の bytes を変えない (紙 F-b K35 決定 4)
         if isinstance(value, Record):
             result["body"] = {"type": type(value.body).__name__, "value": _encode(value.body)}
         hints = _typing.get_type_hints(type(value))
@@ -2703,7 +2729,7 @@ def _encode(value):
             if _typing.get_origin(hint) in (dict, _Mapping) and _typing.get_args(hint)[0] is not str and not item:
                 result[field.name] = []
             types = _typing.get_args(hint)
-            if item is None:
+            if item is None or field.name not in result:
                 continue
             if type(value) is MeasurementFrame and field.name == "value":
                 result[field.name] = {"kind": "unavailable" if isinstance(item, Unavailable) else "value", "value": _encode(item)}
@@ -2874,10 +2900,15 @@ def _decode(value, typ, field=""):
             raise FInputError("shape", "zero denominator", field)
         return out
     if _is_dataclass(typ):
-        _keys(value, (f.name for f in _fields(typ)), field)
+        versioned = _VERSIONED.get(typ, {})
+        absent = {n for n in versioned if isinstance(value, _Mapping) and n not in value}
+        _keys(value, (f.name for f in _fields(typ) if f.name not in absent), field)
         hints = _typing.get_type_hints(typ)
         values = {}
         for fld in _fields(typ):
+            if fld.name in absent:
+                values[fld.name] = versioned[fld.name]
+                continue
             raw = value[fld.name]
             if typ is Record and fld.name == "body":
                 _keys(raw, ("type", "value"), field + "/body")
@@ -2892,6 +2923,9 @@ def _decode(value, typ, field=""):
                 values[fld.name] = _decode(raw["value"], Unavailable if raw["kind"] == "unavailable" else ImmutableJSON, field + "/value/value")
             else:
                 values[fld.name] = _decode(raw, hints[fld.name], field + "/" + fld.name)
+            if fld.name in versioned and values[fld.name] == versioned[fld.name]:
+                # 旧い値をわざわざ書いた形は正準でない (紙 F-b K35 決定 4)
+                raise FInputError("noncanonical", "versioned field at its old value", field + "/" + fld.name)
         try:
             if issubclass(typ, _FactoryHandle):
                 obj = object.__new__(typ)
@@ -2909,6 +2943,10 @@ def _decode(value, typ, field=""):
 
 
 def _validate_structure(value, field=""):
+    if isinstance(value, DrawPrefix):
+        if type(value.bits) is not int or type(value.length) is not int or value.length < 1 \
+                or not 0 <= value.bits < 1 << value.length:
+            raise FInputError("shape", "prefix bits must be in [0,2^length)", field)
     if isinstance(value, CandidateSet):
         names = tuple(a.id for a in value.candidates)
         _unique(names, field + "/candidates/id", nonempty=True)
@@ -3272,7 +3310,40 @@ def _update_joint(model, belief, *, kernel, outcomes, measurements, transition_k
         joint=tuple(v/mass for v in joint), evidence_mass=belief.evidence_mass*mass, applied=applied)
 
 
+UNIFORM_UNIT = _ContractRef("uniform_unit", "1")
+UNIFORM_BITS = _ContractRef("uniform_bits", "1")   # くじ U の二進の桁をかたまりごとに順に読む法則 (紙 F-b K35 決定 1)
+
+
+def _bits_args(request):
+    """uniform_bits/1 の要求の args {offset, after}。offset は 0 以上の int、after は null か空でない文字列、
+    offset が 0 ⇔ after が null。合わなければ FInputError(shape)。"""
+    args = request.args
+    if not isinstance(args, _Mapping) or set(args) != {"offset", "after"}:
+        raise FInputError("shape", "selection law", "/args")
+    offset, after = args["offset"], args["after"]
+    if type(offset) is not int or offset < 0 or not (after is None or (type(after) is str and after)):
+        raise FInputError("shape", "selection law", "/args")
+    if (offset == 0) != (after is None):
+        raise FInputError("shape", "selection law", "/args/after")
+    return offset, after
+
+
+def _bits_value(value):
+    """uniform_bits/1 の値 {bits, length}: length >= 1 の int、0 <= bits < 2^length の int (bool は数えない)。"""
+    _keys(value, ("bits", "length"))
+    bits, length = value["bits"], value["length"]
+    if type(bits) is not int or type(length) is not int or length < 1 or not 0 <= bits < 1 << length:
+        raise FInputError("shape", "bits must be in [0,2^length)")
+    return bits, length
+
+
 def _draw_id(generator, stream_id, request):
+    if request.law == UNIFORM_BITS:
+        offset, _ = _bits_args(request)
+        # かたまりの位置で決める。after (記録への参照) は入れない (紙 F-b K35 決定 2)
+        return _digest(dict(domain="sui.f.draw/2", generator=generator, stream_id=stream_id,
+            purpose=request.purpose, context_key=request.context_key, ordinal=request.ordinal,
+            law=request.law, offset=offset))
     return _digest(dict(domain="sui.f.draw/1", generator=generator, stream_id=stream_id,
         purpose=request.purpose, context_key=request.context_key, ordinal=request.ordinal))
 
@@ -3280,10 +3351,16 @@ def _draw_id(generator, stream_id, request):
 def _validate_draw(draw):
     if (draw.purpose, draw.context_key, draw.ordinal) != (draw.request.purpose, draw.request.context_key, draw.request.ordinal):
         raise FInputError("shape", "draw/request mismatch")
+    if draw.purpose == "selection" and draw.request.law == UNIFORM_BITS:
+        _bits_args(draw.request)
+        _bits_value(draw.value)
+        if draw.id != _draw_id(draw.generator, draw.stream_id, draw.request):
+            raise FInputError("shape", "draw ID mismatch")
+        return
     if draw.id != _draw_id(draw.generator, draw.stream_id, draw.request):
         raise FInputError("shape", "draw ID mismatch")
     if draw.purpose == "selection":
-        if draw.request.law != _ContractRef("uniform_unit", "1") or draw.request.args != {}:
+        if draw.request.law != UNIFORM_UNIT or draw.request.args != {}:
             raise FInputError("shape", "selection law")
         _keys(draw.value, ("u",))
         u = _decode(draw.value["u"], _Fraction)

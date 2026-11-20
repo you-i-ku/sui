@@ -66,12 +66,12 @@ CANDIDATE_GENERATION = _ContractRef("sui.fb.candidate_generation", "1")
 MODEL_OPERATIONS = _ContractRef("sui.fb.model_operations", "1")
 EVALUATION_PREPARE = _ContractRef("sui.fb.evaluation_prepare", "1")
 EVALUATE_FROM_DRAW = _ContractRef("sui.fb.evaluate_from_draw", "1")
-# 選択のくじの生成器 (§6-10 K34、H4): u = k / 2^N、k は OS の暗号用の乱数から取った N ビットの整数。
-# N (格子の細かさ) はここだけに置き、本体の係 UniformDraw と registry の保証の宣言はここから読む。
-# 別の N が欲しい時は別の生成器 (名前か版) を足して起動の宣言で指す
-OS_UNIFORM_DRAW = _ContractRef("sui.fb.os_uniform_draw", "1")
-OS_UNIFORM_DRAW_BITS = 128
-DRAW_GUARANTEE = _ContractRef("sui.fb.draw_guarantee", "1")   # 生成器の保証の範囲 (H4) の値の契約
+# 選択のくじの生成器 (§6-10 K35、H4): 法則 uniform_bits/1 のくじ U の続きのかたまりを、OS の暗号用の乱数から
+# B ビットずつ返す。B (1 回に読むかたまりの大きさ。目盛りではない) はここだけに置き、本体の係 UniformDraw と
+# registry の保証の宣言はここから読む。別の B が欲しい時は別の生成器 (名前か版) を足して起動の宣言で指す
+OS_UNIFORM_BITS = _ContractRef("sui.fb.os_uniform_bits", "1")
+OS_UNIFORM_BITS_BLOCK = 128
+DRAW_GUARANTEE = _ContractRef("sui.fb.draw_guarantee", "2")   # 生成器の保証の範囲 (H4・K35 決定 11) の値の契約
 
 # finite_update/2 とその周り (§2-5-19、段 3 で新しい registry へ)
 FINITE_UPDATE_2 = _ContractRef("sui.f.finite_update", "2")

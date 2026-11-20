@@ -173,7 +173,7 @@ class InitialProcess:
     更新の導出方法 (δ)。δ は保存済みの事実 (受信・区間の報告・Claim など) をきっかけに更新要求 Q* を
     導く差し替えられる方法 (紙 §6-4、TRACE-02)。契約は `sui.fb.saved_segment_update/1` (§6-10 J1・K2: 火種は
     保存した原報告、結びつき B は要求を作る前提。§2-5-4 の `sui.fb.received_update/1` は受信だけを火種にしていた)。
-    draw は選択用のくじの生成器 (§6-9 H4、法則と args は F-a で既決の uniform_unit/1・{})。
+    draw は選択用のくじの生成器 (§6-9 H4。家の人は法則 uniform_bits/1 でくじの続きのかたまりを頼む、紙 F-b K35)。
     prepare_budget・evaluate_budget は評価の準備と、くじからの評価に実際に渡す計算の上限
     (§6-9 H3)。予算は好み・範囲・費用ではなく、コードの既定値で埋めない。信念の更新には固定の上限の
     欄を置かない (紙 F-b Z41 (a)、Z32 (え))。continuation は採用の後に考え直せる差し替えられる方法
@@ -1256,21 +1256,22 @@ class Evaluator:
 
 
 class UniformDraw:
-    """`FWorkers` の「くじ」の仕事の本体 (紙 F-b §6-10 K34、Z51 ②・H4)。生成器 `sui.fb.os_uniform_draw/1`。
+    """`FWorkers` の「くじ」の仕事の本体 (紙 F-b §6-10 K35・K34、Z51 ②・H4)。生成器 `sui.fb.os_uniform_bits/1`。
 
-    ホストが出した選択のくじの仕事 (`Draw`、`desc.purpose == "selection_draw"`) を受け、u = k / 2^N (k は乱数の源から
-    取った N ビットの整数、N は `fb_contracts.OS_UNIFORM_DRAW_BITS`) を `DrawValue` で 1 回返す。引き直さない。
-    乱数の源は作る時に明示して渡せる (既定は OS の暗号用の乱数 `secrets.randbits`)。生成器の名前が違う・要求が
-    selection の uniform_unit/1・{} でない時は引かずに `DrawFailure` (`rejected`、閉じた語の reason)。源の例外・範囲の
-    外の値は `DrawFailure` (`execution_error`、例外の型の名前だけ)。時計は読まない (`DrawReturned` に読みの欄が無く、
-    読んで捨てない = K34 決定 6。受け取った時刻は家の人が残す)。格子は仮の形 (紙 F-b Z60)。くじの仕事以外を渡されたら
-    TypeError (束ねるのは `WorkerBundle`)。"""
+    ホストが出した選択のくじの仕事 (`Draw`、`desc.purpose == "selection_draw"`) を受け、法則 uniform_bits/1 のくじ U の
+    かたまりとして、乱数の源から B ビットの整数 k (B は `fb_contracts.OS_UNIFORM_BITS_BLOCK`) を取り、
+    `{"bits": k, "length": B}` を `DrawValue` で 1 回返す。続きのかたまりも新しい B ビットを取る (独立公平な
+    ビット列の仮定の下で、それが U の続きのけた)。引き直さない。乱数の源は作る時に明示して渡せる (既定は OS の暗号用の
+    乱数 `secrets.randbits`)。生成器の名前が違う・要求が selection の uniform_bits/1 と args の形 {offset, after} に
+    合わない時は引かずに `DrawFailure` (`rejected`、閉じた語の reason)。源の例外・範囲の外の値は `DrawFailure`
+    (`execution_error`、例外の型の名前だけ)。offset と after は形のほかには読まない。時計は読まない (K34 決定 6)。
+    くじの仕事以外を渡されたら TypeError (束ねるのは `WorkerBundle`)。"""
 
     def __init__(self, *, randbits: "_Callable[[int], int]" = _secrets.randbits) -> None:
         self._randbits = randbits
 
     def run(self, work: "FWork", ctx: FWorkContext) -> None:
-        from fractions import Fraction
+        from . import f as _f
         from . import fb_contracts as _fc
         if not isinstance(work, Draw) or work.desc.purpose != "selection_draw":
             raise TypeError("UniformDraw runs selection_draw works only")
@@ -1279,19 +1280,22 @@ class UniformDraw:
         desc = work.desc
         request = desc.args.request
         outcome, failure = None, None
-        if desc.method != _fc.OS_UNIFORM_DRAW:
+        if desc.method != _fc.OS_UNIFORM_BITS:
             failure = ("rejected", {"reason": "unknown_generator"})
-        elif (request.purpose != "selection" or request.law != ContractRef("uniform_unit", "1")
-              or request.args != {}):
-            failure = ("rejected", {"reason": "unsupported_request"})
         else:
             try:
-                bits = _fc.OS_UNIFORM_DRAW_BITS
+                if request.purpose != "selection" or request.law != _f.UNIFORM_BITS:
+                    raise _f.FInputError("shape", "selection law")
+                _f._bits_args(request)
+            except _f.FInputError:
+                failure = ("rejected", {"reason": "unsupported_request"})
+        if failure is None:
+            try:
+                bits = _fc.OS_UNIFORM_BITS_BLOCK
                 k = self._randbits(bits)
                 if type(k) is not int or not 0 <= k < 1 << bits:
-                    raise ValueError("random source returned a value outside the grid")
-                u = Fraction(k, 1 << bits)
-                outcome = DrawValue(value={"u": [u.numerator, u.denominator]})
+                    raise ValueError("random source returned a value outside the block")
+                outcome = DrawValue(value={"bits": k, "length": bits})
             except Exception as exc:   # 引けない: 値を作らず失敗として返す
                 failure = ("execution_error", {"error_type": type(exc).__name__})
         if failure is not None:

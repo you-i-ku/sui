@@ -77,32 +77,33 @@ def fb_registry_v1() -> FRegistry:
     implementations += (CapabilityImplementation(
         kind="generator", ref=c.MODEL_OPERATIONS, implementation=_ModelOperations(),
         identity="sui.fb.first_loop/1:" + c.MODEL_OPERATIONS.name + "/" + c.MODEL_OPERATIONS.version),)
-    # K34: 選択のくじの生成器 (H4)。実行は本体の係 fb.UniformDraw (能力の呼出しの規約からは呼ばない)。保証の範囲を
-    # conditions に書く (黙って誤選択の確率を足さない)。格子の細かさは fb_contracts の 1 か所から読む
-    declarations += (CapabilityDeclaration(kind="generator", ref=c.OS_UNIFORM_DRAW, args_contract=empty,
+    # K35: 選択のくじの生成器 (H4)。実行は本体の係 fb.UniformDraw (能力の呼出しの規約からは呼ばない)。保証の範囲を
+    # conditions に書く (黙って誤選択の確率を足さない)。1 回に読むビットの数は fb_contracts の 1 か所から読む
+    declarations += (CapabilityDeclaration(kind="generator", ref=c.OS_UNIFORM_BITS, args_contract=empty,
                                            input_contract=c.DRAW_REQUESTED, output_contract=c.DRAW_REPORT,
                                            dependencies=(), conditions=(draw_guarantee(),)),)
     implementations += (CapabilityImplementation(
-        kind="generator", ref=c.OS_UNIFORM_DRAW, implementation=_ExecutedByEntrance(),
-        identity="sui.fb.first_loop/1:" + c.OS_UNIFORM_DRAW.name + "/" + c.OS_UNIFORM_DRAW.version),)
+        kind="generator", ref=c.OS_UNIFORM_BITS, implementation=_ExecutedByEntrance(),
+        identity="sui.fb.first_loop/1:" + c.OS_UNIFORM_BITS.name + "/" + c.OS_UNIFORM_BITS.version),)
     return make_f_registry(declarations=old.declarations + declarations,
                            implementations=old.implementations + implementations)
 
 
 def draw_guarantee() -> ContractValue:
-    """くじの生成器 `sui.fb.os_uniform_draw/1` の保証の範囲 (紙 F-b K34 決定 3、H4)。u = k / 2^N で k は 0 以上 2^N 未満の
-    一様 (OS の暗号用の乱数の源が一様であることを前提に)。ずれの上限は格子化だけの誤差: 各候補の正確な累積の区間
-    I_i = [c_{i-1}, c_i) について |Pr(u ∈ I_i) − q_i| < 2^-N。評価が選び終える率や、選び終えた回に条件づけた選ぶ分布は
-    保証しない。格子は仮の形: q が正でも格子点を含まない区間の候補は選ばれる
-    機会が 0 になりうる (誕生の前に無くす、紙 F-b Z60)。"""
-    bits = _c().OS_UNIFORM_DRAW_BITS
+    """くじの生成器 `sui.fb.os_uniform_bits/1` の保証の範囲 (紙 F-b K35 決定 11、H4、Z60-a)。法則 uniform_bits/1 の
+    くじ U の続きのかたまりを、OS の暗号用の乱数から B ビットずつ返す。選び方は区間全体の認証で、固定のけた数で
+    候補を外さない。実際の OS について保証しないこと・止まり方は別に書く (「ゼロだと分かった」とは書かない)。"""
     return ContractValue(contract=_c().DRAW_GUARANTEE, value={
-        "law": {"name": "uniform_unit", "version": "1"}, "source": "os_cryptographic_random",
-        "grid_bits": bits, "value": "u = k / 2^grid_bits, k uniform on 0 <= k < 2^grid_bits",
-        "selection_deviation_below": [1, 2 ** bits],
-        "deviation_is": "grid error only: |Pr(u in I_i) - q_i| for the exact cumulative interval I_i of each candidate; "
-                        "not the evaluator's completion rate nor the selection distribution conditioned on completion",
-        "provisional": "a candidate with positive q whose interval contains no grid point has zero chance"})
+        "law": {"name": "uniform_bits", "version": "1"}, "source": "os_cryptographic_random",
+        "block_bits": _c().OS_UNIFORM_BITS_BLOCK,
+        "selection": "when the requested bits are independent fair bits given the past and the fixed problem and the "
+                     "required certified enclosures converge, candidate i is selected with probability q_i; no "
+                     "candidate is excluded by a fixed finite number of digits",
+        "not_guaranteed": "for the actual operating system source: an independent fair infinite sequence, that each "
+                          "individual candidate can occur, agreement of very small probabilities, or a numeric bound "
+                          "on probability deviation caused by the operating system",
+        "completion": "rates of stopping, failure and NoDecision, and the selection distribution conditioned on "
+                      "completion, are separate and not stated here"})
 
 
 class _ModelOperations:
