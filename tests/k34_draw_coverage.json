@@ -1,0 +1,636 @@
+{
+  "problem": "K34",
+  "request": 77,
+  "base_master": "dfdc88c",
+  "specification": {
+    "path": "specs/関所F_Fb_今の約束.md",
+    "read_scope": "Request 75 read K34 line 3560, body 4791-4875 and Z60 line 3803 in full (before K34-a); request 76 read K34-a line 3561 in full and updated public API section 4834-4838.",
+    "acceptance_lines": [
+      4830
+    ],
+    "scene_lines": [
+      4858,
+      4859,
+      4860,
+      4861,
+      4862,
+      4863,
+      4864,
+      4865,
+      4866,
+      4867,
+      4868,
+      4869,
+      4870,
+      4871,
+      4872
+    ],
+    "answer_lines": [
+      3561
+    ]
+  },
+  "read_boundary": "仕様・公開の宣言/署名/docstring・既存の試験の足場だけから作成。実装の関数本文・非公開の欄・内部カウンタは調査しない。",
+  "coverage_rows": [
+    {
+      "condition": "acceptance.native_once",
+      "paper_lines": [
+        4830
+      ],
+      "tests": [
+        "T01",
+        "T04",
+        "T11",
+        "T12",
+        "T17",
+        "T19"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "acceptance.reject_and_fail_without_redraw",
+      "paper_lines": [
+        4830
+      ],
+      "tests": [
+        "T05",
+        "T06",
+        "T07",
+        "T10",
+        "T11",
+        "T18"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "acceptance.published_guarantee_and_one_N",
+      "paper_lines": [
+        4830
+      ],
+      "tests": [
+        "T02",
+        "T03",
+        "T13",
+        "T15",
+        "T16"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests",
+      "resolved_by": "K34-a:3561; public value/sole condition and central-N field values are directly checked. Explanation wording is not fixed."
+    },
+    {
+      "condition": "scene01.value_DF_evaluation",
+      "paper_lines": [
+        4858
+      ],
+      "tests": [
+        "T04",
+        "T17",
+        "T19"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene02.exact_source_and_range",
+      "paper_lines": [
+        4859
+      ],
+      "tests": [
+        "T04",
+        "T05"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene03.reject_request_before_drawing",
+      "paper_lines": [
+        4860
+      ],
+      "tests": [
+        "T06"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene04.source_exceptions",
+      "paper_lines": [
+        4861
+      ],
+      "tests": [
+        "T07"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene05.no_clocks",
+      "paper_lines": [
+        4862
+      ],
+      "tests": [
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T11"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene06.default_OS_observer",
+      "paper_lines": [
+        4863
+      ],
+      "tests": [
+        "T14"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene07.no_reader_or_prepared",
+      "paper_lines": [
+        4864
+      ],
+      "tests": [
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T11"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene08.host_failure_no_retry",
+      "paper_lines": [
+        4865
+      ],
+      "tests": [
+        "T18"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene09.injected_value_and_choice",
+      "paper_lines": [
+        4866
+      ],
+      "tests": [
+        "T17",
+        "T19"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene10.published_scope_provisional_and_grid_bound",
+      "paper_lines": [
+        4867
+      ],
+      "tests": [
+        "T03",
+        "T13",
+        "T15",
+        "T16"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests",
+      "resolved_by": "K34-a:3561; public value/sole condition and central-N field values are directly checked. Explanation wording is not fixed."
+    },
+    {
+      "condition": "scene11.type_admission_post",
+      "paper_lines": [
+        4868
+      ],
+      "tests": [
+        "T08",
+        "T09",
+        "T10",
+        "T11"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene12.one_post_no_retry",
+      "paper_lines": [
+        4869
+      ],
+      "tests": [
+        "T04",
+        "T05",
+        "T06",
+        "T07",
+        "T11",
+        "T18"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene13.two_current_jobs",
+      "paper_lines": [
+        4870
+      ],
+      "tests": [
+        "T12"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "scene14.registry_same_N",
+      "paper_lines": [
+        4871
+      ],
+      "tests": [
+        "T02",
+        "T03",
+        "T13",
+        "T15"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests",
+      "resolved_by": "K34-a:3561; public value/sole condition and central-N field values are directly checked. Explanation wording is not fixed."
+    },
+    {
+      "condition": "scene15.all_native_main_loop",
+      "paper_lines": [
+        4872
+      ],
+      "tests": [
+        "T19"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "unchanged01.host_draw_flow",
+      "paper_lines": [
+        4841
+      ],
+      "tests": [
+        "T17",
+        "T18",
+        "T19"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "unchanged02.F_a_draw_validation",
+      "paper_lines": [
+        4842
+      ],
+      "tests": [
+        "T17",
+        "T19"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    },
+    {
+      "condition": "unchanged03.scripted_quarter",
+      "paper_lines": [
+        4843
+      ],
+      "tests": [],
+      "coverage": "Existing test worker and scripted generator retained unchanged. The main new rig replaces its bundle slot and Boot method explicitly.",
+      "existing_tests": [
+        {
+          "path": "tests/test_fb_stage2.py",
+          "line": 272,
+          "name": "Workers.normal(selection_draw)"
+        },
+        {
+          "path": "tests/test_fb_evaluator.py",
+          "line": 599,
+          "name": "test_eval1_main_loop_native_measure_update_candidates_prepare_evaluate_and_three_choices"
+        }
+      ]
+    },
+    {
+      "condition": "unchanged04.other_workers_bundle_ports",
+      "paper_lines": [
+        4844
+      ],
+      "tests": [
+        "T08",
+        "T09",
+        "T10",
+        "T19"
+      ],
+      "coverage": "written against public APIs; runtime records are outside tests"
+    }
+  ],
+  "test_inventory": [
+    {
+      "id": "T01",
+      "file": "tests/test_fb_draw.py",
+      "line": 163,
+      "name": "test_draw1_public_constructor_run_and_exports",
+      "checks": "No-argument/default source and keyword-only randbits constructor; run(work,ctx); public export.",
+      "cases": 1,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T02",
+      "file": "tests/test_fb_draw.py",
+      "line": 173,
+      "name": "test_draw1_public_generator_bits_and_guarantee_contracts",
+      "checks": "Generator and guarantee ContractRefs, exact integer N=128.",
+      "cases": 1,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T03",
+      "file": "tests/test_fb_draw.py",
+      "line": 180,
+      "name": "test_draw1_public_guarantee_value_matches_the_seven_field_contract",
+      "checks": "Public draw_guarantee() returns ContractValue with seven exact keys, four fixed values/types, and three nonempty strings without fixed wording.",
+      "cases": 1,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T04",
+      "file": "tests/test_fb_draw.py",
+      "line": 187,
+      "name": "test_draw1_exact_reduced_grid_value_uses_one_source_call",
+      "checks": "Seven exact grid values, including endpoints and reduction, with one source call of N bits.",
+      "cases": 7,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T05",
+      "file": "tests/test_fb_draw.py",
+      "line": 198,
+      "name": "test_draw1_out_of_range_integer_is_execution_failure_without_retry",
+      "checks": "Three out-of-range integers fail execution without retry; exception class name only, not an invented class.",
+      "cases": 3,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T06",
+      "file": "tests/test_fb_draw.py",
+      "line": 207,
+      "name": "test_draw1_rejection_does_not_consume_source_or_read_port_dependencies",
+      "checks": "Generator name/version and request purpose/law name/version/args rejected independently, no randomness or dependencies.",
+      "cases": 6,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T07",
+      "file": "tests/test_fb_draw.py",
+      "line": 234,
+      "name": "test_draw1_source_exception_is_exact_execution_failure_without_retry",
+      "checks": "Six exception classes become exact execution_error/error_type; no open reason/field/text; readings empty.",
+      "cases": 6,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T08",
+      "file": "tests/test_fb_draw.py",
+      "line": 242,
+      "name": "test_draw1_wrong_work_purpose_is_type_error_before_enter",
+      "checks": "All five wrong work purposes are rejected with TypeError before enter.",
+      "cases": 5,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T09",
+      "file": "tests/test_fb_draw.py",
+      "line": 250,
+      "name": "test_draw1_non_draw_is_type_error_before_enter",
+      "checks": "Compute/object are not Draw; TypeError before enter.",
+      "cases": 2,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T10",
+      "file": "tests/test_fb_draw.py",
+      "line": 257,
+      "name": "test_draw1_false_admission_has_no_source_or_other_port_operation",
+      "checks": "False admission touches nothing except enter.",
+      "cases": 1,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T11",
+      "file": "tests/test_fb_draw.py",
+      "line": 264,
+      "name": "test_draw1_post_failure_escapes_and_no_second_post_or_draw_occurs",
+      "checks": "Post error escapes on value/rejection/execution-error paths; one post and no second source call.",
+      "cases": 3,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T12",
+      "file": "tests/test_fb_draw.py",
+      "line": 275,
+      "name": "test_draw1_same_worker_uses_two_current_jobs_and_two_fresh_values",
+      "checks": "One worker, two different jobs and source values, no reuse.",
+      "cases": 1,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T13",
+      "file": "tests/test_fb_draw.py",
+      "line": 286,
+      "name": "test_draw1_registry_declares_one_generator_and_one_guarantee_condition",
+      "checks": "One generator declaration and implementation; empty args; conditions exactly (draw_guarantee(),); both values validated including strict integer types.",
+      "cases": 1,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T14",
+      "file": "tests/test_fb_draw.py",
+      "line": 367,
+      "name": "test_draw1_default_source_calls_public_secrets_randbits_once_with_N",
+      "checks": "Fresh import observes public secrets.randbits called once with N, without statistical assertions. Shared isolated fixture also validates the public guarantee and the sole matching registry condition. Request 77: child imports the same source tree as the parent without requiring an inherited PYTHONPATH.",
+      "cases": 1,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T15",
+      "file": "tests/test_fb_draw.py",
+      "line": 374,
+      "name": "test_draw1_changing_the_single_public_N_changes_worker_and_registry_declaration",
+      "checks": "N=2/3 changes worker values, declaration and registry_key; directly check public guarantee grid_bits/bound and exact sole-condition equality at each N. Request 77: child imports the same source tree as the parent without requiring an inherited PYTHONPATH.",
+      "cases": 1,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T16",
+      "file": "tests/test_fb_draw.py",
+      "line": 397,
+      "name": "test_draw1_small_actual_grid_obeys_strict_interval_error_bound_and_can_miss_a_positive_cell",
+      "checks": "Actual native small grids at N=2/3: exhaustive exact interval counts/strict error bound, plus a positive last cell with zero grid points. Shared isolated fixture also validates the public guarantee and the sole matching registry condition. Request 77: child imports the same source tree as the parent without requiring an inherited PYTHONPATH.",
+      "cases": 2,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T17",
+      "file": "tests/test_fb_draw.py",
+      "line": 466,
+      "name": "test_draw1_host_saves_native_draw_fact_and_selects_the_determined_candidate",
+      "checks": "Real host DF/terminal/evaluation/selection for injected u=1/4 or 3/4 (Q/M).",
+      "cases": 2,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T18",
+      "file": "tests/test_fb_draw.py",
+      "line": 480,
+      "name": "test_draw1_host_persists_failure_without_draw_fact_evaluation_or_retry",
+      "checks": "Real Boot generator mismatch or source exception becomes terminal failure and work knowledge=failure; no DF/evaluation/retry.",
+      "cases": 2,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    },
+    {
+      "id": "T19",
+      "file": "tests/test_fb_draw.py",
+      "line": 538,
+      "name": "test_draw1_main_loop_uses_all_six_native_workers_and_preserves_the_adoption",
+      "checks": "Native M/U/Cg/Ep/D/Ee main loop and one T adoption: injected 1/4 is Q; default OS is not assigned a particular candidate.",
+      "cases": 2,
+      "target": "public native K34 API; missing-name guard executes inside case"
+    }
+  ],
+  "cg": [],
+  "limitations": [
+    "本体K34は無い版。名前の確認より後ろの本体assertは未到達。試験側の係による足場点検は本体の合格に数えない。",
+    "既定のsecrets.randbitsは、新しいPythonプロセスで公開関数をimport前に差し替えて観測する。実際のOS源の一様性を統計で検証しない。",
+    "小さいNは公開定数を隔離プロセス内で変えてから係とregistryをimportする。正当なimport時の別名束縛も許す。srcを書き換えない。",
+    "既定のOS源の主な道では選択する候補を固定しない。K34が評価の完了率を保証しないため、正規のNoDecisionは成功のふりをせず区別する。注入した1/4では値と候補Qを固定する。",
+    "S4やF-aの古いgoldenを、新しいfb_registryのキーに合わせて書き換えない。",
+    "全試験・除外された模型ファイル・K33の重い3ケースは実行しない。"
+  ],
+  "registry_migration_audit": {
+    "assertions": "AST scan of tests/*.py found no assertion containing registry_key and a literal 64-hex SHA-256 expectation.",
+    "golden_json": [
+      {
+        "path": "tests/golden_s4b1a.json",
+        "registry_key_fields": 0
+      },
+      {
+        "path": "tests/golden_s4b1b.json",
+        "registry_key_fields": 0
+      },
+      {
+        "path": "tests/golden_s4b1c.json",
+        "registry_key_fields": 0
+      },
+      {
+        "path": "tests/golden_s4b2.json",
+        "registry_key_fields": 0
+      },
+      {
+        "path": "tests/golden_s4b_action.json",
+        "registry_key_fields": 0
+      }
+    ],
+    "runtime_keys": [
+      {
+        "path": "tests/test_fb_stage2.py",
+        "line": 80,
+        "role": "registry() extends the current fb_registry_v1; no fixed key"
+      },
+      {
+        "path": "tests/test_fb_update_entry.py",
+        "line": 196,
+        "role": "expected key is computed from builtin_f_registry, not fb_registry_v1"
+      }
+    ],
+    "changed_public_names": [
+      {
+        "path": "tests/test_fb_skeleton.py",
+        "line": 872,
+        "change": "UniformDraw added to fb.__all__ expectation"
+      },
+      {
+        "path": "tests/test_fb_skeleton.py",
+        "line": 877,
+        "change": "draw_guarantee added to f_update2.__all__ expectation"
+      }
+    ],
+    "migration": "No golden/key replacement required in the inspected scope. Keep legacy S4/builtin_f_registry expectations and computed-key comparisons.",
+    "named_hash_constants": "No registry_key assertion uses a module constant holding a literal 64-hex SHA-256 in tests/*.py."
+  },
+  "execution_record": "scratchpad/sui0206/bt_tests77/k34_child_process_results.json",
+  "fixture_qualification_record": "scratchpad/sui0206/bt_tests75/k34_fixture_qualification.json",
+  "session_log": {
+    "vault": "今回の書込み許可はwork34/testsだけ。Vault/Heat.mdは未反映。作業記録はこの対応表に置く。",
+    "reused_knowledge": "K30〜K33の公開口を観測する足場・主な輪のrig、Projects/sui.mdのmaster dfdc88cの現在地を再利用。",
+    "other_agent_communication": "別のAIへの通信は実施していない。依頼文や他担当の報告を承認として扱わない。",
+    "codex_session_id": "01a1aeda-b48f-7622-9bbf-6084d8289457",
+    "skill": "C:/Users/you11/.codex/skills/yuu-gut-check/SKILL.md; gut book v0.43 read in full (tool-truncated ranges reread). Self-check types 1 and 6 only, not two delegated persona approvals."
+  },
+  "fixture_corrections": [
+    "The contract() test helper accepts only name; the law-version case now uses dataclasses.replace.",
+    "TerminalKind is value, while the tagged returned value is draw_value (paper 2301/2215).",
+    "Request 75, before K34-a: one matching guarantee condition was checked without forbidding other conditions. Superseded in request 76: K34-a requires exactly the one public guarantee ContractValue.",
+    "Draw failure is observed in FStatus.works[].knowledge, not assumed to be a reading failure.",
+    "registry_view_key is not a public f API. The isolated fixture reads environment.registry_key from a genuine public FMathArtifact instead; no private import is used."
+  ],
+  "source_audit": {
+    "base": "dfdc88c",
+    "tracked_files": 71,
+    "normalized_differences": [],
+    "preexisting_EOL_only_files": 24
+  },
+  "previous_execution_record": "scratchpad/sui0206/bt_tests75/k34_results.json",
+  "request_history": [
+    75,
+    76,
+    77
+  ],
+  "closed_cg": [
+    {
+      "id": "CG-K34-GUARANTEE-SHAPE",
+      "evidence": "紙4817・4833〜4836・4865・4869。意味は列挙されているが、保証JSONの欄名・型とdraw_guarantee()の返り値の形は未記載。現在の写しにも新しい公開宣言は無い。",
+      "question": "draw_guarantee()の返り値の型と、保証JSONの欄名・型を正本で指定してください。法則・源・格子・N・誤差の厳密な上限と適用範囲/前提・保証しない量・仮の形・正の区間でも選ばれる機会が0になりうる点を、どの欄で読むかが必要です。",
+      "unwritten_assertions": [
+        "draw_guarantee()の返り値とregistry conditionsの保証値の直接照合",
+        "公表されたNがOS_UNIFORM_DRAW_BITSと一致すること",
+        "公表された誤差が各候補の正確な区間の格子化誤差だけについて厳密に2^-N未満であること",
+        "源の一様性の前提、評価の完了率/選択済みの条件付き分布の除外、仮の形とZ60の損失が宣言に残ること"
+      ],
+      "independent_work_done": "係の値、公開関数の存在/署名、conditionsの契約、Nを変えた時の係/宣言/registry_keyの変化、小さい実格子の全数え上げは試験を記述済み。これらを保証JSONの意味の検査の代用にしない。",
+      "gut_check": "yuu-gut-checkの型1・6で自己点検。公開形の不足の確認だけを求め、Z60を問い直したり、試験側の都合でJSON形式を本体へ固定したりしない。",
+      "status": "closed by K34-a at paper line 3561",
+      "resolution": "ContractValue; exactly seven named fields; law/source/grid_bits/selection_deviation_below exact; three explanation fields nonempty strings only; sole registry condition equals this public value."
+    }
+  ],
+  "predicate_qualification_record": "scratchpad/sui0206/bt_tests76/k34_guarantee_predicate_qualification.json",
+  "revision_76": {
+    "answer": "K34-a line 3561 read in full; public API now explicitly includes draw_guarantee().",
+    "changed_tests": [
+      "T03",
+      "T13",
+      "T15",
+      "shared isolated fixture used by T14/T16"
+    ],
+    "exact_fields": [
+      "law",
+      "source",
+      "grid_bits",
+      "value",
+      "selection_deviation_below",
+      "deviation_is",
+      "provisional"
+    ],
+    "text_policy": "Only nonempty strings are required for value/deviation_is/provisional; no wording or keyword expectations.",
+    "integer_policy": "Strict integer checks avoid treating JSON true as 1, on both the public value and registry condition.",
+    "active_cg_count": 0,
+    "session_id": "01a1aeda-b48f-7622-9bbf-6084d8289457",
+    "vault": "Not written: explicit write scope is work34/tests only. This coverage file holds the work record."
+  },
+  "previous_execution_records": {
+    "75": "scratchpad/sui0206/bt_tests75/k34_results.json",
+    "76": "scratchpad/sui0206/bt_tests76/k34_results.json"
+  },
+  "revision_77": {
+    "change": "run_isolated_python copies the environment and prepends the src root derived from the already imported fb.__file__ to the child PYTHONPATH. The parent environment is unchanged.",
+    "helper_line": 300,
+    "consumer_line": 312,
+    "changed_cases": [
+      "T14 (1 case)",
+      "T15 (1 case)",
+      "T16 (2 cases)"
+    ],
+    "native_result": "4 failed / 44 deselected, exclusively K34 public API missing: fb.UniformDraw; parent PYTHONPATH absent.",
+    "child_import_qualification": "Passed with parent PYTHONPATH absent: f, fb, fb_contracts and f_update2 are imported from precisely the same files in the child and parent.",
+    "qualification_limit": "Full child native draw behavior remains unexecuted because K34 is absent. The import smoke calls the same child launch helper without bypassing or replacing any production API.",
+    "coverage_change": "No semantic coverage row changed; T14/T15/T16 retain their mapping. No active CG.",
+    "processes": "All pytest and child Python invocations completed; subprocess.run uses its existing 30-second timeout.",
+    "vault": "Not written: explicit write scope is work34/tests only. This coverage file holds the work record."
+  }
+}

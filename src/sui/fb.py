@@ -7,6 +7,7 @@
 は意味を変えずに使い回す。
 """
 
+import secrets as _secrets
 from collections.abc import Callable as _Callable, Mapping as _Mapping
 from dataclasses import dataclass as _dataclass
 from fractions import Fraction as _Fraction
@@ -42,7 +43,7 @@ __all__ = [
     "Unsaved", "Held", "StatusBasis", "SlotStatus", "ReceiptStatus", "WorkStatus",
     "ReadingStatus", "PendingStatus", "CellStatus", "SegmentStatus",
     "PurposeStatus", "BeliefUpdateStatus", "FStatus", "FWorkContext", "FWorkers", "LaunchResult", "FLauncher", "FWindow",
-    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "Evaluator", "WorkerBundle",
+    "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "Evaluator", "UniformDraw", "WorkerBundle",
     "AcquisitionControl", "AcquisitionObservationModel", "AcquisitionReadItem", "AcquisitionReadResult",
     "read_acquisition_sequence",
 ]
@@ -1252,3 +1253,48 @@ class Evaluator:
         if prepared is None:
             raise RuntimeError("this work port has no prepared artifact")
         return _ff.evaluate_f_from_draw(prepared, desc.args.draw, reader=reader, budget=desc.args.budget)
+
+
+class UniformDraw:
+    """`FWorkers` の「くじ」の仕事の本体 (紙 F-b §6-10 K34、Z51 ②・H4)。生成器 `sui.fb.os_uniform_draw/1`。
+
+    ホストが出した選択のくじの仕事 (`Draw`、`desc.purpose == "selection_draw"`) を受け、u = k / 2^N (k は乱数の源から
+    取った N ビットの整数、N は `fb_contracts.OS_UNIFORM_DRAW_BITS`) を `DrawValue` で 1 回返す。引き直さない。
+    乱数の源は作る時に明示して渡せる (既定は OS の暗号用の乱数 `secrets.randbits`)。生成器の名前が違う・要求が
+    selection の uniform_unit/1・{} でない時は引かずに `DrawFailure` (`rejected`、閉じた語の reason)。源の例外・範囲の
+    外の値は `DrawFailure` (`execution_error`、例外の型の名前だけ)。時計は読まない (`DrawReturned` に読みの欄が無く、
+    読んで捨てない = K34 決定 6。受け取った時刻は家の人が残す)。格子は仮の形 (紙 F-b Z60)。くじの仕事以外を渡されたら
+    TypeError (束ねるのは `WorkerBundle`)。"""
+
+    def __init__(self, *, randbits: "_Callable[[int], int]" = _secrets.randbits) -> None:
+        self._randbits = randbits
+
+    def run(self, work: "FWork", ctx: FWorkContext) -> None:
+        from fractions import Fraction
+        from . import fb_contracts as _fc
+        if not isinstance(work, Draw) or work.desc.purpose != "selection_draw":
+            raise TypeError("UniformDraw runs selection_draw works only")
+        if not ctx.enter():
+            return
+        desc = work.desc
+        request = desc.args.request
+        outcome, failure = None, None
+        if desc.method != _fc.OS_UNIFORM_DRAW:
+            failure = ("rejected", {"reason": "unknown_generator"})
+        elif (request.purpose != "selection" or request.law != ContractRef("uniform_unit", "1")
+              or request.args != {}):
+            failure = ("rejected", {"reason": "unsupported_request"})
+        else:
+            try:
+                bits = _fc.OS_UNIFORM_DRAW_BITS
+                k = self._randbits(bits)
+                if type(k) is not int or not 0 <= k < 1 << bits:
+                    raise ValueError("random source returned a value outside the grid")
+                u = Fraction(k, 1 << bits)
+                outcome = DrawValue(value={"u": [u.numerator, u.denominator]})
+            except Exception as exc:   # 引けない: 値を作らず失敗として返す
+                failure = ("execution_error", {"error_type": type(exc).__name__})
+        if failure is not None:
+            outcome = DrawFailure(failure=FailureInfo(failure_kind=failure[0], content=failure[1],
+                                                      readings=(), basis=()))
+        ctx.post(DrawReturned(work=desc.work_id, outcome=outcome))

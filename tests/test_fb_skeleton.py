@@ -869,12 +869,12 @@ FA_ALIAS_SPEC = {
 def test_public_export_names_are_exact():
     expected = set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
         "FbInputError", "FbHostFault", "FHalted", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost",
-        "FSource", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "Evaluator", "WorkerBundle", "read_acquisition_sequence", "BeliefUpdateStatus"}
+        "FSource", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "Evaluator", "UniformDraw", "WorkerBundle", "read_acquisition_sequence", "BeliefUpdateStatus"}
     missing = expected - set(fb.__all__)
     assert not missing, "public export names missing: " + ", ".join(sorted(missing))
     assert set(fb.__all__) == expected
     assert set(u2.__all__) == set(UPDATE_FIELD_SPEC) | set(UPDATE_ALIAS_SPEC) | {
-        "fb_registry_v1", "compute_finite_update", "update_response"}
+        "fb_registry_v1", "compute_finite_update", "update_response", "draw_guarantee"}
 
 
 def declaration_names(surface=fb, *, group="fb"):
