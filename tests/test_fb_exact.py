@@ -499,8 +499,8 @@ class ExactHostRig(Stage2Rig):
             RefKind.PREDICTION, Role.MODEL)
         self.model_point = self.ledger.append(record, ()).cid
         self.boot_input = replace(self.boot_input, declaration=replace(self.boot_input.declaration,
-            initial=replace(self.boot_input.declaration.initial,
-                value=replace(initial, model=self.model_point))))
+            perception=replace(self.boot_input.declaration.perception,
+                value=replace(self.boot_input.declaration.perception.value, model=self.model_point))))
         rig = self
         class EvalPort(fb.FWorkContext):
             def __init__(self, delegate, work): self.delegate, self.work = delegate, work
@@ -509,6 +509,7 @@ class ExactHostRig(Stage2Rig):
             def read(self, point): return self.delegate.read(point)
             def reader(self): return self.delegate.reader()
             def prepared(self): return self.delegate.prepared()
+            def perform(self, execution): return self.delegate.perform(execution)
             def evidence(self): return self.delegate.evidence()
             def acquire(self): return self.delegate.acquire()
             def monitored(self, interval): return self.delegate.monitored(interval)
@@ -525,6 +526,7 @@ class ExactHostRig(Stage2Rig):
             def __init__(self): self.worker = fb.Evaluator()
             def run(self, work, ctx): return self.worker.run(work, EvalPort(ctx, work))
         workers = {stage: self.workers for stage in (*ORDER, "measure_segment", "belief_update")}
+        workers["execute_step"] = fb.StepExecutor()
         self.draw_probe = HostDrawProbe(self, self.native_draw)
         workers["selection_draw"] = self.draw_probe
         self.evaluation_delegate = Evaluation()

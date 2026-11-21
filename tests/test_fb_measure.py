@@ -26,7 +26,7 @@ from sui import f, fb, fb_contracts as c, f_update2 as u
 from sui.ids import Ref, RefKind
 from sui.records import Payload, Prediction, Role
 from gate_f_facts_cases import finite_world, plain
-from test_fb_skeleton import boot, contract, source, require_boot_v3
+from test_fb_skeleton import boot, contract, source, require_boot_v5
 from test_fb_stage1 import RealRig, wire
 from test_fb_stage2 import PREPARE_BUDGET, EVALUATE_BUDGET, LaunchCut, Workers as Stage2Workers
 from test_fb_loop import LoopRig, registry, delta_args, execution_for, CLOCK_SOURCE
@@ -38,7 +38,7 @@ CLAIMS = {"sender_time_ns": -900, "nested": {"text": "unclassified", "values": [
 
 
 def acquire1_api():
-    require_boot_v3()
+    require_boot_v5()
     missing = [name for owner, names in (
         (fb, ("FSource", "SourceItem", "Acquisition", "SourceMeasurer")),
         (fb.FWorkContext, ("now", "acquire")), (u, ("SourceObservation",)),
@@ -155,6 +155,7 @@ class AcquirePort(fb.FWorkContext):
 
     def prepared(self):
         return self.delegate.prepared()
+    def perform(self, execution): return self.delegate.perform(execution)
 
     def post(self, event, issued=None):
         self.rig.worker_posts.append((self.work.desc.work_id, event))
@@ -291,13 +292,10 @@ class AcquireRig(LoopRig):
             RefKind.PREDICTION, Role.MODEL)
         self.model_point = self.ledger.append(model, ()).cid
         event = boot(True)
-        initial = replace(event.declaration.initial.value, model=self.model_point,
-            generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}),
-            method=fb.MethodCall(contract=contract("sui.f.finite_evaluation"), args={}),
-            draw=fb.MethodCall(contract=contract("stage2.scripted_draw"), args={}),
-            prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET,
-            derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
-                contract=c.SAVED_SEGMENT_UPDATE, args=delta_args())), continuation=None)
+        event = replace(event, declaration=replace(event.declaration, perception=replace(
+            event.declaration.perception, value=replace(event.declaration.perception.value,
+                model=self.model_point, derivation=fb.SlottedMethod(slot='delta', method=fb.MethodCall(contract=c.SAVED_SEGMENT_UPDATE, args=delta_args()))))))
+        initial = replace(event.declaration.initial.value, generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}), method=fb.MethodCall(contract=contract('sui.f.finite_evaluation'), args={}), draw=fb.MethodCall(contract=contract('stage2.scripted_draw'), args={}), prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET, continuation=None)
         first = event.declaration.routes[0]
         first = replace(first, value=replace(first.value, config=replace(first.value.config,
             sampling_contract=c.ACQUISITION_RESULT_SAMPLING, clock_contract=contract("sui.f.simulated_clock"))))

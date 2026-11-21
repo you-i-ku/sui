@@ -93,6 +93,7 @@ class AdmissionPort(fb.FWorkContext):
     def evidence(self): return self.delegate.evidence()
     def reader(self): return self.delegate.reader()
     def prepared(self): return self.delegate.prepared()
+    def perform(self, execution): return self.delegate.perform(execution)
     def now(self): return self.delegate.now()
     def post(self, event, issued=None):
         result = self.delegate.post(event, issued=issued)

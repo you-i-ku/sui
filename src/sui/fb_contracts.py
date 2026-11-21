@@ -13,13 +13,22 @@ RESOURCE_SCOPE = _ContractRef("sui.fb.resource_scope", "1")
 ALLOCATION = _ContractRef("sui.fb.allocation", "1")
 # /2 (§6-10 K27 新しい決定 2): 取りに行き方の欄 repeat を足した (旧 /1 は片付けた、Z37)
 BOOTSTRAP_ROUTE = _ContractRef("sui.fb.bootstrap_route", "2")
-INITIAL_PROCESS = _ContractRef("sui.fb.initial_process", "1")
+# /2 (§6-10 K36 新しい決定 2): 感じる側 (モデル・読み手・δ・過程の席・割当) を PERCEPTION へ出し、perception_slot で
+# 参照する (旧 /1 は片付けた、Z37)
+INITIAL_PROCESS = _ContractRef("sui.fb.initial_process", "2")
+PERCEPTION = _ContractRef("sui.fb.perception", "1")
+# 行う一歩の宣言 (§6-10 K36 決定 3・5・12): 相手・宣言した無作用・観測セル・重なりの宣言。起動の時に独立した記録にする
+# /2 (§6-10 K36-c ①・K36-c-a ④ (a)): 行う割当 allocation (Allocation) を足した。旧 /1 は片付けた
+EXECUTION_DECLARATION = _ContractRef("sui.fb.execution_declaration", "2")
 ENVIRONMENT = _ContractRef("sui.fb.environment", "1")
 # δ の契約 (§2-5-4)。v0.25 §6-4 で火種を受信だけから保存済みの事実へ広げ、段 3 で `received_update/1` から
 # 置き換えた (§6-10 J1・K2: 火種は保存した原報告、結びつき B は要求を作る前提)
 SAVED_SEGMENT_UPDATE = _ContractRef("sui.fb.saved_segment_update", "1")
-# 採用の後に考え直す最初の方法 (§6-10 J6・K1・K10)
-REUSE_CANDIDATES = _ContractRef("sui.fb.reuse_candidates", "1")
+# 採用の後に考え直す最初の方法 (§6-10 J6・K1)。/3 (§6-10 K36-c・Z62): 採用ごとに考えを作らない。まだ評価に渡していない
+# 採用があり、考える割当に空きがある時だけ新しい評価の活動を 1 本入場させ、その時の最新の採用を根にして最初の過程の候補を
+# 使い回して比べ直す (席がふさがっている間の採用は次の評価がまとめて読む)。始めた評価は止めない。人が置く最初の配り方で、
+# 差し替えの口 (P9)。どの時点の頭で考えるかを sui が G で選ぶ形に替えるのは F-c (W-39)。旧 /1・/2 は片付けた
+REUSE_CANDIDATES = _ContractRef("sui.fb.reuse_candidates", "3")
 # Need の呼出しの構造契約 (FBS0-R02)。入力 NEED_INPUT = {"work": Desc の正準 JSON, "scope": ResourceScope の
 # 正準 JSON}。出力 QUANTITY_VALUE = QuantityValue の正準 JSON {"contract": 量の契約, "value": その契約の値}
 # (この版の量の契約は SEATS = 非負整数一つで、SEATS 自身の意味は変えない)。F-a の能力の呼出しの構造検査が
@@ -33,10 +42,13 @@ RECEIVED = _ContractRef("sui.fb.received", "1")
 CLOCK_NOTICE = _ContractRef("sui.fb.clock_notice", "1")
 # /2 (§6-10 K26-a (ア)): 型のついた欄 observation_models を足した。/3 (K27): 中の bootstrap_route が /2 に
 # なった (旧版は片付けた、Z37)
-BOOT_DECLARATION = _ContractRef("sui.fb.boot_declaration", "3")
+# /4 (§6-10 K36): perception (感じる側) と execution (行う一歩の宣言) の欄を足し、initial が /2 になった
+# /5 (§6-10 K36-c-a ④ (a)): 中の execution が /2 (行う割当) になった。旧 /4 は片付けた
+BOOT_DECLARATION = _ContractRef("sui.fb.boot_declaration", "5")
 SEGMENT_REPORT = _ContractRef("sui.fb.segment_report", "1")
 WORK_REPORT = _ContractRef("sui.fb.work_report", "1")
 DRAW_REPORT = _ContractRef("sui.fb.draw_report", "1")
+EXECUTION_RESULT = _ContractRef("sui.fb.execution_result", "1")   # 家の人が残す行った一歩の結果 (K36、Z55)
 
 # sui の要求・選択・採用の確定 (Decided / MODEL / FACT)
 # /2 (§6-10 K27): 測る仕事の要求の args に route から写した取りに行き方 repeat を足した (旧 /1 は片付けた)
@@ -48,6 +60,10 @@ DRAW_REQUESTED = _ContractRef("sui.fb.draw_requested", "1")
 SELECTION = _ContractRef("sui.fb.selection", "1")
 ACQUISITION_REQUESTED = _ContractRef("sui.fb.acquisition_requested", "1")
 ADOPTION_REQUESTED = _ContractRef("sui.fb.adoption_requested", "1")
+# 行う一歩 (§6-10 K36): 引受け・一歩の要求 (Desc.args は固定の像 E)・一歩の方法。結果のメモは家の人だけ (原報告)
+INTENTION = _ContractRef("sui.fb.intention", "1")
+EXECUTE_STEP_REQUESTED = _ContractRef("sui.fb.execute_step_requested", "1")
+EXECUTE_STEP = _ContractRef("sui.fb.execute_step", "1")
 
 # 窓口が成立を確かめた論理の出来事 (Observed / MEMBRANE / FACT)
 WORK_TERMINAL = _ContractRef("sui.fb.work_terminal", "1")
@@ -111,3 +127,8 @@ SAVED_ACQUISITION_UPDATE = _ContractRef("sui.fb.saved_acquisition_update", "1") 
 STATE_CORRESPONDENCE = _ContractRef("sui.fb.state_correspondence", "1")           # 物語の対応の記録 (Prediction / MODEL)
 ACQUISITION_SEQUENCE_PROJECTION = _ContractRef("sui.fb.acquisition_sequence_projection", "1")  # 読み方: 列の i 番目を核で
 ACQUISITION_GENERATION = _ContractRef("sui.fb.acquisition_generation", "1")       # 生成: その Frame は acquire が k・route の中で作った
+
+# 一周の本 (§6-10 K36・K36-a)。必要量 = 仕事 1 つが走る間に席 1 つ (seats/1 の意味から導ける値、bootstrap の札・差し替えの口)
+ONE_SEAT_PER_WORK = _ContractRef("sui.fb.one_seat_per_work", "1")
+# 読み方: 行った一歩の結果を、その節の核と行う一歩の宣言のセルで読む (K36 決定 5)
+EXECUTION_STEP_PROJECTION = _ContractRef("sui.fb.execution_step_projection", "1")

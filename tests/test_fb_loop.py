@@ -152,14 +152,10 @@ class LoopRig(Stage2Rig):
             contract=contract("sui.f.model_source")), RefKind.PREDICTION, Role.MODEL)
         self.model_point = self.ledger.append(model, ()).cid
         event = boot(True)
-        initial = replace(event.declaration.initial.value, model=self.model_point,
-            generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}),
-            method=fb.MethodCall(contract=contract("sui.f.finite_evaluation"), args={}),
-            draw=fb.MethodCall(contract=contract("stage2.scripted_draw"), args={}),
-            prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET,
-            derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
-                contract=c.SAVED_SEGMENT_UPDATE, args=delta_args())),
-            continuation=fb.MethodCall(contract=c.REUSE_CANDIDATES, args={}) if continuation else None)
+        event = replace(event, declaration=replace(event.declaration, perception=replace(
+            event.declaration.perception, value=replace(event.declaration.perception.value,
+                model=self.model_point, derivation=fb.SlottedMethod(slot='delta', method=fb.MethodCall(contract=c.SAVED_SEGMENT_UPDATE, args=delta_args()))))))
+        initial = replace(event.declaration.initial.value, generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}), method=fb.MethodCall(contract=contract('sui.f.finite_evaluation'), args={}), draw=fb.MethodCall(contract=contract('stage2.scripted_draw'), args={}), prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET, continuation=fb.MethodCall(contract=c.REUSE_CANDIDATES, args={}) if continuation else None)
         self.boot_input = replace(event, declaration=replace(event.declaration,
             initial=replace(event.declaration.initial, value=initial),
             routes=tuple(replace(route, value=replace(route.value,
@@ -326,6 +322,26 @@ def decimal_real(value):
     raise AssertionError("unknown public ExactReal operator: " + value.op)
 
 
+
+
+def assert_admitted_evaluation_root(rig, request, adopted=None):
+    """K36-c: name the admitted root at o, not a notification's cause."""
+    context = request.value["desc"]["args"]["input"]["context"]
+    activity, = [row for row in rig.host.window.status().evaluations if row.context == context]
+    assert activity.root == ("prior" if adopted is None else "adopted")
+    assert activity.root_point == (None if adopted is None else adopted.cid)
+    assert activity.outcome == "running" and activity.counted
+    return activity.activity
+
+
+def wait_evaluation_activity_end(rig, activity):
+    """Serial rulers deliberately finish/release one activity before the next input."""
+    def completed():
+        rows = [row for row in rig.host.window.status().evaluations if row.activity == activity]
+        return len(rows) == 1 and rows[0].outcome != "running" and not rows[0].counted
+    rig.drive(completed)
+    assert completed()
+
 def assert_quantity(value, expected):
     assert value.status == "finite" and value.exact is not None
     assert abs(decimal_real(value.exact) - expected) < Decimal("1e-35")
@@ -359,7 +375,7 @@ def test_continuation_uses_adopted_joint_in_math_input_and_information(make_acqu
         rig.drive(lambda: len(rig.requests("evaluation_prepare")) == number + 1)
         eq = rig.requests("evaluation_prepare")[-1]
         desc = eq.value["desc"]
-        assert {trigger["point"] for trigger in desc["trigger"]} == {adopted.cid}
+        activity = assert_admitted_evaluation_root(rig, eq, adopted)
         assert {adopted.cid, result.cid, adopted.value["acquisition"]} <= closure(
             rig, desc["numerical_view"]["boundary"])
         assert adopted.cid in closure(rig, desc["args"]["input"]["fixed_parents"])
@@ -381,6 +397,7 @@ def test_continuation_uses_adopted_joint_in_math_input_and_information(make_acqu
         assert selected.evaluation.candidates == ("Q", "M")
         rig.drive(lambda: len(rig.facts(c.SELECTION)) == number + 1)
         evaluations.append((selected.evaluation, probability))
+        wait_evaluation_activity_end(rig, activity)
     assert len(rig.facts(CG)) == 1
     if continuation:
         for stage in ("evaluation_prepare", "selection_draw", "evaluation"):
@@ -415,7 +432,7 @@ def test_continuation_preserves_adopted_state_order_in_asymmetric_information():
         result = assert_update(rig, work, adopted, FIRST)
         rig.drive(lambda: len(rig.requests("evaluation_prepare")) == 2)
         eq = rig.requests("evaluation_prepare")[-1]
-        assert {trigger["point"] for trigger in eq.value["desc"]["trigger"]} == {adopted.cid}
+        activity = assert_admitted_evaluation_root(rig, eq, adopted)
         assert eq.value["desc"]["args"]["input"]["model"] == rig.model_point
         rig.run_stage("evaluation_prepare")
         prepared = rig.workers.prepared_by_request[eq.cid]
@@ -428,6 +445,7 @@ def test_continuation_preserves_adopted_state_order_in_asymmetric_information():
         assert selected.root.problem_key == prepared.value.problem_key
         assert selected.root.K.belief == rig.read_stored(result.cid)[2].id
         rig.drive(lambda: len(rig.facts(c.SELECTION)) == 2)
+        wait_evaluation_activity_end(rig, activity)
         evaluation = selected.evaluation
         assert evaluation.candidates == ("Q", "M")
         with localcontext() as context:

@@ -18,6 +18,8 @@ from decimal import Decimal, localcontext
 from fractions import Fraction
 from threading import Event
 
+from test_fb_loop import assert_admitted_evaluation_root, wait_evaluation_activity_end
+
 import pytest
 
 from sui import f, fb, fb_contracts as c, f_update2 as u
@@ -245,6 +247,8 @@ def test_updater1_ce1_two_updates_and_continuation_use_the_production_worker(mak
         previous = adopted.cid
         if continuation:
             rig.drive(lambda: len(rig.requests("evaluation_prepare")) == number + 1)
+            eq = rig.requests("evaluation_prepare")[-1]
+            activity = assert_admitted_evaluation_root(rig, eq, adopted)
             ep = rig.run_stage("evaluation_prepare")
             prepared = rig.workers.prepared_by_request[ep.request]
             assert isinstance(prepared.value, f.FProblem)
@@ -260,6 +264,7 @@ def test_updater1_ce1_two_updates_and_continuation_use_the_production_worker(mak
                 entropy = -(probability * probability.ln() + (1 - probability) * (1 - probability).ln())
                 assert_quantity(selected.evaluation.information[1].additional, entropy)
             rig.drive(lambda: len(rig.facts(c.SELECTION)) == number + 1)
+            wait_evaluation_activity_end(rig, activity)
         else:
             assert len(rig.requests("evaluation_prepare")) == 1
     assert_one_chain(rig, adoptions)

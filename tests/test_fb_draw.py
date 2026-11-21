@@ -441,8 +441,8 @@ class DrawRig(Stage2Rig):
                           draw=fb.MethodCall(contract=generator, args={}))
         self.boot_input = replace(self.boot_input, declaration=replace(self.boot_input.declaration,
             initial=replace(self.boot_input.declaration.initial, value=initial)))
-        workers = {stage: self.workers for stage in (
-            "measure_segment", "belief_update", "candidate_generation", "evaluation_prepare", "selection_draw", "evaluation")}
+        workers = {stage: fb.StepExecutor() if stage == "execute_step" else self.workers for stage in (
+            "measure_segment", "belief_update", "candidate_generation", "evaluation_prepare", "selection_draw", "evaluation", "execute_step")}
         workers["selection_draw"] = HostDrawProbe(self, self.native_draw)
         self.host = fb.FThreadHost(ledger=self.ledger, clock=self.clock,
             workers=fb.WorkerBundle(workers), registry=self.registry, launcher=self.launcher)
@@ -494,7 +494,7 @@ def test_draw1_host_persists_failure_without_draw_fact_evaluation_or_retry(rigs,
 
 
 class DrawLoopRig(EvaluationLoopRig):
-    """All six bundle uses are native. Only world, clock and launch cut are TEST."""
+    """All seven bundle uses are native. Only world, clock and launch cut are TEST."""
     def __init__(self, cls, *, source=None):
         super().__init__(fb.Evaluator)
         self.draw_posts = []

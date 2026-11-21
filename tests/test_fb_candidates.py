@@ -325,15 +325,15 @@ class CandidateHostRig(Stage2Rig):
                 content=Payload.json({"document": self.document}), contract=contract("sui.f.model_source")),
                 RefKind.PREDICTION, Role.MODEL)
             self.model_point = self.ledger.append(record, ()).cid
-            slot = self.boot_input.declaration.initial
+            slot = self.boot_input.declaration.perception
             self.boot_input = replace(self.boot_input, declaration=replace(self.boot_input.declaration,
-                initial=replace(slot, value=replace(slot.value, model=self.model_point))))
+                perception=replace(slot, value=replace(slot.value, model=self.model_point))))
         if unsupported:
             slot = self.boot_input.declaration.initial
             self.boot_input = replace(self.boot_input, declaration=replace(self.boot_input.declaration,
                 initial=replace(slot, value=replace(slot.value, generator=fb.MethodCall(contract=contract("sui.f.explicit_candidates"), args={})))))
         self.bundle = fb.WorkerBundle({stage: CandidateHostProbe(self, cls()) if stage == "candidate_generation"
-            else self.workers for stage in ("measure_segment", "candidate_generation", "belief_update", "evaluation_prepare", "selection_draw", "evaluation")})
+            else (fb.StepExecutor() if stage == "execute_step" else self.workers) for stage in ("measure_segment", "candidate_generation", "belief_update", "evaluation_prepare", "selection_draw", "evaluation", "execute_step")})
         self.host = fb.FThreadHost(ledger=self.ledger, clock=self.clock, workers=self.bundle,
             registry=self.registry, launcher=self.launcher)
         self.host.post(self.clock_event); self.host.post(self.boot_input)

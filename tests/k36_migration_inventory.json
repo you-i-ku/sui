@@ -1,0 +1,1186 @@
+{
+  "problem": "K36",
+  "request": 84,
+  "base": "bcfa64e",
+  "scope": "Static test-source inventory only; no transitive test-case count claimed. Excluded model files are listed but not run.",
+  "summary": {
+    "direct_or_candidate_occurrences": 50,
+    "files": 19,
+    "functions_and_module_tables": 41,
+    "test_functions_with_occurrences": 14,
+    "by_kind": {
+      "initial absent caller": 21,
+      "InitialProcess replacement": 7,
+      "initial field consumer candidate": 6,
+      "exact six-stage domain": 5,
+      "symbolic bundle constructor": 1,
+      "WorkerBundle constructor": 8,
+      "InitialProcess constructor": 1,
+      "public shape pins": 1
+    },
+    "status_counts": {
+      "not_applicable_test_only_model": 9,
+      "migrated_via_shared_helper": 12,
+      "migrated": 23,
+      "reviewed_and_migrated_as_needed": 6
+    },
+    "modified_python_files": 18
+  },
+  "primary_rig": {
+    "file": "tests/test_fb_cycle.py",
+    "name": "CycleRig",
+    "status": "written; native K36 execution not reached because API absent",
+    "path": "fb.start -> RunningSui.host -> seven native workers -> first selection -> execution -> adoption -> next selection -> next E",
+    "existing_main_rigs": "Model-using historical rigs now explicitly separate perception; new CycleRig/start remains the native seven-use primary birth/cycle path.",
+    "line": 333
+  },
+  "items": [
+    {
+      "file": "tests/fb_check.py",
+      "function": "Checker.on_relation",
+      "line": 1820,
+      "kind": "initial absent caller",
+      "action": "The occurrence is E0/obj in the historical finite test model, not fb.BootDeclaration/InitialProcess or a real host rig. Preserve its model vocabulary; no public Boot/4 migration applies and excluded model tests are not run.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "not_applicable_test_only_model",
+      "excluded_model_not_run": false,
+      "previous_line_83": 1832
+    },
+    {
+      "file": "tests/fb_check.py",
+      "function": "Checker.on_relation",
+      "line": 1820,
+      "kind": "initial absent caller",
+      "action": "The occurrence is E0/obj in the historical finite test model, not fb.BootDeclaration/InitialProcess or a real host rig. Preserve its model vocabulary; no public Boot/4 migration applies and excluded model tests are not run.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "not_applicable_test_only_model",
+      "excluded_model_not_run": false,
+      "previous_line_83": 1832
+    },
+    {
+      "file": "tests/fb_scenes.py",
+      "function": "receipt_e0",
+      "line": 1476,
+      "kind": "initial absent caller",
+      "action": "The occurrence is E0/obj in the historical finite test model, not fb.BootDeclaration/InitialProcess or a real host rig. Preserve its model vocabulary; no public Boot/4 migration applies and excluded model tests are not run.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "not_applicable_test_only_model",
+      "excluded_model_not_run": false,
+      "previous_line_83": 1479
+    },
+    {
+      "file": "tests/fb_scenes.py",
+      "function": "empty_generation_e0",
+      "line": 2918,
+      "kind": "initial absent caller",
+      "action": "The occurrence is E0/obj in the historical finite test model, not fb.BootDeclaration/InitialProcess or a real host rig. Preserve its model vocabulary; no public Boot/4 migration applies and excluded model tests are not run.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "not_applicable_test_only_model",
+      "excluded_model_not_run": false,
+      "previous_line_83": 2920
+    },
+    {
+      "file": "tests/test_fb_acquisition_reception.py",
+      "function": "AcquisitionNoInitialRig.__init__.install",
+      "line": 23,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 24
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "function": "BeliefRig.__init__",
+      "line": 97,
+      "kind": "InitialProcess replacement",
+      "action": "Move model/derivation to explicit perception.value. Preserve thinking fields and explicit update allocation.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 213
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "function": "test_belief1_production_TET_adopts_in_order_and_matches_enumeration_and_K26",
+      "line": 316,
+      "kind": "initial field consumer candidate",
+      "action": "Model pointer/derivation replacements now target perception.value; thinking generator/draw/budget changes remain on initial.value. K26 observation declarations do not imply an active perception model.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "reviewed_and_migrated_as_needed",
+      "excluded_model_not_run": false,
+      "previous_line_83": 315
+    },
+    {
+      "file": "tests/test_fb_bundle.py",
+      "function": "<module>",
+      "line": 28,
+      "kind": "exact six-stage domain",
+      "action": "Expand to seven stages, including native execute_step or test probes.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 28
+    },
+    {
+      "file": "tests/test_fb_bundle.py",
+      "function": "BundleLoopRig.__init__",
+      "line": 48,
+      "kind": "symbolic bundle constructor",
+      "action": "Add native StepExecutor to bundle_workers; no implicit seventh worker.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 406
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "CandidateHostRig.__init__",
+      "line": 64,
+      "kind": "initial field consumer candidate",
+      "action": "Model pointer/derivation replacements now target perception.value; thinking generator/draw/budget changes remain on initial.value. K26 observation declarations do not imply an active perception model.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "reviewed_and_migrated_as_needed",
+      "excluded_model_not_run": false,
+      "previous_line_83": 315
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "CandidateHostRig.__init__",
+      "line": 64,
+      "kind": "WorkerBundle constructor",
+      "action": "Explicit native StepExecutor supplied for seventh use (inherited bundle maps retain it).",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 335
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "CandidateHostRig.__init__",
+      "line": 64,
+      "kind": "exact six-stage domain",
+      "action": "Expand to seven stages, including native execute_step or test probes.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 336
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "function": "DrawRig.__init__",
+      "line": 81,
+      "kind": "exact six-stage domain",
+      "action": "Expand to seven stages, including native execute_step or test probes.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 444
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "function": "DrawRig.__init__",
+      "line": 81,
+      "kind": "WorkerBundle constructor",
+      "action": "Explicit native StepExecutor supplied for seventh use (inherited bundle maps retain it).",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 448
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "function": "DrawLoopRig.__init__",
+      "line": 81,
+      "kind": "WorkerBundle constructor",
+      "action": "Explicit native StepExecutor supplied for seventh use (inherited bundle maps retain it).",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 507
+    },
+    {
+      "file": "tests/test_fb_evaluator.py",
+      "function": "EvaluationRig.__init__",
+      "line": 68,
+      "kind": "exact six-stage domain",
+      "action": "Expand to seven stages, including native execute_step or test probes.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 343
+    },
+    {
+      "file": "tests/test_fb_evaluator.py",
+      "function": "EvaluationRig.__init__",
+      "line": 68,
+      "kind": "WorkerBundle constructor",
+      "action": "Explicit native StepExecutor supplied for seventh use (inherited bundle maps retain it).",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 347
+    },
+    {
+      "file": "tests/test_fb_evaluator.py",
+      "function": "EvaluationLoopRig.__init__",
+      "line": 68,
+      "kind": "WorkerBundle constructor",
+      "action": "Explicit native StepExecutor supplied for seventh use (inherited bundle maps retain it).",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 587
+    },
+    {
+      "file": "tests/test_fb_exact.py",
+      "function": "ExactHostRig.__init__",
+      "line": 482,
+      "kind": "InitialProcess replacement",
+      "action": "Move model/derivation to explicit perception.value. Preserve thinking fields and explicit update allocation.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 503
+    },
+    {
+      "file": "tests/test_fb_exact.py",
+      "function": "ExactHostRig.__init__",
+      "line": 482,
+      "kind": "WorkerBundle constructor",
+      "action": "Explicit native StepExecutor supplied for seventh use (inherited bundle maps retain it).",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 541
+    },
+    {
+      "file": "tests/test_fb_host.py",
+      "function": "with_model",
+      "line": 22,
+      "kind": "InitialProcess replacement",
+      "action": "Move model/derivation to explicit perception.value. Preserve thinking fields and explicit update allocation.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 24
+    },
+    {
+      "file": "tests/test_fb_loop.py",
+      "function": "LoopRig.__init__",
+      "line": 87,
+      "kind": "InitialProcess replacement",
+      "action": "Move model/derivation to explicit perception.value. Preserve thinking fields and explicit update allocation.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 155
+    },
+    {
+      "file": "tests/test_fb_machine.py",
+      "function": "receiver",
+      "line": 26,
+      "kind": "initial absent caller",
+      "action": "The occurrence is E0/obj in the historical finite test model, not fb.BootDeclaration/InitialProcess or a real host rig. Preserve its model vocabulary; no public Boot/4 migration applies and excluded model tests are not run.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "not_applicable_test_only_model",
+      "excluded_model_not_run": true,
+      "previous_line_83": 28
+    },
+    {
+      "file": "tests/test_fb_machine.py",
+      "function": "_handmade_receipt",
+      "line": 573,
+      "kind": "initial absent caller",
+      "action": "The occurrence is E0/obj in the historical finite test model, not fb.BootDeclaration/InitialProcess or a real host rig. Preserve its model vocabulary; no public Boot/4 migration applies and excluded model tests are not run.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "not_applicable_test_only_model",
+      "excluded_model_not_run": true,
+      "previous_line_83": 576
+    },
+    {
+      "file": "tests/test_fb_machine.py",
+      "function": "test_c01_no_initial_uses_process_origin_for_actual_stage",
+      "line": 2211,
+      "kind": "initial absent caller",
+      "action": "The occurrence is E0/obj in the historical finite test model, not fb.BootDeclaration/InitialProcess or a real host rig. Preserve its model vocabulary; no public Boot/4 migration applies and excluded model tests are not run.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "not_applicable_test_only_model",
+      "excluded_model_not_run": true,
+      "previous_line_83": 2218
+    },
+    {
+      "file": "tests/test_fb_machine.py",
+      "function": "test_mg01_no_initial_has_no_qgen_or_generation_work",
+      "line": 4007,
+      "kind": "initial absent caller",
+      "action": "The occurrence is E0/obj in the historical finite test model, not fb.BootDeclaration/InitialProcess or a real host rig. Preserve its model vocabulary; no public Boot/4 migration applies and excluded model tests are not run.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "not_applicable_test_only_model",
+      "excluded_model_not_run": true,
+      "previous_line_83": 4010
+    },
+    {
+      "file": "tests/test_fb_machine.py",
+      "function": "test_mg01_no_initial_has_no_qgen_or_generation_work",
+      "line": 4007,
+      "kind": "initial absent caller",
+      "action": "The occurrence is E0/obj in the historical finite test model, not fb.BootDeclaration/InitialProcess or a real host rig. Preserve its model vocabulary; no public Boot/4 migration applies and excluded model tests are not run.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "not_applicable_test_only_model",
+      "excluded_model_not_run": true,
+      "previous_line_83": 4011
+    },
+    {
+      "file": "tests/test_fb_measure.py",
+      "function": "AcquireRig.__init__",
+      "line": 64,
+      "kind": "InitialProcess replacement",
+      "action": "Move model/derivation to explicit perception.value. Preserve thinking fields and explicit update allocation.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 294
+    },
+    {
+      "file": "tests/test_fb_preparer.py",
+      "function": "PreparationRig.__init__",
+      "line": 85,
+      "kind": "exact six-stage domain",
+      "action": "Expand to seven stages, including native execute_step or test probes.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 520
+    },
+    {
+      "file": "tests/test_fb_preparer.py",
+      "function": "PreparationRig.__init__",
+      "line": 85,
+      "kind": "WorkerBundle constructor",
+      "action": "Explicit native StepExecutor supplied for seventh use (inherited bundle maps retain it).",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 524
+    },
+    {
+      "file": "tests/test_fb_preparer.py",
+      "function": "PreparationLoopRig.__init__",
+      "line": 85,
+      "kind": "WorkerBundle constructor",
+      "action": "Explicit native StepExecutor supplied for seventh use (inherited bundle maps retain it).",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 621
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "function": "make_read1",
+      "line": 163,
+      "kind": "initial field consumer candidate",
+      "action": "Model pointer/derivation replacements now target perception.value; thinking generator/draw/budget changes remain on initial.value. K26 observation declarations do not imply an active perception model.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "reviewed_and_migrated_as_needed",
+      "excluded_model_not_run": false,
+      "previous_line_83": 163
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "function": "make_read1.make",
+      "line": 166,
+      "kind": "initial field consumer candidate",
+      "action": "Model pointer/derivation replacements now target perception.value; thinking generator/draw/budget changes remain on initial.value. K26 observation declarations do not imply an active perception model.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "reviewed_and_migrated_as_needed",
+      "excluded_model_not_run": false,
+      "previous_line_83": 166
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "function": "test_read1_boot_saves_each_slotted_model_as_an_independent_prediction",
+      "line": 306,
+      "kind": "initial field consumer candidate",
+      "action": "Model pointer/derivation replacements now target perception.value; thinking generator/draw/budget changes remain on initial.value. K26 observation declarations do not imply an active perception model.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "reviewed_and_migrated_as_needed",
+      "excluded_model_not_run": false,
+      "previous_line_83": 305
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "function": "test_read1_saving_a_model_without_initial_is_neither_acquisition_nor_belief_adoption",
+      "line": 348,
+      "kind": "initial field consumer candidate",
+      "action": "Model pointer/derivation replacements now target perception.value; thinking generator/draw/budget changes remain on initial.value. K26 observation declarations do not imply an active perception model.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "reviewed_and_migrated_as_needed",
+      "excluded_model_not_run": false,
+      "previous_line_83": 347
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "function": "test_read1_saving_a_model_without_initial_is_neither_acquisition_nor_belief_adoption",
+      "line": 348,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 349
+    },
+    {
+      "file": "tests/test_fb_repeat.py",
+      "function": "make_repeat1.make",
+      "line": 120,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 141
+    },
+    {
+      "file": "tests/test_fb_skeleton.py",
+      "function": "boot",
+      "line": 313,
+      "kind": "InitialProcess constructor",
+      "action": "Boot/4 with Perception and InitialProcess/2 reference, or perception=None; collection mirrors are inert and guarded per case.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 330
+    },
+    {
+      "file": "tests/test_fb_skeleton.py",
+      "function": "public shape tables",
+      "line": 739,
+      "kind": "public shape pins",
+      "action": "Boot/4, InitialProcess/2, Perception fields, seven-stage aliases/exports and host actor seam.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 739
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "RealRig.install_legal_boot",
+      "line": 369,
+      "kind": "InitialProcess replacement",
+      "action": "Move model/derivation to explicit perception.value. Preserve thinking fields and explicit update allocation.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 373
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "test_status_and_drain_do_not_consume_work_or_write",
+      "line": 620,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 622
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "test_ended_and_actual_worker_stop_are_different",
+      "line": 676,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 678
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "test_workfinished_is_not_the_end_of_measuresegment",
+      "line": 709,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 711
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "test_saved_descriptors_match_original_boot_and_worker_arguments",
+      "line": 804,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 806
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "test_worker_start_ticket_is_once_and_rebuild_keeps_running_hold",
+      "line": 827,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 829
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "test_launch_return_and_worker_entry_are_separate",
+      "line": 853,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 863
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "test_uncertain_launch_keeps_occupancy_and_does_not_retry",
+      "line": 893,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 903
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "test_forged_boundary_does_not_supply_worker_provenance",
+      "line": 924,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 926
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "test_legal_boot_shared_repeat_registry_creates_measurement_request",
+      "line": 1451,
+      "kind": "initial absent caller",
+      "action": "Shared boot(False) is Boot/4 with perception=None and execution=None. Explicit no-thinking model wrappers that only test reception also set perception=None. No implicit model/origin/allocation inserted.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated_via_shared_helper",
+      "excluded_model_not_run": false,
+      "previous_line_83": 1464
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "Stage2Rig.__init__",
+      "line": 111,
+      "kind": "InitialProcess replacement",
+      "action": "Move model/derivation to explicit perception.value. Preserve thinking fields and explicit update allocation.",
+      "evidence_scope": "test helper source read; production implementation not inspected",
+      "status": "migrated",
+      "excluded_model_not_run": false,
+      "previous_line_83": 312
+    }
+  ],
+  "qualification": "All inventory sites reviewed. Some original syntax matches belong to the excluded test-only E0 model, not the public Boot. Real host tests migrated via shared helper or direct replacement.",
+  "write_scope": "Only work36/tests; production and paper untouched.",
+  "CG": [],
+  "status": "migration_written_and_master_checked; K36 runtime remains unverified until API implementation",
+  "history_83_summary": {
+    "direct_or_candidate_occurrences": 50,
+    "files": 19,
+    "functions_and_module_tables": 41,
+    "test_functions_with_occurrences": 14,
+    "by_kind": {
+      "initial absent caller": 21,
+      "InitialProcess replacement": 7,
+      "initial field consumer candidate": 6,
+      "exact six-stage domain": 5,
+      "symbolic bundle constructor": 1,
+      "WorkerBundle constructor": 8,
+      "InitialProcess constructor": 1,
+      "public shape pins": 1
+    }
+  },
+  "modified_python_files": [
+    "test_fb_acquisition_loop.py",
+    "test_fb_acquisition_reception.py",
+    "test_fb_belief.py",
+    "test_fb_bundle.py",
+    "test_fb_candidates.py",
+    "test_fb_draw.py",
+    "test_fb_evaluator.py",
+    "test_fb_exact.py",
+    "test_fb_host.py",
+    "test_fb_loop.py",
+    "test_fb_measure.py",
+    "test_fb_preparer.py",
+    "test_fb_read.py",
+    "test_fb_repeat.py",
+    "test_fb_skeleton.py",
+    "test_fb_stage1.py",
+    "test_fb_stage2.py",
+    "test_fb_cycle.py"
+  ],
+  "runtime_results": {
+    "files": {
+      "tests/test_fb_acquisition_loop.py": {
+        "failed": 9
+      },
+      "tests/test_fb_belief.py": {
+        "passed": 172,
+        "failed": 113
+      },
+      "tests/test_fb_acquisition_reception.py": {
+        "failed": 5
+      },
+      "tests/test_fb_bundle.py": {
+        "failed": 76,
+        "passed": 9
+      },
+      "tests/test_fb_candidates.py": {
+        "passed": 7,
+        "failed": 73
+      },
+      "tests/test_fb_cycle.py": {
+        "failed": 73
+      },
+      "tests/test_fb_evaluator.py": {
+        "failed": 61,
+        "passed": 11
+      },
+      "tests/test_fb_draw.py": {
+        "passed": 4,
+        "failed": 59
+      },
+      "tests/test_fb_exact.py": {
+        "passed": 55,
+        "failed": 53
+      },
+      "tests/test_fb_host.py": {
+        "failed": 25,
+        "passed": 8
+      },
+      "tests/test_fb_loop.py": {
+        "failed": 5,
+        "passed": 2
+      },
+      "tests/test_fb_measure.py": {
+        "failed": 60,
+        "passed": 2
+      },
+      "tests/test_fb_preparer.py": {
+        "passed": 73,
+        "failed": 57
+      },
+      "tests/test_fb_skeleton.py": {
+        "failed": 95,
+        "passed": 82
+      },
+      "tests/test_fb_stage1.py": {
+        "passed": 182,
+        "failed": 60
+      },
+      "tests/test_fb_stage2.py": {
+        "passed": 4,
+        "failed": 319
+      },
+      "tests/test_fb_read.py": {
+        "failed": 88,
+        "passed": 2
+      },
+      "tests/test_fb_repeat.py": {
+        "failed": 24
+      }
+    },
+    "failed": 1255,
+    "passed": 613,
+    "skipped_setup": 7,
+    "collection_errors": 0,
+    "failure_reasons": {
+      "K36 required names/fields/versions absent": 1055,
+      "K36 seven-use bundle absent": 34,
+      "K36 public DTO/export absent": 81,
+      "K36 cycle/start API absent": 73,
+      "Child reaches K36 shared API guard": 4,
+      "K36 FStatus fields absent": 8
+    },
+    "full_run_seconds": 130.72,
+    "final_shared_rerun": "230 failed / 95 passed in 6.10s",
+    "final_cycle_and_shallow_controls": "73 failed / 3 passed / 72 deselected in 12.63s",
+    "merge_rule": "Latest per-node reports; the renamed seven-work test replaces six-work test names; 3 shallow controls supplement initial run. 3 slow depth-258 cases not run.",
+    "records": [
+      "scratchpad\\sui1711\\bt_tests84\\k36_results84.json",
+      "scratchpad\\sui1711\\bt_tests84\\k36_shared_results84.json",
+      "scratchpad\\sui1711\\bt_tests84\\k36_final_cycle_results84.json",
+      "scratchpad\\sui1711\\bt_tests84\\k36_measure_only_results84.json",
+      "scratchpad\\sui1711\\bt_tests84\\k36_results84_aggregate.json"
+    ],
+    "final_measure_only_rerun": "117 failed / 2 passed in 2.32s"
+  },
+  "additional_port_migration": "Public FWorkContext forwarding adapters in acquisition_loop, measure and exact forward perform explicitly; base protocol stubs do not forward via __getattr__.",
+  "historical_model_scope": "fb_check/fb_scenes/test_fb_machine entries are synthetic E0/obj values, not real fb.Boot values. No source API change applies. Embedded old-paper snapshots in fb_targets are historical, not rewritten as K36 expectations.",
+  "shared_helper_locations": {
+    "test_fb_skeleton.py": {
+      "require_boot_v4": 273,
+      "boot": 313,
+      "args_by_stage": 420
+    },
+    "test_fb_stage1.py": {
+      "install_legal_boot": 369
+    },
+    "test_fb_stage2.py": {
+      "Stage2Rig": 288
+    },
+    "test_fb_loop.py": {
+      "LoopRig": 139
+    },
+    "test_fb_measure.py": {
+      "AcquireRig": 259
+    },
+    "test_fb_belief.py": {
+      "BeliefRig": 169
+    },
+    "test_fb_bundle.py": {
+      "BundleLoopRig": 393
+    }
+  },
+  "additional_measure_only_migration": "make_repeat1 explicitly sets perception=None after constructing AcquireRig; reception wrapper and make_read1(initial=False) also explicitly remove perception. This is not inferred from initial=None.",
+  "followup_85": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "helper_fixes": [
+      "CycleRig.__init__: native loss_contract",
+      "CycleRig.direct: no-arg CandidateGenerator",
+      "linked Received decoding",
+      "strict causal clock boundaries + stop passive during its current read",
+      "native admission observer for entered old-root jobs"
+    ],
+    "migrated_17_files": "No further changes this turn. Their reported 1802 passed / 7 skipped is Claude/user observation, not independently rerun here.",
+    "coverage": "tests/k36_cycle_coverage.json K36_b_coverage",
+    "open_CG": [
+      "CG-K36B-U-ORDER-NEGATIVE"
+    ],
+    "historical": true,
+    "CG_resolution_in_request86": "Its listed open CG is historical; currently closed as unreachable (see followup_86)."
+  },
+  "last_updated_request": 104,
+  "followup_86": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "new_functions": 5,
+    "new_cases": 17,
+    "new_test_ids": [
+      "C46",
+      "C47",
+      "C48",
+      "C49",
+      "C50"
+    ],
+    "coverage": "tests/k36_cycle_coverage.json K36_b_review_coverage86",
+    "former_CG": "CG-K36B-U-ORDER-NEGATIVE closed as currently unreachable by explicit request86; no fake prior/injection.",
+    "open_CG": [],
+    "migration_status": "The prior 17-file migration is unchanged; no additional old-fixture changes this turn.",
+    "verification": {
+      "master_copy": "109 API-absence failures, no other failure reasons",
+      "implemented_copy": "not run by Codex; user reports 92 request85 cases passed."
+    }
+  },
+  "followup_87": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "new_functions": 7,
+    "new_cases": 13,
+    "new_test_ids": [
+      "C51",
+      "C52",
+      "C53",
+      "C54",
+      "C55",
+      "C56",
+      "C57"
+    ],
+    "strengthened_existing_test": "C12: no known-invalid belief_update request for an exception result lacking a reading",
+    "helper_changes": [
+      "CycleRig.replace_model saves a public immutable model before Boot",
+      "NativeEntryObserver admission gate accepts an explicit watchdog timeout for the optional delayed native evaluation; Event determines ordering"
+    ],
+    "coverage": "tests/k36_cycle_coverage.json K36_b_mutation_coverage87",
+    "migration_status": "Prior shared-helper/17-file migration unchanged; no additional old-fixture migration this request.",
+    "unreachable": "Paper K36-b(na) classifies direct U guards3, incomparable roots and already-adopted later-start observation as currently unreachable. No fake inputs or test-only entry added.",
+    "optional_scenario": "C57 written using genuine native evaluation and declared seats, runtime not run; not a claim of an implemented pass.",
+    "open_CG": [],
+    "verification": {
+      "master_copy": "122 expected API-absence failures; no other failure reasons",
+      "independent_fixture_controls": "4 passed (public F-a2 + owned observer2); not K36 host validation",
+      "implemented_copy": "Not run by Codex. User reports request86 cycle109 passed; new request87 host cases remain unexecuted."
+    }
+  },
+  "followup_88": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "changed_tests": [
+      "C57"
+    ],
+    "changed_cases": 1,
+    "new_cases": 0,
+    "coverage": "tests/k36_cycle_coverage.json K36_b_followup88",
+    "correction": "K36-b(ni): A fixed intention record may persist on retry; only active use/replacement is forbidden. Two asserts now inspect A inactivity, not record absence; all B expectations preserved.",
+    "migration_status": "No additional shared-helper or existing fixture migration.",
+    "open_CG": [],
+    "verification": {
+      "master_copy": "122 failed, all missing K36 API; no other reasons",
+      "implemented_copy": "Not run by Codex. User reported prior121 passed/1failed, including the C57 expectation now corrected."
+    }
+  },
+  "followup_89": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "changed_tests": [
+      "C57"
+    ],
+    "new_test_functions": 0,
+    "cases_before": 1,
+    "cases_now": 4,
+    "net_added_cases": 3,
+    "coverage": "tests/k36_cycle_coverage.json K36_b_followup89",
+    "helper": "IntentionSaveCut at test_fb_cycle.py:269; only public Ledger.write/record are replaced, target C only; public store observers prove durability.",
+    "expectations": [
+      "B accepted in both storage-recovery orders",
+      "before_write and ack_loss/readback failure both covered",
+      "Clashing pending C absent from policy candidates",
+      "C fixed fact may save but stays inactive/selection_conflict",
+      "Old I callback denied after B becomes current; B actor actually called"
+    ],
+    "migration_status": "No additional shared-helper/old-fixture migration; existing56 other test functions kept unchanged.",
+    "open_CG": [],
+    "verification": {
+      "master_copy": "125 failed, all K36 public API missing; no other reasons",
+      "storage_adapter": "2 passed, public Ledger/store only",
+      "implemented_copy": "Not run by Codex; user reports request88 file122 passed."
+    }
+  },
+  "followup_90": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "changed_tests": [
+      "C37 renamed3->2 cases",
+      "C38 parallel rounds",
+      "C39 finish old thought through S"
+    ],
+    "new_test_ids": [
+      "C58",
+      "C59",
+      "C60",
+      "C61",
+      "C62"
+    ],
+    "new_functions": 5,
+    "new_cases": 7,
+    "obsolete_cases_removed": 1,
+    "net_added_cases": 6,
+    "helper_changes": [
+      "Explicit request-lineage run/finish methods support parallel offers",
+      "Thinking allocation can be1/2 seats; no execution declaration isolates scheduler tests",
+      "enter_step can select a specific S while other callbacks exist"
+    ],
+    "unchanged_files": "No old literal /1 expectation in Python tests; shared Boot helpers refer to c.REUSE_CANDIDATES dynamically. No other test file modified or run.",
+    "coverage": "tests/k36_cycle_coverage.json K36_b_followup90",
+    "open_CG": [
+      "CG-K36-NE-YIELD-IDENTITY"
+    ],
+    "verification": {
+      "master_copy": "131 failures, all K36 API absence, no other reason",
+      "fixture_controls": "F-a2 + owned selector2 passed, not native host",
+      "implemented_copy": "Not run by Codex; request89 file125 passed reported by user"
+    },
+    "historical": true,
+    "resolution_in_request91": "CG-K36-NE-YIELD-IDENTITY closed by K36-b(no)5; current open CG is empty."
+  },
+  "followup_91": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "changed_fixture": "CycleRig.thinking_seats removes derivation execution arg with execution declaration",
+    "changed_tests": [
+      "C38 both posterior(2/3,1/3)",
+      "C60 strict four-field Point record, three cases"
+    ],
+    "new_cases": 0,
+    "coverage": "tests/k36_cycle_coverage.json K36_b_followup91",
+    "former_CG": "CG-K36-NE-YIELD-IDENTITY closed by K36-b(no)5",
+    "open_CG": [],
+    "verification": {
+      "master_copy": "131 failures, all K36 public API missing; no other reason",
+      "fixture_controls": "2 passed, owned declaration helper only",
+      "implemented_copy": "Not run by Codex"
+    }
+  },
+  "followup_92": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "new_test_ids": [
+      "C63",
+      "C64",
+      "C65"
+    ],
+    "new_functions": 3,
+    "new_cases": 5,
+    "total_cases": 136,
+    "helper_change": "NativeEntryObserver.hold_post and ObservedEntryPort post-return Event gate; CycleRig.close releases both entry/post gates before joining. Non-gated delegation preserved.",
+    "coverage": "tests/k36_cycle_coverage.json K36_b_followup92",
+    "migration_status": "No existing test assertion or old-fixture migration this request; only new scenes and observer synchronization helper.",
+    "open_CG": [],
+    "verification": {
+      "master_copy": "136 failures, all K36 API absent; no other reason; n=0",
+      "observer_controls": "3 passed, all owned threads joined; not K36 host validation",
+      "implemented_copy": "Not run by Codex. User reports prior file131 green."
+    }
+  },
+  "followup_93": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "new_test_ids": [
+      "C66",
+      "C67",
+      "C68",
+      "C69"
+    ],
+    "new_functions": 4,
+    "new_cases": 7,
+    "total_cases": 143,
+    "helper_change": "No new shared helper; reuses real-context observer, post-return gate, native numeric fixture and request-lineage helpers. Existing test assertions unchanged.",
+    "coverage": "tests/k36_cycle_coverage.json K36_b_followup93",
+    "open_CG": [],
+    "verification": {
+      "master_copy": "143 failures, all K36 public API missing; no other reason; n=0",
+      "public_F_a": "3 numerical fixture controls passed; not native scheduling",
+      "implemented_copy": "Not run by Codex; user reports request92 scenes green and targeted mutation3/3 red."
+    },
+    "historical": true,
+    "request94_correction": "C66 prior initial-yield expectation explicitly withdrawn by K36-b(ha)2; C67 prior save order strengthened. See followup_94."
+  },
+  "followup_94": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "changed_tests": [
+      "C66 renamed to only_middle_reconsideration_yields_after_generator_finishes",
+      "C67 fresh-EQ-before-continued-D order"
+    ],
+    "new_cases": 0,
+    "total_cases": 143,
+    "helper_change": "NativeEntryObserver.hold_before_post, ObservedEntryPort before delegate gate, teardown releases entry/before/after gates. Existing ungated paths preserved.",
+    "coverage": "tests/k36_cycle_coverage.json K36_b_followup94",
+    "open_CG": [],
+    "verification": {
+      "master_copy": "143 failures, all K36 API missing; no other reason; n=0",
+      "observer_controls": "3 passed, all owned threads joined; not K36 host",
+      "implemented_copy": "Not run by Codex; user supplied prior results distinguished in coverage"
+    }
+  },
+  "followup_95": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "new_tests": [
+      "C70"
+    ],
+    "new_cases": 2,
+    "total_cases": 145,
+    "helper_change": "None. Existing actual-port observer and public launcher seams reused; no prior test assertion changed.",
+    "coverage": "tests/k36_cycle_coverage.json K36_b_followup95",
+    "open_CG": [],
+    "verification": {
+      "master_copy": "145 failed, all K36 public API absent; no other reasons; n=0",
+      "implemented_copy": "Not run by Codex; prior request94=143 passed is user report only."
+    }
+  },
+  "followup_96": {
+    "modified_python": [
+      "tests/test_fb_cycle.py"
+    ],
+    "new_tests": [
+      "C71",
+      "C72"
+    ],
+    "new_cases": 2,
+    "total_cases": 147,
+    "helper_change": "None. Existing launcher and native observer reused; previous70 test bodies unchanged.",
+    "coverage": "tests/k36_cycle_coverage.json K36_b_followup96",
+    "open_CG": [],
+    "verification": {
+      "master_copy": "147 failed, all K36 public API absent; no other reasons; n=0",
+      "implemented_copy": "Not run by Codex. Prior request95 145 passed and C70 mutation red are user report, not independent verification."
+    }
+  },
+  "followup_97": {
+    "status": "K36-c supersedes seat queue migration",
+    "current_inventory": "tests/k36_c_migration_inventory.json",
+    "modified_python": [
+      "tests/test_fb_cycle.py",
+      "tests/test_fb_skeleton.py"
+    ],
+    "summary": {
+      "retired_functions": 14,
+      "retired_cases": 27,
+      "cancelled_request96": [
+        "C71",
+        "C72"
+      ],
+      "migrated_functions": 4,
+      "migrated_cases_now": 6,
+      "added_functions": 14,
+      "added_cases": 25,
+      "unchanged_functions": 54,
+      "current_functions": 72,
+      "current_cases": 147,
+      "shared_fixture": "test_fb_skeleton.py Boot guard/version pins and known FStatus shape migrated; old helper identifier require_boot_v4 retained only for callers, checks /5."
+    },
+    "open_CG": [
+      "CG-K36C-EVALUATION-STATUS",
+      "CG-K36C-MATERIAL-STATUS",
+      "CG-K36C-START-STATUS",
+      "CG-K36C-START-REJECTION"
+    ],
+    "warning": "Earlier followups are historical K36-b results; they do not validate K36-c."
+  },
+  "followup_98": {
+    "current_manifest": "tests/k36_c_b_migration_inventory.json",
+    "CG_closed": [
+      "CG-K36C-EVALUATION-STATUS",
+      "CG-K36C-MATERIAL-STATUS",
+      "CG-K36C-START-STATUS",
+      "CG-K36C-START-REJECTION"
+    ],
+    "open_CG": [],
+    "cycle_functions": 75,
+    "cycle_cases": 160,
+    "results": {
+      "tests/test_fb_cycle.py": {
+        "failed": 160
+      },
+      "tests/test_fb_skeleton.py": {
+        "passed": 82,
+        "failed": 98
+      },
+      "tests/test_fb_bundle.py": {
+        "failed": 76,
+        "passed": 9
+      },
+      "tests/test_fb_measure.py": {
+        "failed": 60,
+        "passed": 2
+      },
+      "tests/test_fb_read.py": {
+        "failed": 88,
+        "passed": 2
+      },
+      "tests/test_fb_repeat.py": {
+        "failed": 24
+      },
+      "tests/test_fb_stage1.py": {
+        "passed": 182,
+        "failed": 60,
+        "skipped": 7
+      },
+      "tests/test_fb_loop.py": {
+        "failed": 5,
+        "passed": 2
+      },
+      "tests/test_fb_belief.py": {
+        "passed": 172,
+        "failed": 113
+      },
+      "tests/test_fb_updater.py": {
+        "failed": 15
+      },
+      "tests/test_fb_acquisition_pending.py": {
+        "failed": 6
+      }
+    },
+    "legacy_note": "Prior request snapshots describe historical shapes; current guard is require_boot_v5 and CG answers are K36-c-b."
+  },
+  "followup_99": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_99",
+    "test_ids": [
+      "C83",
+      "C84",
+      "C85"
+    ],
+    "changed_cases": 7,
+    "results": "160 expected public-shape failures; new native assertions not run",
+    "open_CG": []
+  },
+  "followup_100": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_100",
+    "new_tests": [
+      "C90",
+      "C91",
+      "C92",
+      "C93"
+    ],
+    "new_cases": 8,
+    "results": "168 expected public-shape failures; new native assertions not run",
+    "open_CG": []
+  },
+  "followup_101": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_101",
+    "new_tests": [
+      "C94",
+      "C95"
+    ],
+    "new_cases": 3,
+    "results": "171 expected public-shape failures; new native assertions not run",
+    "open_CG": []
+  },
+  "followup_102": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_102",
+    "changed_tests": [
+      "C94",
+      "C95"
+    ],
+    "changed_cases": 3,
+    "results": "Pure math5 passed; cycle171 expected public-shape failures; native corrected fixtures not run",
+    "open_CG": []
+  },
+  "followup_103": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_103",
+    "changed_tests": [
+      "C94"
+    ],
+    "new_tests": [
+      "C96"
+    ],
+    "new_cases": 2,
+    "results": "173 expected public-shape failures; corrected/new native fixtures not run",
+    "open_CG": []
+  },
+  "followup_104": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_104",
+    "new_tests": [
+      "C97"
+    ],
+    "new_cases": 1,
+    "results": "174 expected public-shape failures; new native fixture not run",
+    "open_CG": []
+  }
+}

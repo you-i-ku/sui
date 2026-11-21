@@ -20,7 +20,7 @@ from .f import (
     ClockReading, ContractValue, CoverageClaim, CoverageUnproved, DrawRequest,
     FFactsRequest, FiniteKernel, FMathArtifact, FReader, FRegistry, Gap, ImmutableJSON, MeasurementFrame,
     MeasurementId, MeasurementInterval, MeasurementUnavailable, ObservationCell, Point, RouteConfig,
-    Unavailable,
+    Unavailable, ActionSpec, KernelRef, PolicyRef,
 )
 from .f_update2 import IssuedUpdate, LaunchResult, TargetEvidence
 from .ids import Ref
@@ -46,6 +46,10 @@ __all__ = [
     "FThreadHost", "Envelope", "SourceItem", "FSource", "Acquisition", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "Evaluator", "UniformDraw", "WorkerBundle",
     "AcquisitionControl", "AcquisitionObservationModel", "AcquisitionReadItem", "AcquisitionReadResult",
     "read_acquisition_sequence",
+    "Perception", "ExecutionDeclaration", "ExecutionArgs", "ExecuteStep", "StepExecutor", "FActor",
+    "ExecutionResult", "ExecutionReport", "PolicyStatus", "IntentionStatus", "ExecutionStatus",
+    "EvaluationStatus", "ThinkingMaterialStatus",
+    "start", "RunningSui", "StartInputError",
 ]
 
 
@@ -168,26 +172,36 @@ class BootstrapRoute:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
-class InitialProcess:
-    """`sui.fb.initial_process/1`: 最初の過程・読み手・モデル・生成方法・評価方法・割当・
-    更新の導出方法 (δ)。δ は保存済みの事実 (受信・区間の報告・Claim など) をきっかけに更新要求 Q* を
-    導く差し替えられる方法 (紙 §6-4、TRACE-02)。契約は `sui.fb.saved_segment_update/1` (§6-10 J1・K2: 火種は
-    保存した原報告、結びつき B は要求を作る前提。§2-5-4 の `sui.fb.received_update/1` は受信だけを火種にしていた)。
-    draw は選択用のくじの生成器 (§6-9 H4。家の人は法則 uniform_bits/1 でくじの続きのかたまりを頼む、紙 F-b K35)。
-    prepare_budget・evaluate_budget は評価の準備と、くじからの評価に実際に渡す計算の上限
-    (§6-9 H3)。予算は好み・範囲・費用ではなく、コードの既定値で埋めない。信念の更新には固定の上限の
-    欄を置かない (紙 F-b Z41 (a)、Z32 (え))。continuation は採用の後に考え直せる差し替えられる方法
-    (§6-10 J6・K1)。None は考え直す道を置かない。「採用したら必ず考え直す」の規則ではない (D7)。"""
+class Perception:
+    """`sui.fb.perception/1`: 感じる側 (紙 F-b K36 新しい決定 2)。見立てを直す過程の席 process_slot・読み手 reader_slot
+    (knowledge_origin を作る位置)・見立てのモデル model・割当 allocation・更新の導出方法 δ derivation を自分で持つ。
+    考える側 (InitialProcess) が無くても、受け取って・残して・見立てを直す (D7 問 1・Q5 の案 2)。人が置く bootstrap の札で、
+    差し替えの口 (P9)。隠れた既定の割当や最低の持分は足さない。δ は保存済みの事実をきっかけに更新要求 Q* を導く方法
+    (`sui.fb.saved_segment_update/1` か `sui.fb.saved_acquisition_update/1`)。"""
     process_slot: str
     reader_slot: str
     model: Point
+    allocation: SlotValue
+    derivation: SlottedMethod
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class InitialProcess:
+    """`sui.fb.initial_process/2`: 考える側 (紙 F-b K36 新しい決定 2)。最初の考える過程の席・感じる側の宣言の位置
+    perception_slot (その origin とモデルを参照する)・生成方法・評価方法・くじ・予算・割当・continuation だけを持つ。
+    draw は選択用のくじの生成器 (§6-9 H4。家の人は法則 uniform_bits/1 でくじの続きのかたまりを頼む、紙 F-b K35)。
+    prepare_budget・evaluate_budget は評価の準備と、くじからの評価に実際に渡す計算の上限 (§6-9 H3)。予算は好み・範囲・
+    費用ではなく、コードの既定値で埋めない。continuation は採用の後に考え直せる差し替えられる方法 (§6-10 J6・K1)。
+    None は考え直す道を置かない。「採用したら必ず考え直す」の規則ではない (D7)。行う一歩 (K36) はこの過程に帰属する
+    (選んだ方針を行うのは選んだ過程) が、席と割当は行う割当 (execution の allocation) を使う (K36-c ①)。"""
+    process_slot: str
+    perception_slot: str
     generator: MethodCall
     method: MethodCall
     draw: MethodCall
     prepare_budget: RateBudget
     evaluate_budget: RateBudget
     allocation: SlotValue
-    derivation: SlottedMethod
     continuation: MethodCall | None
 
 
@@ -199,8 +213,26 @@ class Environment:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
+class ExecutionDeclaration:
+    """`sui.fb.execution_declaration/2`: 行う一歩をどう行い、その結果をどう読むかの宣言 (紙 F-b K36 決定 3・5・12、K36-a)。
+    人が置く bootstrap の読み方で、環境 (おもちゃの相手と受け身の源) について述べる。actors は核の id → 入口で受け取る環境の
+    相手の名前、no_effect は宣言した無作用 (外を呼ばずに完了する) の核の id、cells は核の id → 観測セル (観測値は
+    `{result, source_called}` の合法な 4 組) で、行った一歩の結果を「届いた / 届かない」で読む分け方。source_overlap・
+    actor_overlap は区間が重なった時の宣言: state_preserving (区間の途中も見立ての状態を変えない) / serializable (重なった
+    観測と作用を 1 回ずつの前後で表せる) / undeclared (述べない = 重なりは順が分からない)。宣言は現物の証明ではない。"""
+    actors: _Mapping[str, str]
+    no_effect: tuple[str, ...]
+    cells: _Mapping[str, tuple[ObservationCell, ...]]
+    source_overlap: _Literal["state_preserving", "serializable", "undeclared"]
+    actor_overlap: _Literal["state_preserving", "serializable", "undeclared"]
+    allocation: SlotValue        # 行う割当 (Allocation、同じ Boot の資源範囲。考える割当と分ける、K36-c ①)
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
 class BootDeclaration:
-    """起動の宣言 (§2-5-3、`sui.fb.boot_declaration/3`)。資源範囲 1 つ・量の契約 1 つ・bootstrap の口と測る過程 1 つが
+    """起動の宣言 (§2-5-3、`sui.fb.boot_declaration/5`)。perception は感じる側、initial は考える側 (K36 新しい決定 2)。
+    execution は行う一歩の宣言 (K36・K36-c、`sui.fb.execution_declaration/2`。None は行う一歩を宣言しない)。低い水準のホストは
+    perception=None を許し、測って残すだけで見立てを直さない (K36-a (オ))。誕生の入口 `start` は perception を求める。資源範囲 1 つ・量の契約 1 つ・bootstrap の口と測る過程 1 つが
     この版の合法な縦の 1 本。capacity の実値は宣言で受け取り、既定値を置かない。observation_models は取得の列を読む
     観測モデル (各 SlotValue の contract = `sui.fb.acquisition_observation_model/1`、value = AcquisitionObservationModel)。
     起動の時にホストが各項から独立した Prediction / MODEL の記録を保存する (§6-10 K26-a (ア)・K26-b)。宣言しない時は
@@ -210,6 +242,8 @@ class BootDeclaration:
     scope: SlotValue
     routes: tuple[SlotValue, ...]
     initial: SlotValue | None
+    perception: SlotValue | None
+    execution: SlotValue | None
     environment: SlotValue
     observation_models: tuple[SlotValue, ...]
 
@@ -374,9 +408,10 @@ FEvent: _TypeAlias = Boot | ClockDeclared | Received | SegmentReport | WorkFinis
 
 Stage: _TypeAlias = _Literal[
     "measure_segment", "candidate_generation", "belief_update",
-    "evaluation_prepare", "selection_draw", "evaluation",
+    "evaluation_prepare", "selection_draw", "evaluation", "execute_step",
 ]
-"""仕事の用途。v0.25 で belief_result・belief_proof・verification を belief_update 1 つに (§6-2・§6-6)。"""
+"""仕事の用途。v0.25 で belief_result・belief_proof・verification を belief_update 1 つに (§6-2・§6-6)。K36 で「一歩を
+行う」execute_step を足した (7 用途)。"""
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -459,8 +494,32 @@ class EvaluationArgs:
     budget: RateBudget
 
 
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class ExecutionArgs:
+    """行う一歩の固定の像 E (紙 F-b K36 決定 4・6)。要求を Publish する時に固定し、行う係も家の人も結果の記録もこの E に
+    結ぶ (結果の側から「最新の選択」を探し直さない)。selection・evaluated は選択 S と評価 EV の Point、root_key・draw は
+    評価の根とくじの記録 (DF) の Point、intention は引受けの記録の Point、policy・node・occurrence は方策と節とその節の
+    何回目か、action は選んだ操作、kernel・u はこの節の核と、この回の制御 (段 4 では核の id)、model・reading は見立ての
+    モデルと行う一歩の宣言の記録、prior は E を作った時の見立ての系列の頭 (採用 A*。無ければ None)。u はその一歩の前までの
+    履歴と、状態から独立なくじから決まる (言えるのは P(u | s, H) = P(u | H) まで)。cursor・sample_seq と兼ねない。"""
+    selection: Point
+    evaluated: Point
+    root_key: str
+    draw: Point | None
+    intention: Point
+    policy: PolicyRef | None
+    node: str
+    occurrence: int
+    action: ActionSpec | None
+    kernel: KernelRef
+    u: str
+    model: Point
+    reading: Point
+    prior: Point | None
+
+
 WorkArgs: _TypeAlias = (
-    SegmentArgs | CandidateArgs | UpdateArgs | EvaluationPrepareArgs | DrawArgs | EvaluationArgs
+    SegmentArgs | CandidateArgs | UpdateArgs | EvaluationPrepareArgs | DrawArgs | EvaluationArgs | ExecutionArgs
 )
 
 
@@ -506,7 +565,15 @@ class Draw:
     desc: Desc
 
 
-FWork: _TypeAlias = MeasureSegment | Compute | Draw
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class ExecuteStep:
+    """一歩を行う仕事 (紙 F-b K36 決定 3)。desc.purpose="execute_step"、desc.args は固定の像 E。係は入場して E を家の人の
+    口 `FWorkContext.perform` に渡すだけで、結果のメモは家の人が書く (Z55)。"""
+    request: Point
+    desc: Desc
+
+
+FWork: _TypeAlias = MeasureSegment | Compute | Draw | ExecuteStep
 """保存した要求と Desc に対応する実行用の和型 (§2-5-16)。開始の札・実行ハンドルを Point にしない。"""
 
 
@@ -656,6 +723,81 @@ class BeliefUpdateStatus:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
+class PolicyStatus:
+    """意味 8 (方策の進み、紙 F-b K36 決定 8)。選択 S ごとに、方策 policy のどの節まで来たか。outcome は running (次の一歩を
+    行っている・待っている) / ended (end の節に着いた) / stopped (進めない。reason に名指し: choose_unconnected・
+    exception_reading_missing・next_unknown・not_performed・unconnected) / withdrawn (引受けが置き換えられた)。"""
+    selection: Point
+    intention: Point | None
+    policy: PolicyRef | None
+    node: str | None
+    outcome: _Literal["running", "ended", "stopped", "withdrawn"]
+    reason: str
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class IntentionStatus:
+    """意味 9 (引受け、紙 F-b K36 決定 7)。point は引受けの記録 (`sui.fb.intention/1`) の Point、active は今の引受けか
+    (同じ採用の系列で根が後に続く選択に置き換えられたら False)。replaced_by は置き換えた引受けの Point。"""
+    point: Point
+    selection: Point
+    active: bool
+    replaced_by: Point | None
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class ExecutionStatus:
+    """意味 10 (一歩の実行、紙 F-b K36 決定 3・5・12・13・K36-a (エ))。execution は固定の像 E、request はその要求の Point、
+    result は家の人が残した結果の記録の Point (まだ無ければ None)。outcome は requested (まだ入場していない) / entered
+    (行っている) / waiting_storage (結果の保存待ち。retryable) / observed (観測として残った) / no_effect (宣言した無作用で
+    完了、外を呼んでいない) / unconnected (行う所が未接続) / not_performed (呼ぶ前の不足、行っていない) / order_unknown
+    (受け身の観測との順が分からない。待っても解けない) / model_zero (読めるセルの質量が 0) / blocked (引受けが置き換え
+    られて入場しない)。reason は名指しの語、retryable は待てば解けるか。source_called・result_symbol は結果の観測
+    (呼んだか・4 組の語。観測でなければ None)。"""
+    execution: ExecutionArgs
+    request: Point
+    result: Point | None
+    outcome: str
+    reason: str
+    retryable: bool
+    source_called: bool | None
+    result_symbol: str | None
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class EvaluationStatus:
+    """評価の活動 (紙 F-b K36-c ②・K36-c-a ④ (c))。activity は入場の時から変わらない識別 (保存の再試行とくじの続きで
+    変えない)。root は根の状態: undetermined (最初の活動の Wg の間) / prior (まだ採用が無い) / adopted (point に採用の
+    Point)。context は文脈の記録 (o・j を含む。評価の準備の入力の context と同じ) の保存済みの Point か、未保存の Held。outcome は running / selected (選択を保存) / no_decision /
+    no_candidates / failure / unknown / conflict (食い違いで新しい使用を止めた) / stopped (仕事の本体が終わりの知らせ
+    無しに止まった) / short (使用の条件の不足)。residual は
+    論理的に結末しても席を持っている仕事の識別 (席を返すまで考える割当の数に入る)。counted はその数に入っているか。"""
+    activity: str
+    allocation: BootSlot
+    root: _Literal["undetermined", "prior", "adopted"]
+    root_point: Point | None
+    context: Point | Held | None
+    outcome: str
+    residual: tuple[str, ...]
+    counted: bool
+    basis: StatusBasis
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class ThinkingMaterialStatus:
+    """まだ評価に入場していない材料 (紙 F-b K36-c ⑦・K36-c-a ④ (d))。起動・考える側・採用の系列ごとに、最新の使える採用
+    latest、評価に渡した根の境界 handed、未評価の材料があるか unevaluated、入場を妨げている活動 blocked_by (考える割当が
+    埋まっている時に数えている活動の識別。根が未確定の活動がある時はその活動)。まだ存在しない評価の識別は作らない。"""
+    boot: Point
+    initial: BootSlot
+    latest: Point | None
+    handed: Point | None
+    unevaluated: bool
+    blocked_by: tuple[str, ...]
+    basis: StatusBasis
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
 class FStatus:
     """窓口の公開の操作の境目でとった整合した局所の像 (M1)。正本の状態・判断の入力・
     仕事を出す命令にしない。試験の期待値の生成元にもしない。"""
@@ -666,6 +808,11 @@ class FStatus:
     segments: tuple[SegmentStatus, ...]
     purposes: tuple[PurposeStatus, ...]
     updates: tuple[BeliefUpdateStatus, ...]
+    policies: tuple[PolicyStatus, ...]
+    intentions: tuple[IntentionStatus, ...]
+    executions: tuple[ExecutionStatus, ...]
+    evaluations: tuple[EvaluationStatus, ...]
+    thinking_materials: tuple[ThinkingMaterialStatus, ...]
 
 
 # --- 口の源と、そこからの取り出し (§6-10 K23) ---
@@ -699,6 +846,46 @@ class Acquisition:
     outcome: _Literal["taken", "empty", "unavailable"]
     reason: str
     item: SourceItem | None
+
+
+# --- 行う一歩の相手と結果 (§6-10 K36) ---
+
+class FActor(_Protocol):
+    """環境の相手 (紙 F-b K36 決定 3、差し替えの口)。家の人が固定の像 E を渡して呼ぶ。相手は sui の操作を選ばない。返すのは
+    届いた 1 件 (SourceItem) か None (何も届かなかった)。例外は「呼んだ・例外になった」として家の人が記録する (決定 13)。
+    段 4 の相手はおもちゃ。本物の作用は S6。ホストへは入口 `start` / FThreadHost の actors (名前 → 相手) で渡す。"""
+
+    def perform(self, execution: "ExecutionArgs") -> SourceItem | None: ...
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class ExecutionResult:
+    """`FWorkContext.perform` の返値 (紙 F-b K36 決定 3・5・13、K36-a (エ))。家の人が行った結果と、それを記録したこと。
+    outcome: observed (相手を呼び、「届いた / 届かない」の観測として残した) / no_effect (宣言した無作用。外を呼ばずに完了) /
+    unconnected (行う所が未接続、呼んでいない) / not_performed (呼ぶ前の不足、行っていない)。source_called・result_symbol は
+    observed の時だけ (taken / empty / unavailable_called)。item は届いた 1 件 (中身は見立てに使わない、Z46 ③)。"""
+    outcome: _Literal["observed", "no_effect", "unconnected", "not_performed"]
+    reason: str
+    source_called: bool | None
+    result_symbol: str | None
+    item: SourceItem | None
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class ExecutionReport:
+    """家の人だけが作る、行った一歩の結果のメモ (`sui.fb.execution_result/1`、紙 F-b K36 決定 3・Z55)。係の口 post からは
+    受け付けない (FbInputError)。execution は固定の像 E、value は観測 {result, source_called} (観測でない結果は None)、
+    outcome・reason は ExecutionResult と同じ語、entered・finished は一歩の入場と結果の記録のホストの読み (順の判定、
+    決定 12)、received は届いた中身の原文の名札、actor は呼んだ相手の名前。"""
+    work: str
+    execution: "ExecutionArgs"
+    value: ImmutableJSON
+    outcome: str = "observed"
+    reason: str = ""
+    entered: ReadingClock | None = None
+    finished: ReadingClock | None = None
+    received: Ref | None = None
+    actor: str | None = None
 
 
 # --- 取得の列を読む本 (§6-10 K26・K26-a・K26-b) ---
@@ -800,9 +987,15 @@ class FWorkContext(_Protocol):
     now() はホストが今の M を読み、発行済みの時計の出どころの Point とまとめて返す (K23)。acquire() は測る仕事の口だけが
     呼べ、ホストがその口の源へ次の番号の 1 件を取りに行く (K23)。取得の結果の Frame (taken・empty・unavailable の
     どれでも 1 つ、測り方 acquisition_result_sampling/1) と、取れた時の原文を、ホストが同じ操作の中で受信の列へ入れ、
-    その操作の観測は evidence() の sources に残る (K25)。どちらも開始の札を取っていない口では RuntimeError。"""
+    その操作の観測は evidence() の sources に残る (K25)。どちらも開始の札を取っていない口では RuntimeError。
+    perform(execution) は一歩を行う仕事の口だけが呼べ (K36 決定 3)、渡す E はその仕事の要求の E と全く同じでなければ
+    FbInputError (選ばれていない操作・別の選択の E では行わない)。家の人が宣言を見て、宣言した無作用なら外を呼ばずに完了を、
+    行える観測の一歩なら入口で受け取った環境の相手を呼んで、結果のメモ (`sui.fb.execution_result/1`) を家の人自身が残す。
+    行う所が未接続・相手が無い時は呼ばずに名指しして残す。返値は ExecutionResult。"""
 
     def enter(self) -> bool: ...
+
+    def perform(self, execution: "ExecutionArgs") -> ExecutionResult: ...
 
     def now(self) -> ReadingClock: ...
 
@@ -822,8 +1015,8 @@ class FWorkContext(_Protocol):
 
 
 class FWorkers(_Protocol):
-    """仕事の本体を走らせる係。本体の束ね `WorkerBundle` が用途ごとの係へ振り分ける (K30。束ねを組むのは今は使う側、
-    起動の入口は ④' 段 4)。run はホストのスレッドで呼ばれ、
+    """仕事の本体を走らせる係。本体の束ね `WorkerBundle` が用途ごとの係へ振り分ける (K30。誕生の入口 `start` が本体の
+    係 7 用途で組む、K36。低い水準のホストは使う側が組む)。run はホストのスレッドで呼ばれ、
     戻ったことが実際の停止の観測になる。返す前に ctx.enter() が False なら本体に入らない。"""
 
     def run(self, work: FWork, ctx: FWorkContext) -> None: ...
@@ -889,14 +1082,16 @@ class FThreadHost:
 
     def __init__(self, *, ledger: _Ledger, clock: _Clock, workers: FWorkers,
                  registry: FRegistry, launcher: FLauncher | None = None,
-                 sources: _Mapping[str, FSource] | None = None) -> None:
+                 sources: _Mapping[str, FSource] | None = None,
+                 actors: _Mapping[str, FActor] | None = None) -> None:
         """launcher=None は OS のスレッドで起動する本番の起動係 (threading.Thread.start の成否で
         launched / not_started、start が戻らず分からない時は unknown)。sources は口の源 (route_epoch → FSource、K23)。
-        None や、口の route_epoch が無い時、その口の acquire() は unavailable を返す。"""
+        None や、口の route_epoch が無い時、その口の acquire() は unavailable を返す。actors は環境の相手 (名前 → FActor、
+        K36)。行う一歩の宣言が名指す相手が無ければ、その一歩は「行っていない」と記録される (K36-a (エ))。"""
         from . import _fb_core
         self._state = _fb_core.State(ledger=ledger, clock=clock, workers=workers, registry=registry,
                                      launcher=launcher if launcher is not None else _fb_core.ThreadLauncher(),
-                                     sources=sources)
+                                     sources=sources, actors=actors)
         self._window = FWindow(self)
 
     @property
@@ -1064,7 +1259,7 @@ class WorkerBundle:
     """係の束ね (紙 F-b §6-10 K30、Z51 ②)。用途 (`Stage`) → 係 の対応を作る時に受け取り、仕事の `desc.purpose` で
     係を 1 人選んで、同じ (work, ctx) で `run` を 1 回呼ぶ。`FWorkers` を満たす。
 
-    作る時に用途の 6 つ全部がちょうどそろっていなければ ValueError (欠け・余りを名指す)、係に呼べる `run` が無ければ
+    作る時に用途の 7 つ (K36 で「一歩を行う」を足した) 全部がちょうどそろっていなければ ValueError (欠け・余りを名指す)、係に呼べる `run` が無ければ
     TypeError。係がその用途を扱えるかは確かめない (書き間違えると係が入場前に断り、起こし直しが続く = K30 (4))。
     同じ係を幾つの用途に書いてもよい。受け取った対応は写して持ち、作った後は変えない。束ね自身は入場せず
     (`ctx.enter()` を呼ばない)、口のどの操作も呼ばず、係の戻りと例外をそのまま通す。"""
@@ -1302,3 +1497,89 @@ class UniformDraw:
             outcome = DrawFailure(failure=FailureInfo(failure_kind=failure[0], content=failure[1],
                                                       readings=(), basis=()))
         ctx.post(DrawReturned(work=desc.work_id, outcome=outcome))
+
+
+class StepExecutor:
+    """`FWorkers` の「一歩を行う」仕事の本体 (紙 F-b K36 決定 3)。ホストが出した一歩の仕事 (`ExecuteStep`、
+    `desc.purpose == "execute_step"`) を受け、入場して、その要求の固定の像 E を家の人の口 `perform` に渡すだけ。何をどう
+    行うかは家の人が宣言から決め、結果のメモも家の人が書く (Z55: 係は結果のメモを書かない)。perform の例外 (止まった
+    ホストなど) は偽りの結果にせず上げる。一歩の仕事以外を渡されたら TypeError (束ねるのは `WorkerBundle`)。"""
+
+    def run(self, work: "FWork", ctx: FWorkContext) -> None:
+        if not isinstance(work, ExecuteStep) or work.desc.purpose != "execute_step":
+            raise TypeError("StepExecutor runs execute_step works only")
+        if not ctx.enter():
+            return
+        ctx.perform(work.desc.args)
+
+
+class StartInputError(ValueError):
+    """誕生の入口 `start` が起動の宣言を断った (紙 F-b K36 決定 11・K36-a (ア)(エ)(オ))。何も保存せず、何も起こさない。
+    reason は閉じた語: perception_missing (感じる側が無い) / finite_budget (予算に上限がある) / draw_generator (くじが
+    本体の生成器でない) / draw_args (くじの args が空でない) / actor_missing (行う一歩の宣言が名指す相手が無い)。
+    field は断った欄の JSON Pointer (相手は `/actors/<名前>`)。"""
+
+    def __init__(self, *, reason: str, field: str) -> None:
+        super().__init__(f"{reason}: {field}")
+        self.reason = reason
+        self.field = field
+
+
+class RunningSui:
+    """`start` が起こした sui (紙 F-b K36 決定 11)。host は起こしたホスト (回す役 `keep_running` で回す)。stop() は本体の
+    測る係に止める合図を出す (始めた取りに行きは決着まで。環境の相手・源は呼ぶ側のもの)。"""
+
+    def __init__(self, *, host: FThreadHost, measurer: SourceMeasurer) -> None:
+        self._host, self._measurer = host, measurer
+
+    @property
+    def host(self) -> FThreadHost:
+        return self._host
+
+    def stop(self) -> None:
+        self._measurer.stop()
+
+
+def start(*, ledger: _Ledger, clock: _Clock, clock_declaration: ClockSource, boot: Boot,
+          sources: _Mapping[str, FSource], actors: _Mapping[str, FActor], registry: FRegistry | None = None,
+          launcher: FLauncher | None = None, randbits: "_Callable[[int], int] | None" = None) -> RunningSui:
+    """誕生の入口 (紙 F-b K36 決定 11・Z51 ④⑤・K36-a (ア))。外から帳面・時計・時計の宣言・起動の宣言・環境 (受け身の源と
+    行う手の相手) を受け取り、本体の係 7 用途の束ねと registry をそろえ、ホストを作って時計の宣言と起動の宣言を入れる。
+    宣言を先に確かめ、合わなければ何も保存せず StartInputError で断る: 感じる側が無い・考える側の予算に上限がある・くじが
+    `sui.fb.os_uniform_bits/1` でない・その args が空でない・行う一歩の宣言が名指す相手が渡されていない。上限を書いた
+    宣言を試す時は FThreadHost を直接組む (Z57・K32 決定 6)。registry・launcher・randbits は試験の継ぎ目で、既定は本体の
+    registry (`f_update2.fb_registry_v1()`)・OS のスレッドの起動係・OS の暗号用の乱数 (既定を変える口ではない)。
+    ホストは回さない (回す役 `keep_running` は呼ぶ側)。"""
+    from . import fb_contracts as _c
+    from .f_update2 import fb_registry_v1
+    declaration = boot.declaration
+    if declaration.perception is None:
+        raise StartInputError(reason="perception_missing", field="/declaration/perception")
+    if declaration.initial is not None:
+        initial = declaration.initial.value
+        for name in ("prepare_budget", "evaluate_budget"):
+            budget = getattr(initial, name)
+            for limit in ("max_cells", "max_terms", "max_refinements"):
+                if getattr(budget, limit) is not None:
+                    raise StartInputError(reason="finite_budget",
+                                          field=f"/declaration/initial/value/{name}/{limit}")
+        if initial.draw.contract != _c.OS_UNIFORM_BITS:
+            raise StartInputError(reason="draw_generator", field="/declaration/initial/value/draw/contract")
+        if initial.draw.args:
+            raise StartInputError(reason="draw_args", field="/declaration/initial/value/draw/args")
+    if declaration.execution is not None:
+        for name in declaration.execution.value.actors.values():
+            if name not in actors:
+                raise StartInputError(reason="actor_missing", field="/actors/" + name)
+    registry = fb_registry_v1() if registry is None else registry
+    measurer = SourceMeasurer()
+    workers = WorkerBundle({
+        "measure_segment": measurer, "belief_update": FiniteUpdater(registry=registry),
+        "candidate_generation": CandidateGenerator(), "evaluation_prepare": EvaluationPreparer(registry=registry),
+        "selection_draw": UniformDraw() if randbits is None else UniformDraw(randbits=randbits),
+        "evaluation": Evaluator(), "execute_step": StepExecutor()})
+    host = FThreadHost(ledger=ledger, clock=clock, workers=workers, registry=registry, launcher=launcher,
+                       sources=sources, actors=actors)
+    host.post(ClockDeclared(declaration=clock_declaration))
+    host.post(boot)
+    return RunningSui(host=host, measurer=measurer)

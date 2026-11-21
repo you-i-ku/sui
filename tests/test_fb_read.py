@@ -25,7 +25,7 @@ import pytest
 
 from sui import f, fb, fb_contracts as c
 from sui.ids import Ref, RefKind
-from test_fb_skeleton import contract, point, slot, source, require_boot_v3
+from test_fb_skeleton import contract, point, slot, source, require_boot_v5
 from test_fb_stage1 import RealRig, entry_from_header, wire
 from sui.clock import FakeClock
 from sui.records import Decided, Observed, Payload, Prediction, Role, WriterNotAllowed
@@ -47,7 +47,7 @@ MODEL_SLOT = "acquisition-model"
 
 def read1_api():
     """Resolve K26-a names/fields per test; never fail module collection."""
-    require_boot_v3()
+    require_boot_v5()
     missing = [name for owner, names in (
         (fb, ("read_acquisition_sequence", "AcquisitionReadResult", "AcquisitionReadItem",
               "AcquisitionObservationModel", "AcquisitionControl")),
@@ -55,8 +55,8 @@ def read1_api():
     ) for name in names if not hasattr(owner, name)]
     if "observation_models" not in {field.name for field in fields(fb.BootDeclaration)}:
         missing.append("BootDeclaration.observation_models")
-    if c.BOOT_DECLARATION != replace(contract("sui.fb.boot_declaration"), version="3"):
-        missing.append("BOOT_DECLARATION/3")
+    if c.BOOT_DECLARATION != replace(contract("sui.fb.boot_declaration"), version="5"):
+        missing.append("BOOT_DECLARATION/5")
     assert not missing, "K26-a public names/fields missing: " + ", ".join(missing)
     assert c.ACQUISITION_RESULT_PROJECTION == PROJECTION
     assert c.ACQUISITION_OBSERVATION_MODEL == MODEL
@@ -196,7 +196,8 @@ def make_read1():
             *(slot(f"{MODEL_SLOT}-{i}", c.ACQUISITION_OBSERVATION_MODEL, extra.declaration)
               for i, extra in enumerate(extra_models, 2)))
         rig.boot_input = replace(rig.boot_input, declaration=replace(rig.boot_input.declaration,
-            initial=rig.boot_input.declaration.initial if initial else None, observation_models=declared_models))
+            initial=rig.boot_input.declaration.initial if initial else None,
+            perception=rig.boot_input.declaration.perception if initial else None, observation_models=declared_models))
         # The imported test rig posted its default Boot but has not run it.
         # Construct our public host with the declared Boot; no private queue edit.
         rig.host = fb.FThreadHost(ledger=rig.ledger, clock=rig.clock, workers=rig.workers,
@@ -230,7 +231,7 @@ def make_read1():
             assert frame.value["item"]["value"]["value"]["value"]["source_called"] is (symbol != M)
             cursor += symbol == T
         boot, = rig.facts(c.BOOT_DECLARATION)
-        assert boot.contract == replace(contract("sui.fb.boot_declaration"), version="3")
+        assert boot.contract == replace(contract("sui.fb.boot_declaration"), version="5")
         assert boot.value["observation_models"] == wire(declared_models)
         assert boot.value["environment"] == wire(rig.boot_input.declaration.environment)
         models = tuple(rig.facts(c.ACQUISITION_OBSERVATION_MODEL))
@@ -298,7 +299,7 @@ def test_read1_typed_boot_models_and_version_match_K26a():
         "route_slot", "states", "controls", "control_rule", "independence", "projection", "time_projection"}
     assert {field.name for field in fields(api.Control)} == {"id", "kernel", "cells"}
     assert "observation_models" in {field.name for field in fields(fb.BootDeclaration)}
-    assert c.BOOT_DECLARATION == replace(contract("sui.fb.boot_declaration"), version="3")
+    assert c.BOOT_DECLARATION == replace(contract("sui.fb.boot_declaration"), version="5")
 
 
 @pytest.mark.parametrize("initial", [False, True], ids=["initial-none", "initial-present"])
@@ -315,7 +316,7 @@ def test_read1_boot_saves_each_slotted_model_as_an_independent_prediction(make_r
     assert tuple(s.slot for s in scene.declared_models) == (MODEL_SLOT, f"{MODEL_SLOT}-2")
     assert all(s.contract == MODEL and s.value == model.declaration for s in scene.declared_models)
     assert len(scene.models) == len({m.cid for m in scene.models}) == len({m.record_id for m in scene.models}) == 2
-    assert scene.boot.contract == replace(contract("sui.fb.boot_declaration"), version="3")
+    assert scene.boot.contract == replace(contract("sui.fb.boot_declaration"), version="5")
     assert scene.boot.value["observation_models"] == wire(scene.declared_models)
     by_slot = {saved.value["declared_at"]["slot"]: saved for saved in scene.models}
     assert set(by_slot) == {declared.slot for declared in scene.declared_models}
@@ -345,9 +346,10 @@ def test_read1_boot_saves_each_slotted_model_as_an_independent_prediction(make_r
 
 
 def test_read1_saving_a_model_without_initial_is_neither_acquisition_nor_belief_adoption(make_read1):
-    """K26-a(a): model declaration is independent of initial/derivation and is not an observation."""
+    """K26-a(a), K36-a(o): declaration-only Boot has no thinking or perception."""
     scene = make_read1(read1_static(), (), initial=False)
     assert scene.rig.boot_input.declaration.initial is None
+    assert scene.rig.boot_input.declaration.perception is None
     assert len(scene.models) == 1 and scene.model_record.cid != scene.boot.cid
     assert scene.rig.source.calls == [] and scene.rig.calls == [] and scene.rig.workers.entries == []
     assert not scene.rig.facts(c.RECEIVED) and not scene.rig.reports("frame")

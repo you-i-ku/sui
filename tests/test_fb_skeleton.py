@@ -5,6 +5,7 @@ Point strings below are *named raw claims*, not evidence of saved records.
 Construction success never certifies a claim or a runnable Boot method.
 Integration requires real saved Points. Historical gaps below are replaced by
 construction/signature tests; they are not claims of implemented computation.
+Request 105: status_examples explicitly supplies both K36-c-b status collections.
 """
 
 from dataclasses import dataclass, fields, make_dataclass, replace
@@ -270,32 +271,33 @@ def budget():
     return RateBudget(Fraction(1, 1000), 1000, 1000, 10)
 
 
-def require_boot_v3():
-    """K27: missing public fields/versions fail each case, never collection."""
-    missing = []
-    if "observation_models" not in {field.name for field in fields(fb.BootDeclaration)}:
-        missing.append("BootDeclaration.observation_models")
-    for cls in (fb.BootstrapRoute, fb.SegmentArgs):
-        if "repeat" not in {field.name for field in fields(cls)}:
-            missing.append(cls.__name__ + ".repeat")
-    for name, version in (("BOOT_DECLARATION", "3"), ("BOOTSTRAP_ROUTE", "2"), ("SEGMENT_REQUESTED", "2")):
+def require_boot_v5():
+    """K36-c-b: resolve the current Boot/5 and public status shape per case."""
+    missing = [name for name in ("Perception", "ExecutionDeclaration", "ExecutionArgs", "ExecuteStep", "StepExecutor", "EvaluationStatus", "ThinkingMaterialStatus")
+               if not hasattr(fb, name)]
+    for name in ("perception", "execution"):
+        if name not in {field.name for field in fields(fb.BootDeclaration)}:
+            missing.append("BootDeclaration." + name)
+    for name, version in (("BOOT_DECLARATION", "5"), ("REUSE_CANDIDATES", "3"), ("INITIAL_PROCESS", "2"),
+                          ("BOOTSTRAP_ROUTE", "2"), ("SEGMENT_REQUESTED", "2")):
         if getattr(c, name).version != version:
             missing.append(name + "/" + version)
-    if not hasattr(c, "ACQUISITION_REPEAT_WHEN_DONE"):
-        missing.append("ACQUISITION_REPEAT_WHEN_DONE")
-    assert not missing, "K27 public names/fields/version missing: " + ", ".join(missing)
+    assert not missing, "K36-c public names/fields/version missing: " + ", ".join(missing)
 
 
-# Parameter data must remain collectable before the required public field exists.
-# This test-only subtype is used ONLY by explicit _for_collection calls below
-# and in stage1's raw probes. Focused per-case checks prevent it reaching a host.
-# Once the public field exists, even collection uses the real public constructor.
-if "observation_models" not in {field.name for field in fields(fb.BootDeclaration)}:
-    @dataclass(frozen=True, slots=True, kw_only=True)
-    class _BootV3CollectionValue(fb.BootDeclaration):
-        observation_models: tuple[fb.SlotValue, ...]
-else:
-    _BootV3CollectionValue = fb.BootDeclaration
+# Inert collection data only. Per-case guards forbid passing a substitute to a host.
+_BootV5CollectionValue = (fb.BootDeclaration if "perception" in {f.name for f in fields(fb.BootDeclaration)}
+    else make_dataclass("BootV5CollectionValue", [("perception", object), ("execution", object)],
+        bases=(fb.BootDeclaration,), frozen=True, slots=True, kw_only=True))
+_PerceptionCollectionValue = getattr(fb, "Perception", None) or make_dataclass(
+    "PerceptionCollectionValue", [(n, object) for n in
+        ("process_slot", "reader_slot", "model", "allocation", "derivation")],
+    frozen=True, slots=True, kw_only=True)
+_InitialV2CollectionValue = (fb.InitialProcess if "perception_slot" in {f.name for f in fields(fb.InitialProcess)}
+    else make_dataclass("InitialV2CollectionValue", [(n, object) for n in
+        ("process_slot", "perception_slot", "generator", "method", "draw", "prepare_budget",
+         "evaluate_budget", "allocation", "continuation")], frozen=True, slots=True, kw_only=True))
+
 
 _RouteCollectionValue = (fb.BootstrapRoute if "repeat" in {f.name for f in fields(fb.BootstrapRoute)}
     else make_dataclass("RouteCollectionValue", [("repeat", fb.MethodCall)],
@@ -310,16 +312,16 @@ def repeat_method():
 
 
 def boot(initial=False, *, _for_collection=False):
-    """Boot /3; collection-only subtypes never certify absent public fields."""
+    """Boot /5: shape-only has no perception; model fixtures declare its own seat."""
     if not _for_collection:
-        require_boot_v3()
-    declaration_type = _BootV3CollectionValue if _for_collection else fb.BootDeclaration
+        require_boot_v5()
+    declaration_type = _BootV5CollectionValue if _for_collection else fb.BootDeclaration
     route_type = _RouteCollectionValue if _for_collection else fb.BootstrapRoute
     def allocation(name):
         return slot(name, c.ALLOCATION, fb.Allocation(scope_slot="scope",
                     amount=fb.QuantityValue(contract=c.SEATS, value=1)))
 
-    initial_value = None
+    initial_value = perception_value = None
     if initial:
         delta_args = {
             "process_slot": "thinking", "reader_slot": "reader",
@@ -327,13 +329,19 @@ def boot(initial=False, *, _for_collection=False):
             **{name: {"contract": {"name": "test." + name, "version": "1"}, "args": {}}
                for name in ("condition", "trigger_slots", "inputs", "stage_slots", "grouping", "request")},
         }
-        initial_value = slot("initial", c.INITIAL_PROCESS, fb.InitialProcess(
-            process_slot="thinking", reader_slot="reader", model=point("model"),
+        perception_type = _PerceptionCollectionValue if _for_collection else fb.Perception
+        initial_type = _InitialV2CollectionValue if _for_collection else fb.InitialProcess
+        delta_args["process_slot"] = "perceiving"
+        perception_value = slot("perception", contract("sui.fb.perception"), perception_type(
+            process_slot="perceiving", reader_slot="reader", model=point("model"),
+            allocation=allocation("perception-allocation"),
+            derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
+                contract=c.SAVED_SEGMENT_UPDATE, args=delta_args))))
+        initial_value = slot("initial", ContractRef("sui.fb.initial_process", "2"), initial_type(
+            process_slot="thinking", perception_slot="perception",
             generator=method("test.generator"), method=method("test.evaluation"),
             draw=method("test.draw"), prepare_budget=budget(), evaluate_budget=budget(),
-            allocation=allocation("thinking-allocation"),
-            derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(
-                contract=c.SAVED_SEGMENT_UPDATE, args=delta_args)), continuation=None))
+            allocation=allocation("thinking-allocation"), continuation=None))
     return fb.Boot(declaration=declaration_type(
         capacity=fb.QuantityValue(contract=c.SEATS, value=2),
         scope=slot("scope", c.RESOURCE_SCOPE, fb.ResourceScope(
@@ -341,7 +349,7 @@ def boot(initial=False, *, _for_collection=False):
         routes=(slot("route", ContractRef("sui.fb.bootstrap_route", "2"), route_type(
             config=route(), process_slot="sensing", allocation=allocation("sensing-allocation"),
             reading_contract=c.FINITE_SEGMENT_PROJECTION, repeat=repeat_method())),),
-        initial=initial_value,
+        initial=initial_value, perception=perception_value, execution=None,
         environment=slot("environment", c.ENVIRONMENT,
                          fb.Environment(data={"fixture": "shape-only"})),
         observation_models=()))
@@ -396,11 +404,25 @@ def view():
                         reader_view_key="fixture-view", registry_key="fixture-registry")
 
 
+_EXECUTION_FIELDS = ("selection", "evaluated", "root_key", "draw", "intention", "policy", "node",
+                     "occurrence", "action", "kernel", "u", "model", "reading", "prior")
+_ExecutionCollectionValue = make_dataclass("ExecutionCollectionValue",
+    [(name, object) for name in _EXECUTION_FIELDS], frozen=True, slots=True, kw_only=True)
+
+
+def execution_fields():
+    """Shape-only E; the certified positive image belongs to test_fb_cycle."""
+    return dict(selection=point("S"), evaluated=point("EV"), root_key="root", draw=point("DF"),
+        intention=point("intention"), policy=None, node="step", occurrence=0,
+        action=None, kernel=method("test.kernel"), u="peek",
+        model=point("model"), reading=point("reading"), prior=None)
+
+
 def args_by_stage(*, _for_collection=False):
     if not _for_collection:
-        require_boot_v3()
+        require_boot_v5()
     segment_type = _SegmentCollectionValue if _for_collection else fb.SegmentArgs
-    return {
+    result = {
         "measure_segment": segment_type(route=point("route"), requested=interval(), start_reason="bootstrap",
                                         repeat=repeat_method()),
         "candidate_generation": fb.CandidateArgs(model=point("model"), generator_args={}, basis=()),
@@ -417,6 +439,9 @@ def args_by_stage(*, _for_collection=False):
         "evaluation": fb.EvaluationArgs(evaluation_request=point("EQ"), prepared=point("PR"), draw=point("DF"),
                                         budget=budget()),
     }
+    execution_type = (getattr(fb, "ExecutionArgs", None) or _ExecutionCollectionValue) if _for_collection else fb.ExecutionArgs
+    result["execute_step"] = execution_type(**execution_fields())
+    return result
 
 
 def desc(stage):
@@ -456,6 +481,7 @@ def status_examples():
             process=fb.BootSlot(declaration=point("boot"), slot="sensing"), reader=None,
             target=point("request"), part=interval(), handled=True, handed_to=unsaved,
             unmet=True, evidence=evidence),),
+        policies=(), intentions=(), executions=(), evaluations=(), thinking_materials=(),
         updates=(fb.BeliefUpdateStatus(model=point("model"), origin=point("origin"), route_epoch="route-A",
             sample_seq=0, obligation=point("B"), request=point("Q"), outcome="adopted", reading="read",
             reasons=(), fields=(), published_through=0, saved_through=0, adopted_through=0),),
@@ -466,6 +492,8 @@ def status_examples():
 def test_boot_nested_shape(initial):
     event = boot(initial)
     assert (event.declaration.initial is not None) == initial
+    assert (event.declaration.perception is not None) == initial
+    assert event.declaration.execution is None
     assert event.declaration.routes[0].value.config.origin == "bootstrap"
     assert event.declaration.capacity.value == 2
     assert event.declaration.observation_models == ()
@@ -498,18 +526,19 @@ def test_draw_outcome_branches(branch):
     fb.DrawReturned(work="unknown", outcome=draw_outcomes()["unknown"])], ids=lambda e: type(e).__name__)
 def test_six_events_and_envelope(event):
     if isinstance(event, fb.Boot):
-        require_boot_v3()  # Collection-only data cannot certify the missing public declaration.
+        require_boot_v5()  # Collection-only data cannot certify the missing public declaration.
     envelope = fb.Envelope(number=7, event=event, received_ns=20)
     assert envelope.event is event
     assert isinstance(event, get_args(fb.FEvent))
 
 
 @pytest.mark.parametrize("stage", tuple(args_by_stage(_for_collection=True)))
-def test_six_work_uses(stage):  # v0.25 §6-6: belief_update 1 つ (前は 8 用途)
+def test_seven_work_uses(stage):  # v0.25 §6-6: belief_update 1 つ (前は 8 用途)
     assert set(get_args(fb.Stage)) == set(args_by_stage())
-    assert set(get_args(fb.FWork)) == {fb.MeasureSegment, fb.Compute, fb.Draw}
+    assert set(get_args(fb.FWork)) == {fb.MeasureSegment, fb.Compute, fb.Draw, fb.ExecuteStep}
     d = desc(stage)
-    cls = fb.MeasureSegment if stage == "measure_segment" else fb.Draw if stage == "selection_draw" else fb.Compute
+    cls = (fb.MeasureSegment if stage == "measure_segment" else fb.Draw if stage == "selection_draw"
+           else fb.ExecuteStep if stage == "execute_step" else fb.Compute)
     work = cls(request=point("request-" + stage), desc=d)
     assert work.desc.purpose == stage
     assert len(fields(fb.Desc)) == 13
@@ -526,7 +555,7 @@ def test_six_status_shape_representatives(meaning):
 
 
 def test_public_entry_signatures():
-    require_boot_v3()
+    require_boot_v5()
     require_belief_updates()
     assert get_type_hints(fb.FStatus)["updates"] == tuple[fb.BeliefUpdateStatus, ...]
     # K26-a/b: the declaration is mandatory and the pure reader takes its saved Point.
@@ -544,7 +573,7 @@ def test_public_entry_signatures():
     assert get_type_hints(fb.read_acquisition_sequence) == {
         "records": Mapping[str, Record], "model": str, "run": Ref, "route_epoch": str,
         "through_seq": int, "return": fb.AcquisitionReadResult}
-    assert c.BOOT_DECLARATION == ContractRef("sui.fb.boot_declaration", "3")
+    assert c.BOOT_DECLARATION == ContractRef("sui.fb.boot_declaration", "5")
     assert c.BOOTSTRAP_ROUTE == ContractRef("sui.fb.bootstrap_route", "2")
     assert c.SEGMENT_REQUESTED == ContractRef("sui.fb.segment_requested", "2")
     assert c.ACQUISITION_REPEAT_WHEN_DONE == contract("sui.fb.acquisition_repeat_when_done")
@@ -554,7 +583,7 @@ def test_public_entry_signatures():
     assert c.ACQUISITION_OBSERVATION_MODEL == contract("sui.fb.acquisition_observation_model")
     assert c.ACQUISITION_RESULT_PROJECTION == contract("sui.fb.acquisition_result_projection")
     # K23(2)(a): an optional route_epoch -> FSource mapping is supplied by the caller.
-    assert set(signature(fb.FThreadHost).parameters) == {"ledger", "clock", "workers", "registry", "launcher", "sources"}
+    assert set(signature(fb.FThreadHost).parameters) == {"ledger", "clock", "workers", "registry", "launcher", "sources", "actors"}
     assert signature(fb.FThreadHost).parameters["launcher"].default is None
     assert signature(fb.FThreadHost).parameters["sources"].default is None
     assert get_type_hints(fb.FThreadHost.__init__)["sources"] == Mapping[str, fb.FSource] | None
@@ -749,9 +778,10 @@ FB_FIELD_SPEC = {
     "ResourceScope": "quantity_contract:ContractRef;need:MethodCall",
     "Allocation": "scope_slot:str;amount:QuantityValue",
     "BootstrapRoute": "config:RouteConfig;process_slot:str;allocation:SlotValue;reading_contract:ContractRef|None;repeat:MethodCall",
-    "InitialProcess": "process_slot:str;reader_slot:str;model:Point;generator:MethodCall;method:MethodCall;draw:MethodCall;prepare_budget:RateBudget;evaluate_budget:RateBudget;allocation:SlotValue;derivation:SlottedMethod;continuation:MethodCall|None",  # v0.26 §6-9 H3・H4、§6-10 J6・K1 (Z41: 更新の上限の欄は無い)
+    "Perception": "process_slot:str;reader_slot:str;model:Point;allocation:SlotValue;derivation:SlottedMethod",
+    "InitialProcess": "process_slot:str;perception_slot:str;generator:MethodCall;method:MethodCall;draw:MethodCall;prepare_budget:RateBudget;evaluate_budget:RateBudget;allocation:SlotValue;continuation:MethodCall|None",  # v0.26 §6-9 H3・H4、§6-10 J6・K1 (Z41: 更新の上限の欄は無い)
     "Environment": "data:ImmutableJSON",
-    "BootDeclaration": "capacity:QuantityValue;scope:SlotValue;routes:tuple[SlotValue,...];initial:SlotValue|None;environment:SlotValue;observation_models:tuple[SlotValue,...]",
+    "BootDeclaration": "capacity:QuantityValue;scope:SlotValue;routes:tuple[SlotValue,...];initial:SlotValue|None;perception:SlotValue|None;execution:SlotValue|None;environment:SlotValue;observation_models:tuple[SlotValue,...]",
     "AcquisitionControl": "id:str;kernel:f.FiniteKernel;cells:tuple[f.ObservationCell,...]",
     "AcquisitionObservationModel": "route_slot:str;states:tuple[str,...];controls:tuple[AcquisitionControl,...];control_rule:MethodCall;independence:MethodCall;projection:ContractRef;time_projection:ContractRef",
     "AcquisitionReadItem": "sample_seq:int;cursor:int;result:Literal['taken','empty','unavailable'];source_called:bool;before:ReadingClock;after:ReadingClock;received_id:Ref|None;measurement_id:f.MeasurementId;frame:Point;received:Point|None",
@@ -797,7 +827,9 @@ FB_FIELD_SPEC = {
     "CellStatus": "interval:MeasurementInterval;reports:tuple[Literal['frame','gap','measurement_unavailable','claim','coverage_unproved'],...];certified:bool;evidence:StatusBasis",
     "SegmentStatus": "segment:Held;cells:tuple[CellStatus,...];ended:bool;evidence:StatusBasis",
     "PurposeStatus": "obligation:Held;o_id:str;condition:Literal['issue','save','run','handle','stop'];role:str;process:BootSlot|None;reader:Point|None;target:Held|None;part:MeasurementInterval|None;handled:bool;handed_to:Held|None;unmet:bool;evidence:StatusBasis",
-    "FStatus": "receipts:tuple[ReceiptStatus,...];works:tuple[WorkStatus,...];readings:tuple[ReadingStatus,...];pending:tuple[PendingStatus,...];segments:tuple[SegmentStatus,...];purposes:tuple[PurposeStatus,...];updates:tuple[BeliefUpdateStatus,...]",
+    "EvaluationStatus": "activity:str;allocation:BootSlot;root:Literal['undetermined','prior','adopted'];root_point:Point|None;context:Point|Held|None;outcome:str;residual:tuple[str,...];counted:bool;basis:StatusBasis",
+    "ThinkingMaterialStatus": "boot:Point;initial:BootSlot;latest:Point|None;handed:Point|None;unevaluated:bool;blocked_by:tuple[str,...];basis:StatusBasis",
+    "FStatus": "receipts:tuple[ReceiptStatus,...];works:tuple[WorkStatus,...];readings:tuple[ReadingStatus,...];pending:tuple[PendingStatus,...];segments:tuple[SegmentStatus,...];purposes:tuple[PurposeStatus,...];updates:tuple[BeliefUpdateStatus,...];policies:tuple[PolicyStatus,...];intentions:tuple[IntentionStatus,...];executions:tuple[ExecutionStatus,...];evaluations:tuple[EvaluationStatus,...];thinking_materials:tuple[ThinkingMaterialStatus,...]",
     # K23(2)(a)(c), handwritten from the new paper declarations.
     "SourceItem": "media_type:str;data:bytes;claims:ImmutableJSON",
     "Acquisition": "route_epoch:str;cursor:int;before:ReadingClock;after:ReadingClock;outcome:Literal['taken','empty','unavailable'];reason:str;item:SourceItem|None",
@@ -848,9 +880,9 @@ FB_ALIAS_SPEC = {
     # Two literal boundary kinds plus these six types give eight wire branches.
     "SegmentItem": "SegmentBoundary|RouteAppliedItem|MeasurementFrame|Gap|MeasurementUnavailable|CoverageClaim|CoverageUnproved",
     "FEvent": "Boot|ClockDeclared|Received|SegmentReport|WorkFinished|DrawReturned",
-    "Stage": "Literal['measure_segment','candidate_generation','belief_update','evaluation_prepare','selection_draw','evaluation']",
-    "WorkArgs": "SegmentArgs|CandidateArgs|UpdateArgs|EvaluationPrepareArgs|DrawArgs|EvaluationArgs",
-    "FWork": "MeasureSegment|Compute|Draw",
+    "Stage": "Literal['measure_segment','candidate_generation','belief_update','evaluation_prepare','selection_draw','evaluation','execute_step']",
+    "WorkArgs": "SegmentArgs|CandidateArgs|UpdateArgs|EvaluationPrepareArgs|DrawArgs|EvaluationArgs|ExecutionArgs",
+    "FWork": "MeasureSegment|Compute|Draw|ExecuteStep",
     "Held": "Point|Unsaved",
     "LaunchResult": "Literal['launched','not_started','unknown']",
 }
@@ -867,9 +899,12 @@ FA_ALIAS_SPEC = {
 
 
 def test_public_export_names_are_exact():
+    require_boot_v5()
     expected = set(FB_FIELD_SPEC) | set(FB_ALIAS_SPEC) | {
         "FbInputError", "FbHostFault", "FHalted", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost",
-        "FSource", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "Evaluator", "UniformDraw", "WorkerBundle", "read_acquisition_sequence", "BeliefUpdateStatus"}
+        "FSource", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "Evaluator", "UniformDraw", "WorkerBundle", "read_acquisition_sequence", "BeliefUpdateStatus",
+        "start", "RunningSui", "StartInputError", "StepExecutor", "FActor", "ExecutionDeclaration", "FStatus",
+        "ExecutionArgs", "ExecuteStep", "ExecutionResult", "ExecutionReport", "PolicyStatus", "IntentionStatus", "ExecutionStatus"}
     missing = expected - set(fb.__all__)
     assert not missing, "public export names missing: " + ", ".join(sorted(missing))
     assert set(fb.__all__) == expected
@@ -889,6 +924,7 @@ def declaration_names(surface=fb, *, group="fb"):
                  RateBudget=RateBudget, ClockSource=ClockSource, Literal=Literal,
                  CapabilityCallable=f.CapabilityCallable, Mapping=Mapping, Fraction=Fraction,
                  FiniteKernel=f.FiniteKernel, ObservationCell=f.ObservationCell)
+    names.update({name: getattr(surface, name, object) for name in ("ExecutionArgs", "ExecuteStep", "PolicyStatus", "IntentionStatus", "ExecutionStatus")})
     names.update(f=f, fb=surface, u2=u2, update=u2,
                  MeasurementInterval=f.MeasurementInterval)
     if group == "fb":
@@ -1063,3 +1099,14 @@ def test_stage3_independent_evidence_contrasts_are_constructible(contrast):
     assert good_input[0] is bad_input[0] and legal != illegal
     for key in ("request", "reader", "registry"):
         assert good_call[key] is bad_call[key]
+
+
+
+def test_public_k36_c_status_rows_are_frozen_and_keyword_only():
+    require_boot_v5()
+    for cls in (fb.EvaluationStatus, fb.ThinkingMaterialStatus):
+        assert cls.__dataclass_params__.frozen
+        assert all(parameter.kind == parameter.KEYWORD_ONLY
+                   for parameter in signature(cls).parameters.values())
+    assert get_type_hints(fb.FStatus)["evaluations"] == tuple[fb.EvaluationStatus, ...]
+    assert get_type_hints(fb.FStatus)["thinking_materials"] == tuple[fb.ThinkingMaterialStatus, ...]

@@ -340,8 +340,8 @@ class EvaluationRig(Stage2Rig):
         self.reader_error = reader_error
         self.evaluation_reader = self.evaluation_problem = None
         self.native_evaluator = cls()
-        workers = {stage: self.workers for stage in (
-            "candidate_generation", "measure_segment", "belief_update", "evaluation_prepare", "selection_draw", "evaluation")}
+        workers = {stage: fb.StepExecutor() if stage == "execute_step" else self.workers for stage in (
+            "candidate_generation", "measure_segment", "belief_update", "evaluation_prepare", "selection_draw", "evaluation", "execute_step")}
         workers["evaluation"] = HostEvaluatorProbe(self, self.native_evaluator)
         self.host = fb.FThreadHost(ledger=self.ledger, clock=self.clock,
             workers=fb.WorkerBundle(workers), registry=self.registry, launcher=self.launcher)

@@ -517,8 +517,8 @@ class PreparationRig(Stage2Rig):
             omit_implementation=contract("finite_option_proof") if no_decision else None)
         self.native_posts, self.replace_issue, self.prepare_reader = [], replace_issue, None
         self.native_preparer = cls(registry=self.registry)
-        self.bundle_workers = {stage: self.workers for stage in (
-            "candidate_generation", "measure_segment", "belief_update", "evaluation_prepare", "selection_draw", "evaluation")}
+        self.bundle_workers = {stage: fb.StepExecutor() if stage == "execute_step" else self.workers for stage in (
+            "candidate_generation", "measure_segment", "belief_update", "evaluation_prepare", "selection_draw", "evaluation", "execute_step")}
         self.bundle_workers["evaluation_prepare"] = HostPreparationProbe(self, self.native_preparer)
         self.host = fb.FThreadHost(ledger=self.ledger, clock=self.clock,
             workers=fb.WorkerBundle(self.bundle_workers), registry=self.registry, launcher=self.launcher)

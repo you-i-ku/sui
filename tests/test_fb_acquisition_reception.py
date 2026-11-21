@@ -21,7 +21,7 @@ from test_fb_stage1 import wire
 class AcquisitionNoInitialRig(AcquisitionLoopRig):
     def __init__(self):
         def install(rig):
-            rig.boot_input = replace(rig.boot_input, declaration=replace(rig.boot_input.declaration, initial=None))
+            rig.boot_input = replace(rig.boot_input, declaration=replace(rig.boot_input.declaration, initial=None, perception=None))
         super().__init__(symbols=(T, E), before_host=install)
         self.hold_return = True
 
@@ -44,12 +44,14 @@ def make_reception():
 
 
 def test_initial_none_continues_measuring_receiving_and_saving(make_reception):
-    """Two production operations and independent Post prove progress without Compute.
+    """Low-level perception=None: two operations and independent Post without Compute.
 
     Disabling measurement with initial=None, losing a raw/Frame, or starting
     candidate/evaluation/update work fails the explicit received/saved witnesses.
     """
     rig = make_reception()
+    assert rig.boot_input.declaration.initial is None
+    assert rig.boot_input.declaration.perception is None
     rig.begin()
     probe = fb.Received(route_epoch="route-A", media_type="text/plain", data=b"independent reception", claims={})
     rig.host.post(probe)

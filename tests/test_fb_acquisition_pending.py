@@ -13,6 +13,7 @@ from test_fb_belief import T, E
 from test_fb_measure import acquire1_expected_frame
 from test_fb_loop import (LoopRig, Row1StoreCut, Row2AckLoss, ORDER, assert_update,
     row5_report_for_work, execution_for, assert_keep_interruption, ACQUIRED)
+from test_fb_loop import assert_admitted_evaluation_root, wait_evaluation_activity_end
 from test_fb_skeleton import contract
 from test_fb_stage1 import wire
 from test_fb_stage2 import Stage2Rig, MATH, TINY_BUDGET, terminal
@@ -55,7 +56,7 @@ def make_pending(symbols):
 
 
 def finish_continuation(rig, number, *, allow_no_decision=False):
-    """K10: adoption and its continuation Q need not save in one settle.
+    """K36-c: explicitly finish one admitted activity before the next serial input.
 
     Wait for a saved, offered WorkId that has not run. LoopRig.callback alone
     can return the previous continuation's last request; rerunning that body is
@@ -67,7 +68,9 @@ def finish_continuation(rig, number, *, allow_no_decision=False):
     selections_before = {s.cid for s in rig.facts(c.SELECTION)}
     if not allow_no_decision:
         assert len(selections_before) == number
-    for stage in ORDER[1:]:
+    position, activity = 0, None
+    while position < len(ORDER[1:]):
+        stage = ORDER[1:][position]
         def fresh_request_offered():
             requests = rig.requests(stage)
             if not requests: return False
@@ -76,9 +79,14 @@ def finish_continuation(rig, number, *, allow_no_decision=False):
                 key == work_id for key, _body in rig.launcher.attempts)
         rig.until(fresh_request_offered)
         request = rig.requests(stage)[-1]
+        if stage == "evaluation_prepare":
+            adoptions = rig.facts(c.BELIEF_ADOPTED)
+            activity = assert_admitted_evaluation_root(rig, request, adoptions[-1] if adoptions else None)
         work = rig.run_stage(stage)
         assert work.request == request.cid
-        if stage == "selection_draw": continue
+        if stage == "selection_draw":
+            position += 1
+            continue
         issued = rig.workers.issued[stage]
         if isinstance(issued.value, f.NoDecision):
             assert allow_no_decision, "this short control must reach selection"
@@ -103,9 +111,17 @@ def finish_continuation(rig, number, *, allow_no_decision=False):
             else:
                 assert not [s for s in rig.facts(c.SELECTION) if s.value["evaluated"] == saved.cid]
             assert {s.cid for s in rig.facts(c.SELECTION)} == selections_before
+            if stage == "evaluation" and issued.value.reason == "selection_boundary":
+                row, = [row for row in rig.host.window.status().evaluations if row.activity == activity]
+                assert row.outcome == "running" and row.counted
+                position = 1  # K35 continues D/Ee inside this same activity, without a fixed cap.
+                continue
+            wait_evaluation_activity_end(rig, activity)
             return stage + ":no_decision"
         assert isinstance(issued.value, f.FProblem if stage == "evaluation_prepare" else f.Selected)
+        position += 1
     rig.until(lambda: len(rig.facts(c.SELECTION)) == len(selections_before) + 1)
+    wait_evaluation_activity_end(rig, activity)
     return "selected"
 
 

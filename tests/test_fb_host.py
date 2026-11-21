@@ -20,8 +20,8 @@ def declare_clock(rig):
 
 
 def with_model(rig, event):
-    return replace(event, declaration=replace(event.declaration, initial=replace(event.declaration.initial,
-        value=replace(event.declaration.initial.value, model=rig.model_point))))
+    return replace(event, declaration=replace(event.declaration, perception=replace(event.declaration.perception,
+        value=replace(event.declaration.perception.value, model=rig.model_point))))
 
 
 def pending(rig):

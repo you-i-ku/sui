@@ -16,7 +16,7 @@ import tracemalloc
 import pytest
 
 from sui import f, fb, fb_contracts as c, f_update2 as u
-from test_fb_skeleton import contract, slot, source, require_boot_v3, repeat_method
+from test_fb_skeleton import contract, slot, source, require_boot_v5, repeat_method
 from test_fb_stage1 import wire
 from test_fb_measure import AcquireRig, AcquirePort, AcquireWorkers, acquire1_api, RAW, ROUTE
 from test_fb_loop import execution_for
@@ -32,7 +32,7 @@ class RepeatOverrun(BaseException):
 
 
 def repeat1_api():
-    require_boot_v3()
+    require_boot_v5()
     assert c.ACQUISITION_REPEAT_WHEN_DONE == REPEAT
     return acquire1_api()
 
@@ -139,7 +139,7 @@ def make_repeat1():
             args={"first": [CONTROL_ID], "after": {s: [CONTROL_ID] for s in SYMBOLS}}))
         rig.model_declaration = model.declaration
         rig.boot_input = replace(rig.boot_input, declaration=replace(rig.boot_input.declaration,
-            initial=None, observation_models=(slot("repeat-model", MODEL, model.declaration),)))
+            initial=None, perception=None, observation_models=(slot("repeat-model", MODEL, model.declaration),)))
         if unsupported is not None:
             route, = rig.boot_input.declaration.routes
             rig.boot_input = replace(rig.boot_input, declaration=replace(rig.boot_input.declaration,

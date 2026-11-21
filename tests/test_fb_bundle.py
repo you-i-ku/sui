@@ -26,9 +26,9 @@ from test_fb_acquisition_loop import MATRICES
 
 
 STAGES = ("measure_segment", "candidate_generation", "belief_update",
-          "evaluation_prepare", "selection_draw", "evaluation")
+          "evaluation_prepare", "selection_draw", "evaluation", "execute_step")
 THINKING = ("candidate_generation", "evaluation_prepare", "selection_draw", "evaluation")
-OPERATIONS = ("enter", "now", "acquire", "read", "monitored", "reader", "prepared", "post", "evidence")
+OPERATIONS = ("enter", "now", "acquire", "read", "monitored", "reader", "prepared", "post", "evidence", "perform")
 WATCHDOG = 30
 
 
@@ -38,7 +38,8 @@ def bundle_type():
 
 
 def work_for(stage):
-    kind = fb.MeasureSegment if stage == "measure_segment" else fb.Draw if stage == "selection_draw" else fb.Compute
+    kind = (fb.MeasureSegment if stage == "measure_segment" else fb.Draw if stage == "selection_draw"
+            else fb.ExecuteStep if stage == "execute_step" else fb.Compute)
     return kind(request=point("bundle-request-" + stage), desc=desc(stage))
 
 
@@ -53,6 +54,7 @@ class PortSpy:
     def enter(self): self.touch("enter"); return self.enter_result
     def now(self): self.touch("now")
     def acquire(self): self.touch("acquire")
+    def perform(self, execution): self.touch("perform")
     def read(self, point): self.touch("read")
     def monitored(self, interval): self.touch("monitored")
     def reader(self): self.touch("reader")
@@ -85,7 +87,9 @@ def assert_one(workers, stage, work, ctx):
             assert worker.calls[0][0] is work and worker.calls[0][1] is ctx
 
 
-def test_bundle1_public_shape_and_exact_six_stage_domain():
+def test_bundle1_public_shape_and_exact_seven_stage_domain():
+    from test_fb_skeleton import require_boot_v5
+    require_boot_v5()
     cls = bundle_type()
     assert get_args(fb.Stage) == STAGES
     assert "WorkerBundle" in fb.__all__
@@ -119,7 +123,7 @@ def test_bundle1_each_missing_purpose_is_value_error(missing):
 
 @pytest.mark.parametrize("shape", ["extra", "five-plus-unknown", "empty"])
 def test_bundle1_extra_replacement_and_empty_domains_are_value_error(shape):
-    """A six-key map with one unknown key defeats count-only validation."""
+    """A seven-key map with one unknown key defeats count-only validation."""
     cls = bundle_type()
     workers = probes()
     if shape == "empty": workers.clear()
@@ -402,7 +406,8 @@ class BundleLoopRig(BeliefRig):
         self.native_candidate = candidate_worker
         if candidate_worker is not None:
             self.bundle_workers["candidate_generation"] = candidate_worker
-        self.bundle_workers.update(measure_segment=self.native_measurer, belief_update=self.native_updater)
+        self.bundle_workers.update(measure_segment=self.native_measurer, belief_update=self.native_updater,
+                                   execute_step=fb.StepExecutor())
         self.bundle = cls(self.bundle_workers)
         assert not self.requests("candidate_generation") and not self.requests("measure_segment")
         self.host = fb.FThreadHost(ledger=self.ledger, clock=self.clock, workers=self.bundle,

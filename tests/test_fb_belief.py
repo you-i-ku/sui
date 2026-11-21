@@ -18,6 +18,8 @@ from threading import Event
 from types import SimpleNamespace
 from typing import get_args, get_type_hints
 
+from test_fb_loop import assert_admitted_evaluation_root, wait_evaluation_activity_end
+
 import pytest
 
 from sui import f, fb, fb_contracts as c, f_update2 as u
@@ -210,15 +212,16 @@ class BeliefRig(AcquireRig):
                 "correspondence": {"pairs": wire(pairs)}}
         if mutate is not None: observation.declaration, args = mutate(observation.declaration, args)
         event = boot(True)
-        initial = replace(event.declaration.initial.value, model=self.model_point,
-            generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}),
-            method=fb.MethodCall(contract=contract("sui.f.finite_evaluation"), args={}),
-            draw=fb.MethodCall(contract=contract("stage2.scripted_draw"), args={}),
-            prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET,
-            derivation=fb.SlottedMethod(slot="delta", method=fb.MethodCall(contract=delta, args=args)),
-            continuation=fb.MethodCall(contract=c.REUSE_CANDIDATES, args={}) if continuation else None)
+        event = replace(event, declaration=replace(event.declaration, perception=replace(
+            event.declaration.perception, value=replace(event.declaration.perception.value,
+                model=self.model_point, derivation=fb.SlottedMethod(slot='delta', method=fb.MethodCall(contract=delta, args=args))))))
+        initial = replace(event.declaration.initial.value, generator=fb.MethodCall(contract=c.MODEL_OPERATIONS, args={}), method=fb.MethodCall(contract=contract('sui.f.finite_evaluation'), args={}), draw=fb.MethodCall(contract=contract('stage2.scripted_draw'), args={}), prepare_budget=PREPARE_BUDGET, evaluate_budget=EVALUATE_BUDGET, continuation=fb.MethodCall(contract=c.REUSE_CANDIDATES, args={}) if continuation else None)
         initial = replace(initial, allocation=replace(initial.allocation, value=replace(initial.allocation.value,
             amount=fb.QuantityValue(contract=c.SEATS, value=2))))
+        per = event.declaration.perception
+        event = replace(event, declaration=replace(event.declaration, perception=replace(per,
+            value=replace(per.value, allocation=replace(per.value.allocation, value=replace(
+                per.value.allocation.value, amount=fb.QuantityValue(contract=c.SEATS, value=2)))))))
         route, = event.declaration.routes
         route = replace(route, value=replace(route.value, reading_contract=PROJECTION,
             config=replace(route.value.config, sampling_contract=c.ACQUISITION_RESULT_SAMPLING,
@@ -343,7 +346,7 @@ def test_belief1_production_TET_adopts_in_order_and_matches_enumeration_and_K26(
         assert binding.value["segment"] == frame.value["segment"]
         correspondence = rig.read_stored(rig.one(CORRESPONDENCE).cid)[2]
         assert correspondence.writer == Role.MODEL and isinstance(correspondence.body, Prediction)
-        assert wire(rig.boot_input.declaration.initial.value.derivation.method.args) == {
+        assert wire(rig.boot_input.declaration.perception.value.derivation.method.args) == {
             "route": "route", "observation_model": "observation",
             "correspondence": {"pairs": [["A", "A"], ["B", "B"]]}}
         assert correspondence.body.content.as_json() == {
@@ -1169,13 +1172,14 @@ def test_belief1_continuation_reads_the_adopted_result_and_new_joint(make_belief
             continue
         rig.until(lambda: len(rig.requests("evaluation_prepare")) == i+2)
         eq = rig.requests("evaluation_prepare")[-1]
-        assert {t["point"] for t in eq.value["desc"]["trigger"]} == {adopted.cid}
+        activity = assert_admitted_evaluation_root(rig, eq, adopted)
         assert {adopted.cid, result.cid, adopted.value["acquisition"]} <= closure(rig, eq.value["desc"]["numerical_view"]["boundary"])
         for stage in ("evaluation_prepare", "selection_draw", "evaluation"): rig.run_stage(stage)
         prepared = rig.workers.prepared_by_request[eq.cid].value
         evaluated = rig.workers.evaluated_by_request[rig.requests("evaluation")[-1].cid].value
         assert prepared.K.belief == evaluated.root.K.belief == rig.read_stored(result.cid)[2].id
         rig.until(lambda: len(rig.facts(c.SELECTION)) == i+2)
+        wait_evaluation_activity_end(rig, activity)
     belief1_chain(rig, EXPECTED[:2])
 
 

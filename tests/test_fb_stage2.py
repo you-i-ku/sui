@@ -309,11 +309,10 @@ class Stage2Rig(RealRig):
             RefKind.PREDICTION, Role.MODEL)
         self.model_point = self.ledger.append(record, ()).cid
         event = boot(True)
-        initial = replace(event.declaration.initial.value, model=self.model_point,
-            generator=fb.MethodCall(contract=GENERATOR, args={}),
-            method=fb.MethodCall(contract=METHOD, args={}),
-            draw=fb.MethodCall(contract=DRAW_GENERATOR, args={}),
-            prepare_budget=prepare_budget, evaluate_budget=evaluate_budget)
+        event = replace(event, declaration=replace(event.declaration, perception=replace(
+            event.declaration.perception, value=replace(event.declaration.perception.value,
+                model=self.model_point))))
+        initial = replace(event.declaration.initial.value, generator=fb.MethodCall(contract=GENERATOR, args={}), method=fb.MethodCall(contract=METHOD, args={}), draw=fb.MethodCall(contract=DRAW_GENERATOR, args={}), prepare_budget=prepare_budget, evaluate_budget=evaluate_budget)
         self.boot_input = replace(event, declaration=replace(event.declaration,
             initial=replace(event.declaration.initial, value=initial),
             routes=tuple(replace(route, value=replace(route.value,

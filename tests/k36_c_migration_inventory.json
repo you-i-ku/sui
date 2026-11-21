@@ -1,0 +1,529 @@
+{
+  "request": 97,
+  "retired": [
+    {
+      "id": "C21",
+      "name": "test_cycle1_replacement_before_entry_blocks_old_callback_and_uses_new_selection",
+      "file": "tests/test_fb_cycle.py",
+      "line": 1000,
+      "cases": 1,
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: master copy lacks K36 API",
+      "retired_request": 97,
+      "reason": "The old starting step is replaced before entry; K36-c-a3 now locks the chosen start target."
+    },
+    {
+      "id": "C49",
+      "name": "test_cycle1_pending_new_selection_does_not_replace_live_intention_after_clash",
+      "file": "tests/test_fb_cycle.py",
+      "line": 1609,
+      "cases": 4,
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: master copy lacks K36 API",
+      "retired_request": 97,
+      "reason": "Pending replacement overrides a previously claimed start target; replaced by c-a3 stable-target/retry scenes."
+    },
+    {
+      "id": "C56",
+      "name": "test_cycle1_live_intention_can_enter_until_replacement_intention_is_saved",
+      "file": "tests/test_fb_cycle.py",
+      "line": 1895,
+      "cases": 2,
+      "condition": "Old unentered step may enter while the new intention record is unsaved",
+      "discrimination": "Cut the public intention write before storage, with S already saved. Actor entry happens while the write is still blocked. Restore storage to confirm the new intention; confirmed-before-entry control denies the old callback.",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: master copy lacks K36 API",
+      "retired_request": 97,
+      "reason": "New S replaces an old starting target before entry; withdrawn by c-a3."
+    },
+    {
+      "id": "C57",
+      "name": "test_cycle1_clashing_later_selection_is_not_a_candidate_blocking_delayed_middle_root",
+      "file": "tests/test_fb_cycle.py",
+      "line": 1943,
+      "cases": 4,
+      "condition": "Use only usable current/pending intentions as comparisons; reconsider a middle-root selection independently of storage/delivery order",
+      "discrimination": "Four cases: recover-before-B / B-before-recovery crossed with before_write / ack_loss. B is an actually admitted native evaluation held by Event. C selection persists; the same C fixed intention stays pending with a real public write failure, and in ack_loss target record readback also remains unavailable despite durable storage. Same actual Ee context posts C conflict. B selection is saved before recovery in two cases. All four end with B active, I old callback refused, C inactive with selection_conflict; no clashing unconfirmed C policy is displayed. No fake selection/prior or test-only entry.",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: master copy lacks K36 API",
+      "request88_correction": "Two absence-of-intention-record asserts replaced by A-not-active status asserts. Fixed-record persistence is allowed by K36-b(ni)/INV-7.b; no new requirement on record presence.",
+      "request89_expansion": {
+        "cases_before": 1,
+        "cases_now": 4,
+        "net_added_cases": 3,
+        "save_phase": [
+          "before_write",
+          "ack_loss"
+        ],
+        "recovery": [
+          "before_middle",
+          "after_middle"
+        ],
+        "pending_policy_check": "C absent from FStatus.policies while its intention is unconfirmed and conflicting",
+        "fixed_fact_retry": "C fixed intention may persist; after recovery it is a retained fact, never active. Its policy is named selection_conflict.",
+        "existing_expectations_preserved": "Same B native root, one active B intention, old I refuses admission, actual actor receives B E."
+      },
+      "retired_request": 97,
+      "reason": "Assumes competing intentions can replace a starting target before entry; root/start-lock scenes replace it."
+    },
+    {
+      "id": "C59",
+      "name": "test_cycle1_started_thought_next_stage_has_seat_priority_and_waiters_name_it",
+      "file": "tests/test_fb_cycle.py",
+      "line": 2076,
+      "cases": 1,
+      "condition": "One actual Ep holds the only thinking seat; a newer unbegun round names it in blocked_by. Old D receives the freed seat first and the waiter names old D. Both thoughts eventually reach S; no spurious yield.",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: master API guard precedes fixtures",
+      "retired_request": 97,
+      "reason": "Priority among queued thought stages is withdrawn."
+    },
+    {
+      "id": "C60",
+      "name": "test_cycle1_unbegun_round_yields_when_seats_are_full_and_names_fact_and_purpose",
+      "file": "tests/test_fb_cycle.py",
+      "line": 2104,
+      "cases": 3,
+      "condition": "Ep/D/Ee occupied-stage3 cases: unstarted older thought yields under one-seat pressure; strict four-field record {process:Qgen Point,cause:yielded adoption Point,newer:recipient adoption Point,reason:seats}, original comparison pG and blocked_by; yielded thought never generates new requests.",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: master API guard precedes fixtures",
+      "request91_correction": "round removed; process compared to original candidate request Point (not BootSlot); newer equals second adoption Point; PurposeStatus.process remains a BootSlot compared independently to work.desc.process.",
+      "retired_request": 97,
+      "reason": "Per-adoption queued thoughts and yielding facts are withdrawn."
+    },
+    {
+      "id": "C64",
+      "name": "test_cycle1_spare_seats_keep_unbegun_older_reconsiderations_including_middle_root",
+      "file": "tests/test_fb_cycle.py",
+      "line": 2281,
+      "cases": 2,
+      "condition": "Allocation3 leaves spare room for two unbegun A0/A1 reconsiderations; allocation5 pre-candidate branch keeps initial/A0/A1 after two adoptions queue before candidate output. No thinking_yielded. All native rounds select; pre-candidate contexts all use posterior(4/5,1/5).",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: master API guard precedes fixtures/assertions",
+      "retired_request": 97,
+      "reason": "Per-adoption queued thoughts while spare seats remain are withdrawn."
+    },
+    {
+      "id": "C65",
+      "name": "test_cycle1_conflicting_next_stage_does_not_steal_priority_from_another_thought",
+      "file": "tests/test_fb_cycle.py",
+      "line": 2334,
+      "cases": 1,
+      "condition": "Allocation3: old Ep is complete, D request saved but launcher returns not_started and holds no seat. Same actual old Ep port sends a contradictory failure; fresh-root Ep enters and selects. Its blocked_by never contains old D; conflicting old D remains unentered and its fact is retained.",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: master API guard precedes fixtures/assertions",
+      "retired_request": 97,
+      "reason": "Priority between queued rounds is withdrawn; activity conflict/residual occupancy replaces it."
+    },
+    {
+      "id": "C66",
+      "name": "test_cycle1_only_middle_reconsideration_yields_after_generator_finishes",
+      "file": "tests/test_fb_cycle.py",
+      "line": 2386,
+      "cases": 1,
+      "condition": "Wg owns the sole thinking seat during two adoptions, but no reconsideration or yield exists before candidates. After Wg completes, initial Ep owns the seat and latest Ep waits naming it; only middle A0 yields to A1. Initial/latest both select from prior(4/5,1/5); exactly two contexts/EQs and all successors.",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: API guard precedes native fixtures/assertions",
+      "request94_correction": "Removed mistaken initial-null yield expectation. C66 renamed to match K36-b(ha)2. First launched Ep actual entry/held slot is witnessed; original and latest S are identified by individually invoked native Ee calls, not mathematical-key inequality.",
+      "retired_request": 97,
+      "reason": "Initial/middle yielding after Wg is withdrawn; first activity now fixes one latest root."
+    },
+    {
+      "id": "C67",
+      "name": "test_cycle1_continued_draw_gets_the_only_seat_before_an_unbegun_reconsideration",
+      "file": "tests/test_fb_cycle.py",
+      "line": 2461,
+      "cases": 1,
+      "condition": "Fresh reconsideration EQ Point is saved BEFORE continued D exists. Before-publication gate keeps original Ee output invisible, after-publication gate retains its actual run/sole seat. Both contenders then wait; fresh EQ blocked_by includes later D. First offered contender must be D despite reverse save order; both thoughts eventually select.",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: API guard precedes native fixtures/assertions",
+      "request94_strengthening": "Saved-point snapshot contains fresh EQ and only original D before NoDecision is delegated; later D absent from that snapshot. Both pending while original Ee holds quantity1. Check rank blocker before freeing seat, then first-offer membership fails FIFO immediately.",
+      "retired_request": 97,
+      "reason": "Priority between continued D and a queued reconsideration is withdrawn; continuation stays in one activity."
+    },
+    {
+      "id": "C68",
+      "name": "test_cycle1_offered_unentered_step_names_its_current_blocker_without_changing_starting_phase",
+      "file": "tests/test_fb_cycle.py",
+      "line": 2532,
+      "cases": 3,
+      "condition": "Three starting-phase cases: saved newer intention replacement, late conflicting old-Ee terminal, identical terminal control. Named blocker is saved current replacement intention / tainted selection; phase remains starting before callback. Rejected callback has no actor/memo; controls admit a valid actor.",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: API guard precedes native fixtures/assertions",
+      "retired_request": 97,
+      "reason": "Its replacement branch uses the withdrawn before-entry replacement rule; c-a3 start-target scene replaces it."
+    },
+    {
+      "id": "C70",
+      "name": "test_cycle1_conflicting_newer_adoption_does_not_claim_the_older_thoughts_seat",
+      "file": "tests/test_fb_cycle.py",
+      "line": 2624,
+      "cases": 2,
+      "condition": "One thinking seat; A0 context/EQ saved and launcher returns not_started (pending, unentered, no held seat). Actual native Wu for A1 sends a conflicting late failure or identical terminal through the same original context. Clash leaves A0 unyielded, admitted and selected at prior(2/3,1/3); A1 evaluation does not enter or prepare. Identical control gives A1 the seat/selection at prior(4/5,1/5), and exactly one A0-to-A1 yield fact. Existing adoptions/initial selection remain facts.",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: API guard precedes native fixtures/assertions",
+      "retired_request": 97,
+      "reason": "Yield/seat claim filtering is withdrawn; conflict and admission use separate activity rules."
+    },
+    {
+      "id": "C71",
+      "name": "test_cycle1_unentered_newer_thought_holding_one_seat_is_not_counted_as_another_claim",
+      "file": "tests/test_fb_cycle.py",
+      "line": 2715,
+      "cases": 1,
+      "condition": "Two thinking seats. A0 EQ saved, launcher not_started keeps it unentered/unowned. Newer A1 EQ is launched and starting/held=1 but unentered; total held thinking seats=1. A0 uses the remaining seat and selects while A1 remains starting/held/unentered. Then A1 also selects. No yield facts. Probability rulers: A0 prior(2/3,1/3), A1 prior(4/5,1/5).",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: API guard precedes native fixtures/assertions",
+      "retired_request": 97,
+      "reason": "Explicitly cancelled request96 held-seat claim scene."
+    },
+    {
+      "id": "C72",
+      "name": "test_cycle1_two_free_seats_go_to_latest_and_middle_roots_not_the_initial_thought",
+      "file": "tests/test_fb_cycle.py",
+      "line": 2785,
+      "cases": 1,
+      "condition": "Two thinking seats. Initial EQ and middle A1 EQ receive not_started and remain unentered/unowned. After A2, all EQ launches still return not_started. Exactly one yield fact: process=Qgen,cause=null,newer=A2,reason=seats. Middle/latest then enter and select on recovery. Initial never enters/prepares/selects, and blocked_by names its saved yield.",
+      "result": "failed_expected_K36_API_absent",
+      "native_K36_validation": "not_run: API guard precedes native fixtures/assertions",
+      "retired_request": 97,
+      "reason": "Explicitly cancelled request96 root-order claim scene."
+    }
+  ],
+  "migrated": {
+    "C58": {
+      "old_name": "test_cycle1_reuse_candidates_version_two_is_the_declared_seat_policy",
+      "new_name": "test_cycle1_reuse_candidates_version_three_declares_activity_admission",
+      "line": 1815,
+      "cases_now": 1
+    },
+    "C38": {
+      "old_name": "test_cycle1_candidate_generation_is_not_suppressed_by_a_newer_adoption",
+      "new_name": "test_cycle1_initial_activity_reads_all_pre_candidate_adoptions_as_one_latest_root",
+      "line": 1307,
+      "cases_now": 2
+    },
+    "C61": {
+      "old_name": "test_cycle1_fast_passive_adoptions_do_not_starve_an_admitted_thought",
+      "new_name": "test_cycle1_fast_passive_adoptions_preserve_selections_and_execution_with_separate_allocations",
+      "line": 1826,
+      "cases_now": 1
+    },
+    "C62": {
+      "old_name": "test_cycle1_bit_continuation_keeps_its_begun_thought_after_a_newer_adoption",
+      "new_name": "test_cycle1_bit_continuation_keeps_its_activity_after_a_newer_adoption",
+      "line": 1859,
+      "cases_now": 2
+    }
+  },
+  "added": [
+    {
+      "id": "C73",
+      "name": "test_cycle1_busy_activity_batches_adoptions_and_admits_only_the_latest_unused_root",
+      "line": 2035,
+      "cases": 1,
+      "condition": "Quota1: two genuine acquisitions/adoptions while Ep remains entered; only one EQ until S; the next activity reads latest prior(4/5,1/5), not intermediate root."
+    },
+    {
+      "id": "C74",
+      "name": "test_cycle1_terminal_or_stop_never_rewinds_the_handed_root_boundary",
+      "line": 2059,
+      "cases": 3,
+      "condition": "Failure/Unknown/actual stopped worker: no same-root replay after terminal; a later adoption permits a fresh activity and native success."
+    },
+    {
+      "id": "C75",
+      "name": "test_cycle1_logical_end_with_a_live_worker_still_occupies_activity_capacity",
+      "line": 2080,
+      "cases": 2,
+      "condition": "Failure or actual-port incompatible terminal ends logic while parent worker remains Event-held. New material cannot admit another activity until actual return; unrelated fresh root then selects."
+    },
+    {
+      "id": "C76",
+      "name": "test_cycle1_first_generator_terminal_does_not_recreate_the_initial_activity",
+      "line": 2112,
+      "cases": 4,
+      "condition": "Initial Wg Failure/Unknown/actual stop/native NoCandidates does not rerun Wg or create an evaluation after later material."
+    },
+    {
+      "id": "C77",
+      "name": "test_cycle1_continuation_none_keeps_only_the_first_activity_despite_fresh_material",
+      "line": 2131,
+      "cases": 1,
+      "condition": "continuation=None: first S only, no new activity after later adoption."
+    },
+    {
+      "id": "C78",
+      "name": "test_cycle1_two_activities_run_distinct_roots_and_batch_only_after_both_are_busy",
+      "line": 2143,
+      "cases": 1,
+      "condition": "Two entered native preparers evaluate distinct roots concurrently. A third root stays material until one activity ends; all three frozen roots produce independently checked probabilities."
+    },
+    {
+      "id": "C79",
+      "name": "test_cycle1_one_thinking_and_one_execution_allocation_allow_simultaneous_entry",
+      "line": 2168,
+      "cases": 1,
+      "condition": "Thinking1 + execution1, sufficient global capacity: actor and native Ep both entered/held. Work allocation differs, selected-process attribution remains; new S computed while actor result stays old E."
+    },
+    {
+      "id": "C80",
+      "name": "test_cycle1_zero_execution_allocation_never_uses_a_thinking_seat",
+      "line": 2191,
+      "cases": 1,
+      "condition": "Execution allocation0 never launches/calls/records a step using a thinking seat. Saved S is preserved; any exposed work row remains unstartable/unowned. Exact public row/reason naming its capacity wait remains CG-K36C-START-STATUS."
+    },
+    {
+      "id": "C81",
+      "name": "test_cycle1_unused_execution_allocation_is_not_lent_to_busy_thinking",
+      "line": 2204,
+      "cases": 1,
+      "condition": "Three idle execution seats are not borrowed by one busy thinking activity; fresh material waits until that activity ends."
+    },
+    {
+      "id": "C82",
+      "name": "test_cycle1_claimed_execution_start_keeps_its_selection_until_entry_or_conflict",
+      "line": 2222,
+      "cases": 2,
+      "condition": "New S alone cannot replace a claimed starting target. Actual-port conflicting terminal ends old start, denies its callback and allows comparison/use of the new S; equal return keeps target."
+    },
+    {
+      "id": "C83",
+      "name": "test_cycle1_fixed_intention_retry_keeps_start_target_but_never_uses_a_conflicted_target",
+      "line": 2247,
+      "cases": 4,
+      "condition": "Intention before-write/ack-loss retries keep claimed target despite new S; conflicting old terminal prevents using that target while fixed record still saves. Other usable S can perform."
+    },
+    {
+      "id": "C84",
+      "name": "test_cycle1_admission_root_stays_fixed_while_its_context_storage_is_retried",
+      "line": 2278,
+      "cases": 2,
+      "condition": "Context before-write/ack-loss retry keeps identical prepared record/parents/point and the prior root despite newer adoption. Next activity alone reads newer material."
+    },
+    {
+      "id": "C85",
+      "name": "test_cycle1_separate_allocations_still_obey_the_shared_total_capacity",
+      "line": 2306,
+      "cases": 1,
+      "condition": "Two admitted roots, thinking quota2 and shared capacity1: launcher not_started leaves EQs unowned; recovery offers/enters only one job. Separate allocations do not bypass shared capacity."
+    },
+    {
+      "id": "C86",
+      "name": "test_cycle1_final_native_no_decision_closes_activity_without_rewinding_material",
+      "line": 2339,
+      "cases": 1,
+      "condition": "Native preparer missing-proof registry emits genuine WorkOutputs(NoDecision algorithm_unavailable), not failure; closes activity, does not replay same root, permits a fresh later-root NoDecision."
+    }
+  ],
+  "changed_common_helpers": [
+    "CycleRig default total capacity6; explicit execution allocation/2; thinking_seats excludes execution; execution_seats helper.",
+    "FixedRecordSaveCut supports chosen contract; Native ActivityTerminalObserver modes preserve actual port/clock/entry and held return.",
+    "Shared require_boot_v4 historical identifier now enforces Boot/5 and reuse/3; FStatus known names checked with new collections. New type annotations/export closure remain CG."
+  ],
+  "open_CG": [],
+  "summary": {
+    "retired_functions": 14,
+    "retired_cases": 27,
+    "cancelled_request96": [
+      "C71",
+      "C72"
+    ],
+    "migrated_functions": 4,
+    "migrated_cases_now": 6,
+    "added_functions": 14,
+    "added_cases": 25,
+    "unchanged_functions": 54,
+    "current_functions": 72,
+    "current_cases": 147,
+    "shared_fixture": "test_fb_skeleton.py Boot guard/version pins and known FStatus shape migrated; old helper identifier require_boot_v4 retained only for callers, checks /5."
+  },
+  "results": {
+    "state": "partial",
+    "args": [
+      "-ra",
+      "--strict-markers",
+      "tests/test_fb_cycle.py",
+      "tests/test_fb_skeleton.py",
+      "-q",
+      "-n",
+      "0",
+      "-p",
+      "no:cacheprovider",
+      "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0125/bt_tests97",
+      "--tb=no",
+      "-r",
+      ""
+    ],
+    "source_path": "C:\\Users\\you11\\Desktop\\iku\\sui\\scratchpad\\sui1711\\work36\\src\\sui\\fb.py",
+    "by_file": {
+      "tests/test_fb_cycle.py": {
+        "failed": 147
+      },
+      "tests/test_fb_skeleton.py": {
+        "passed": 82,
+        "failed": 95
+      }
+    },
+    "total_failed": 242,
+    "total_passed": 82,
+    "cycle_failure_reasons": {
+      "K36-c public shape missing": 147
+    },
+    "skeleton_failure_reasons": {
+      "K36-c declaration /5 /3 and prerequisite K36 API absent": 13,
+      "FStatus.policies missing in master (prerequisite K36 status shape)": 8,
+      "Perception missing in master (prerequisite K36 type)": 74
+    },
+    "other_failure_reasons": 0,
+    "collection_errors": 0,
+    "record": "scratchpad/sui0125/bt_tests97/k36_results97.json",
+    "observer_qualification": {
+      "record": "scratchpad/sui0125/bt_tests97/k36_c_observer_qualification97.json",
+      "passed": 4,
+      "scope": "Owned probe/context only; all own threads joined; not K36-c host."
+    },
+    "registry_control": "Public native registry loses exactly finite_option_proof/1 implementation, keeps declarations; genuine final-NoDecision fixture, no production source read.",
+    "native_K36_c_validation": "not_run: API guard before cycle fixtures",
+    "not_run": [
+      "Implemented K36-c runtime",
+      "Mutation table",
+      "Other files/full suite"
+    ],
+    "elapsed_seconds": 2.422000000020489
+  },
+  "last_updated_request": 104,
+  "followup_98": {
+    "current_manifest": "tests/k36_c_b_migration_inventory.json",
+    "CG_closed": [
+      "CG-K36C-EVALUATION-STATUS",
+      "CG-K36C-MATERIAL-STATUS",
+      "CG-K36C-START-STATUS",
+      "CG-K36C-START-REJECTION"
+    ],
+    "open_CG": [],
+    "cycle_functions": 75,
+    "cycle_cases": 160,
+    "results": {
+      "tests/test_fb_cycle.py": {
+        "failed": 160
+      },
+      "tests/test_fb_skeleton.py": {
+        "passed": 82,
+        "failed": 98
+      },
+      "tests/test_fb_bundle.py": {
+        "failed": 76,
+        "passed": 9
+      },
+      "tests/test_fb_measure.py": {
+        "failed": 60,
+        "passed": 2
+      },
+      "tests/test_fb_read.py": {
+        "failed": 88,
+        "passed": 2
+      },
+      "tests/test_fb_repeat.py": {
+        "failed": 24
+      },
+      "tests/test_fb_stage1.py": {
+        "passed": 182,
+        "failed": 60,
+        "skipped": 7
+      },
+      "tests/test_fb_loop.py": {
+        "failed": 5,
+        "passed": 2
+      },
+      "tests/test_fb_belief.py": {
+        "passed": 172,
+        "failed": 113
+      },
+      "tests/test_fb_updater.py": {
+        "failed": 15
+      },
+      "tests/test_fb_acquisition_pending.py": {
+        "failed": 6
+      }
+    },
+    "legacy_note": "Prior request snapshots describe historical shapes; current guard is require_boot_v5 and CG answers are K36-c-b.",
+    "public_row_version": "1.65; all four CGs closed, stopped distinguished from unknown"
+  },
+  "historical_open_CG_request97": [
+    "CG-K36C-EVALUATION-STATUS",
+    "CG-K36C-MATERIAL-STATUS",
+    "CG-K36C-START-STATUS",
+    "CG-K36C-START-REJECTION"
+  ],
+  "followup_99": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_99",
+    "test_ids": [
+      "C83",
+      "C84",
+      "C85"
+    ],
+    "changed_cases": 7,
+    "results": "160 expected public-shape failures; new native assertions not run",
+    "open_CG": []
+  },
+  "followup_100": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_100",
+    "new_tests": [
+      "C90",
+      "C91",
+      "C92",
+      "C93"
+    ],
+    "new_cases": 8,
+    "results": "168 expected public-shape failures; new native assertions not run",
+    "open_CG": []
+  },
+  "followup_101": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_101",
+    "new_tests": [
+      "C94",
+      "C95"
+    ],
+    "new_cases": 3,
+    "results": "171 expected public-shape failures; new native assertions not run",
+    "open_CG": []
+  },
+  "followup_102": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_102",
+    "changed_tests": [
+      "C94",
+      "C95"
+    ],
+    "changed_cases": 3,
+    "results": "Pure math5 passed; cycle171 expected public-shape failures; native corrected fixtures not run",
+    "open_CG": []
+  },
+  "followup_103": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_103",
+    "changed_tests": [
+      "C94"
+    ],
+    "new_tests": [
+      "C96"
+    ],
+    "new_cases": 2,
+    "results": "173 expected public-shape failures; corrected/new native fixtures not run",
+    "open_CG": []
+  },
+  "followup_104": {
+    "current_coverage": "tests/k36_cycle_coverage.json",
+    "current_manifest": "tests/k36_c_b_migration_inventory.json followup_104",
+    "new_tests": [
+      "C97"
+    ],
+    "new_cases": 1,
+    "results": "174 expected public-shape failures; new native fixture not run",
+    "open_CG": []
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "request": 105,
+  "date": "2026-11-21",
+  "problem": "K36-c-b status construction migration",
+  "paper": {
+    "file": "specs/F-b",
+    "line": 3571,
+    "read_scope": "Full first two named answer clauses (EvaluationStatus/FStatus.evaluations and ThinkingMaterialStatus/FStatus.thinking_materials); not the entire file."
+  },
+  "changes": [
+    {
+      "file": "tests/test_fb_skeleton.py",
+      "function": "status_examples",
+      "line": 464,
+      "added_keywords": {
+        "evaluations": "()",
+        "thinking_materials": "()"
+      },
+      "scope": "Shared dictionary is the only argument source for the two FStatus construction callsites; all twelve FStatus fields now supplied."
+    }
+  ],
+  "export_expectation": {
+    "function": "test_public_export_names_are_exact",
+    "line": 901,
+    "changed": false,
+    "verified": "Expected set already contains EvaluationStatus/ThinkingMaterialStatus through FB_FIELD_SPEC. Exact export equality retained; no expectation weakening."
+  },
+  "affected_constructed_cases": 8,
+  "named_requested_cases": 9,
+  "named_requested_note": "Seven status representatives, one CG-STATUS-VIEW case, one export case. User described ten; named selectors resolve to nine cases in this copy. No missing selector/owner choice inferred.",
+  "requested_case_nodeids": [
+    "tests/test_fb_skeleton.py::test_six_status_shape_representatives[receipts]",
+    "tests/test_fb_skeleton.py::test_six_status_shape_representatives[works]",
+    "tests/test_fb_skeleton.py::test_six_status_shape_representatives[readings]",
+    "tests/test_fb_skeleton.py::test_six_status_shape_representatives[pending]",
+    "tests/test_fb_skeleton.py::test_six_status_shape_representatives[segments]",
+    "tests/test_fb_skeleton.py::test_six_status_shape_representatives[purposes]",
+    "tests/test_fb_skeleton.py::test_six_status_shape_representatives[updates]",
+    "tests/test_fb_skeleton.py::test_contract_gap_replacement[CG-STATUS-VIEW]",
+    "tests/test_fb_skeleton.py::test_public_export_names_are_exact"
+  ],
+  "sha256": "f82b48f9c00ca09429539e0387b62733f5fd7db11100dfc446014220c5bdea50",
+  "verification": {
+    "state": "partial",
+    "record": "scratchpad/sui0125/bt_tests105/k36_status_results105.json",
+    "args": [
+      "-ra",
+      "--strict-markers",
+      "tests/test_fb_skeleton.py",
+      "-q",
+      "-n",
+      "0",
+      "-p",
+      "no:cacheprovider",
+      "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0125/bt_tests105",
+      "--tb=no",
+      "-r",
+      ""
+    ],
+    "source_path": "C:\\Users\\you11\\Desktop\\iku\\sui\\scratchpad\\sui1711\\work36\\src\\sui\\fb.py",
+    "passed": 82,
+    "failed": 98,
+    "skipped": 0,
+    "collection_errors": 0,
+    "failure_reasons": {
+      "K36-c public names/fields/version missing": 13,
+      "Prerequisite FStatus.policies missing": 8,
+      "Prerequisite Perception missing": 75,
+      "EvaluationStatus missing": 1,
+      "ThinkingMaterialStatus missing": 1
+    },
+    "other_failure_reasons": 0,
+    "static": "New keyword tuples, exact twelve field-key match, both callsites share status_examples, both expected export names present. Syntax and executed source hash checked.",
+    "native_new_status_construction": "not_run: work36/src lacks K36 prerequisite types/fields; the eight FStatus constructions stop first at missing policies. Export check stops at public-shape guard.",
+    "not_run": [
+      "Implemented K36 source",
+      "Other test files / full suite",
+      "Frozen model tests"
+    ]
+  },
+  "open_CG": [],
+  "session_log": {
+    "tool": "codex",
+    "project": "sui",
+    "request": 105,
+    "date": "2026-11-21",
+    "codex_session": "01a1aeda-b48f-7622-9bbf-6084d8289457",
+    "record": "This allowed tests-directory manifest is the local session record; Vault Sessions/Projects/Heat not modified under explicit tests-only scope.",
+    "reused_knowledge": "Valid: strict field/export specification added in98 already contains both public status names. The shared constructor dictionary was the remaining migration gap. Continuing-task knowledge reused without wholesale reread.",
+    "source_read_limit": "Relevant permitted skeleton tests and full first two K36-c-b clauses; no production implementation body read or src write.",
+    "external_report_not_independently_verified": "User105 reports implementation export correction and earlier174 green cases; implemented source not independently run.",
+    "processes": "All commands including skeleton pytest exited; no background helper or native host threads started.",
+    "next_step": "Claude reruns skeleton tests against implemented K36; no CG or owner decision remains."
+  }
+}

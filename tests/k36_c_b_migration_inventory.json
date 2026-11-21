@@ -1,0 +1,893 @@
+{
+  "request": 98,
+  "paper": {
+    "file": "specs/F-b paper",
+    "version": "1.64",
+    "line": 3571,
+    "read": "full row",
+    "requested_version": "1.64",
+    "current_read_version": "1.65",
+    "version_delta": "K36-c-b(a) now explicitly lists stopped; applied to the two existing terminal-mode rulers."
+  },
+  "files": [
+    {
+      "file": "tests/test_fb_cycle.py",
+      "kind": "status_and_rejection",
+      "change": "Close four CGs; add C87-C89 (13 cases); activity/material/claim/zero-quota snapshots, legal total-capacity control. C74/C76 distinguish actual stopped from unknown using the final v1.65 clarification.",
+      "anchors": [
+        708,
+        731,
+        2528
+      ],
+      "results": {
+        "failed": 160
+      },
+      "sha256": "8167e30084828602fa0af7b07eeb1a8efa44245d1ba2985166be58111dea22f5"
+    },
+    {
+      "file": "tests/test_fb_skeleton.py",
+      "kind": "shared_version_and_schema",
+      "change": "require_boot_v5 and collection name; Boot5/reuse3 guard; exact EvaluationStatus/ThinkingMaterialStatus/FStatus annotations, frozen/kw-only and exact exports restored.",
+      "anchors": [
+        273,
+        316,
+        422,
+        528,
+        557,
+        829,
+        900,
+        901,
+        1105
+      ],
+      "results": {
+        "passed": 82,
+        "failed": 98
+      },
+      "sha256": "0c7b8be7276afa36fc2fb88fda69b7552f8f577806a8461f04267190afe02fae"
+    },
+    {
+      "file": "tests/test_fb_bundle.py",
+      "kind": "version_only",
+      "change": "Rename imported/called Boot guard v4 to v5; seven-purpose expectations unchanged.",
+      "anchors": [
+        91,
+        92
+      ],
+      "results": {
+        "failed": 76,
+        "passed": 9
+      },
+      "sha256": "2d2f23591e5b91da55107a699ccc025348a4dd2c529a67ab79cb3c3db780c579"
+    },
+    {
+      "file": "tests/test_fb_measure.py",
+      "kind": "version_only",
+      "change": "Rename Boot guard import/call; acquisition/frame/timing expectations unchanged.",
+      "anchors": [
+        29,
+        41
+      ],
+      "results": {
+        "failed": 60,
+        "passed": 2
+      },
+      "sha256": "d96be0d8d023750c427f4d248b5fc3166ae5ae762f3c8c35610d7cc34019c665"
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "kind": "version_only",
+      "change": "Rename guard and four Boot version pins /4 -> /5; model origin/value/likelihood expectations unchanged.",
+      "anchors": [
+        28,
+        50
+      ],
+      "results": {
+        "failed": 88,
+        "passed": 2
+      },
+      "sha256": "0a8d19c8f3d230d65b38a27a983f532e65b1b0549edbf4229d7463ce1e7ad5f7"
+    },
+    {
+      "file": "tests/test_fb_repeat.py",
+      "kind": "version_only",
+      "change": "Rename guard import/call; repeat/stop/source expectations unchanged.",
+      "anchors": [
+        19,
+        35
+      ],
+      "results": {
+        "failed": 24
+      },
+      "sha256": "c3192cf0afffad8f71d5a064390a185763b193488672a457f627189602525488"
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "kind": "version_only",
+      "change": "Rename guard import/calls; existing seven D11 frozen skips retained.",
+      "anchors": [
+        34,
+        1300,
+        1324
+      ],
+      "results": {
+        "passed": 182,
+        "failed": 60,
+        "skipped": 7
+      },
+      "sha256": "9f09b1c9a5fdeb18751e8b9e4047ddf75713889545b0c436171c6c724dfbc2a3"
+    },
+    {
+      "file": "tests/test_fb_loop.py",
+      "kind": "activity_semantics",
+      "change": "Root/admission/completion helpers and two serial numeric continuation scenes.",
+      "anchors": [
+        327,
+        337,
+        378,
+        435
+      ],
+      "results": {
+        "failed": 5,
+        "passed": 2
+      },
+      "sha256": "0c5bdefb946237c3346a46e99ed363cf21ac313a09eb9a0989a4554300b8e2a1"
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "kind": "activity_semantics",
+      "change": "One serialized continuation scene checks actual admitted root and release.",
+      "anchors": [
+        1175
+      ],
+      "results": {
+        "passed": 172,
+        "failed": 113
+      },
+      "sha256": "ca737b0c56e7936887d867aed4e5a12d3d1ab58c9dbf7ac7210175a8f260f547"
+    },
+    {
+      "file": "tests/test_fb_updater.py",
+      "kind": "activity_semantics",
+      "change": "Native updater continuation scene checks actual admitted root and release.",
+      "anchors": [
+        251
+      ],
+      "results": {
+        "failed": 15
+      },
+      "sha256": "71864c72b00a3bb4a19748521a4b33da188862481a9693e629cfa0f486e2185b"
+    },
+    {
+      "file": "tests/test_fb_acquisition_pending.py",
+      "kind": "activity_semantics",
+      "change": "Shared completion helper uses activity identity, final NoDecision and same-activity K35 continuation.",
+      "anchors": [
+        58,
+        84
+      ],
+      "results": {
+        "failed": 6
+      },
+      "sha256": "d31ad43803b60a5639fad639b2c9738d4a6388b78e8d3fb88886e57f8d89675a"
+    }
+  ],
+  "meaning_changes": [
+    {
+      "file": "tests/test_fb_loop.py",
+      "functions": [
+        "test_continuation_uses_adopted_joint_in_math_input_and_information",
+        "test_continuation_preserves_adopted_state_order_in_asymmetric_information"
+      ],
+      "change": "Use admitted EvaluationStatus root at o instead of notification Trigger equality; explicitly finish/release each activity before next serial input. All posterior/entropy/G/q expectations unchanged.",
+      "lines": {
+        "test_continuation_uses_adopted_joint_in_math_input_and_information": 351,
+        "test_continuation_preserves_adopted_state_order_in_asymmetric_information": 421
+      }
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "functions": [
+        "test_belief1_continuation_reads_the_adopted_result_and_new_joint"
+      ],
+      "change": "Same serialized root/admission check and actual completion boundary; no unconditional plan-per-adoption rule. Numerical R* and joint checks unchanged.",
+      "lines": {
+        "test_belief1_continuation_reads_the_adopted_result_and_new_joint": 1157
+      }
+    },
+    {
+      "file": "tests/test_fb_updater.py",
+      "functions": [
+        "test_updater1_ce1_two_updates_and_continuation_use_the_production_worker"
+      ],
+      "change": "Confirm native updater continuation belongs to the admitted adopted root and releases its activity before next serial input; original clock/output/numeric checks retained.",
+      "lines": {
+        "test_updater1_ce1_two_updates_and_continuation_use_the_production_worker": 224
+      }
+    },
+    {
+      "file": "tests/test_fb_acquisition_pending.py",
+      "functions": [
+        "finish_continuation"
+      ],
+      "affected_tests": [
+        "test_pending_continuation_distinguishes_selection_from_regular_no_decision",
+        "test_row2_accept_order_ack_loss_confirms_a_before_q_b_and_keeps_one_chain",
+        "test_row5_pending_order_follows_received_time_and_envelope_not_report_sort_keys"
+      ],
+      "change": "Follow actual admitted activity/root; only final NoDecision ends it. K35 selection_boundary loops D/Ee within the same activity without a fixed cap; wait for logical end/residual release before next serial input. Original adoption order/numeric/NoDecision contrasts retained.",
+      "lines": {
+        "finish_continuation": 58
+      }
+    },
+    {
+      "file": "tests/test_fb_cycle.py",
+      "functions": [
+        "test_cycle1_separate_allocations_still_obey_the_shared_total_capacity"
+      ],
+      "change": "Use legal allocation amounts thinking2/execution1/global2, with held execution consuming one seat. Replaces thinking2/global1 setup; preserves the shared-total-capacity property without an allocation-over-capacity defect.",
+      "lines": {
+        "test_cycle1_separate_allocations_still_obey_the_shared_total_capacity": 2460
+      }
+    },
+    {
+      "file": "tests/test_fb_cycle.py",
+      "functions": [
+        "test_cycle1_terminal_or_stop_never_rewinds_the_handed_root_boundary",
+        "test_cycle1_first_generator_terminal_does_not_recreate_the_initial_activity"
+      ],
+      "change": "Final public-row clarification v1.65: terminal mode stopped expects stopped, not unknown; other modes and boundary/count/retry properties preserved.",
+      "lines": {
+        "test_cycle1_terminal_or_stop_never_rewinds_the_handed_root_boundary": 2135,
+        "test_cycle1_first_generator_terminal_does_not_recreate_the_initial_activity": 2207
+      }
+    }
+  ],
+  "reviewed_without_edit": [
+    "test_fb_stage2.py and other callers inherit boot() -> require_boot_v5; no explicit old /4 pin or ExecutionDeclaration/1 constructor found outside migrated files."
+  ],
+  "audit_scope": "Name/version/constructor searches across tests/*.py; relevant fixture/continuation portions read. Frozen historical model/spec snapshots at old /1 are not current /4 fixtures and were not rewritten or run.",
+  "CG_closed": [
+    "CG-K36C-EVALUATION-STATUS",
+    "CG-K36C-MATERIAL-STATUS",
+    "CG-K36C-START-STATUS",
+    "CG-K36C-START-REJECTION"
+  ],
+  "open_CG": [],
+  "last_updated_request": 105,
+  "followup_99": {
+    "request": 99,
+    "changed_python": "tests/test_fb_cycle.py",
+    "sha256": "969ea2d511af11ca88303d7165e0a8b4a5d2003334e16e78d1bcd3a33b5d9807",
+    "test_ids": [
+      "C83",
+      "C84",
+      "C85"
+    ],
+    "cases": 7,
+    "line_numbers": {
+      "C83": 2387,
+      "C84": 2441,
+      "C85": 2488
+    },
+    "change": "Restore storage before new adoption/evaluation; explicitly retry identical prepared records. C85 keeps the legal 2/1/2 ruler and asserts individual bounds plus excess sum.",
+    "current_results": {
+      "state": "partial",
+      "request": 99,
+      "record": "scratchpad/sui0125/bt_tests99/k36_cycle_results99.json",
+      "args": [
+        "-ra",
+        "--strict-markers",
+        "tests/test_fb_cycle.py",
+        "-q",
+        "-n",
+        "0",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0125/bt_tests99",
+        "--tb=no",
+        "-r",
+        ""
+      ],
+      "source_path": "C:\\Users\\you11\\Desktop\\iku\\sui\\scratchpad\\sui1711\\work36\\src\\sui\\fb.py",
+      "by_file": {
+        "tests/test_fb_cycle.py": {
+          "failed": 160
+        }
+      },
+      "failed": 160,
+      "passed": 0,
+      "skipped": 0,
+      "failure_reasons": {
+        "K36-c public shape absent": 160
+      },
+      "other_failure_reasons": 0,
+      "collection_errors": 0,
+      "changed_scene_results": {
+        "C83": {
+          "failed": 4
+        },
+        "C84": {
+          "failed": 2
+        },
+        "C85": {
+          "failed": 1
+        }
+      },
+      "native_K36_c_validation": "not_run: master public-shape guard precedes corrected fixtures/assertions",
+      "not_run": [
+        "Implemented K36-c source",
+        "Mutation discrimination",
+        "Other test files / full suite"
+      ]
+    },
+    "open_CG": []
+  },
+  "results_scope_note": "Migration snapshots are request98 history. followup_104 and k36_cycle_coverage.json give current cycle lines/hash/results. Other files not rerun in104.",
+  "followup_100": {
+    "request": 100,
+    "changed_python": "tests/test_fb_cycle.py",
+    "sha256": "bf449463ea12f9411d8ad40c2a9a37292476a0b8c51d16782155f4081648d149",
+    "new_tests": [
+      {
+        "id": "C90",
+        "name": "test_cycle1_execution_allocation_slot_must_not_alias_the_thinking_allocation",
+        "file": "tests/test_fb_cycle.py",
+        "line": 2623,
+        "cases": 2,
+        "condition": "Thinking1/execution0; change only execution allocation slot to the thinking slot. Boot has a named pending plan shortage and no step can start. Distinct-slot control completes a selection and exposes the legitimate zero-execution-capacity wait. No unspecified shortage reason literal is fixed.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      },
+      {
+        "id": "C91",
+        "name": "test_cycle1_initial_activity_uses_the_durable_adoption_after_ack_loss_exactly_once",
+        "file": "tests/test_fb_cycle.py",
+        "line": 2659,
+        "cases": 2,
+        "condition": "Hold entered Wg using Event. Produce one passive adoption, optionally leave BELIEF_ADOPTED durable but unconfirmed with ack-loss. Restore the cut and finish Wg with no intervening host drive. Same initial activity has adopted root A and only one Ep, material boundary=A and correct numeric selection; compare confirmed-save control.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      },
+      {
+        "id": "C92",
+        "name": "test_cycle1_conflicted_latest_adoption_does_not_create_an_evaluation_activity",
+        "file": "tests/test_fb_cycle.py",
+        "line": 2706,
+        "cases": 2,
+        "condition": "Thinking1; hold entered initial Ep with prior root, create A, then use the actual native updater port to deliver a conflicting terminal or identical redelivery. Prior activity completes and releases all counted occupancy. Conflict branch never adds an activity/Ep after repeated settle; identical redelivery admits exactly one next activity with root A and correct numbers. Existing A fact remains.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      },
+      {
+        "id": "C93",
+        "name": "test_cycle1_zero_thinking_allocation_never_admits_even_the_initial_activity",
+        "file": "tests/test_fb_cycle.py",
+        "line": 2748,
+        "cases": 2,
+        "condition": "Thinking0 vs thinking1, identical sufficient global capacity4. Run native passive measurement/update to make fresh A and exercise the boot plan. Zero leaves evaluations empty and no Wg/Ep/selection request; one-seat control selects with adopted root A. Zero quota is not treated as an invalid Boot plan.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "1 allocation position collision",
+        "test": "C90",
+        "basis": [
+          "K36-c1",
+          "Boot slot uniqueness:2128"
+        ],
+        "controls": "distinct-slots-control vs same-slot; both thinking1/execution0"
+      },
+      {
+        "condition": "2 adoption confirmation wait and root",
+        "test": "C91",
+        "basis": [
+          "K36-c3",
+          "K36-c5",
+          "K36-c-a2"
+        ],
+        "controls": "confirmed-control vs adoption-ack-loss; no host drive after restore until Wg finishes"
+      },
+      {
+        "condition": "3 unusable latest material",
+        "test": "C92",
+        "basis": [
+          "K36-c4",
+          "K36-b(chi)",
+          "INV-7.b"
+        ],
+        "controls": "identical terminal redelivery vs conflicting terminal, same real updater port; prior activity occupancy fully released"
+      },
+      {
+        "condition": "4 zero thinking quota",
+        "test": "C93",
+        "basis": [
+          "K36-c-a2"
+        ],
+        "controls": "zero vs one thinking seat, both total capacity4 and one native adoption"
+      }
+    ],
+    "current_results": {
+      "state": "partial",
+      "request": 100,
+      "record": "scratchpad/sui0125/bt_tests100/k36_cycle_results100.json",
+      "args": [
+        "-ra",
+        "--strict-markers",
+        "tests/test_fb_cycle.py",
+        "-q",
+        "-n",
+        "0",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0125/bt_tests100",
+        "--tb=no",
+        "-r",
+        ""
+      ],
+      "source_path": "C:\\Users\\you11\\Desktop\\iku\\sui\\scratchpad\\sui1711\\work36\\src\\sui\\fb.py",
+      "by_file": {
+        "tests/test_fb_cycle.py": {
+          "failed": 168
+        }
+      },
+      "failed": 168,
+      "passed": 0,
+      "skipped": 0,
+      "failure_reasons": {
+        "K36-c public shape absent": 168
+      },
+      "other_failure_reasons": 0,
+      "collection_errors": 0,
+      "new_scene_results": {
+        "C90": {
+          "failed": 2
+        },
+        "C91": {
+          "failed": 2
+        },
+        "C92": {
+          "failed": 2
+        },
+        "C93": {
+          "failed": 2
+        }
+      },
+      "native_K36_c_validation": "not_run: master public-shape guard precedes new native fixtures/assertions",
+      "not_run": [
+        "Implemented K36-c source",
+        "Mutation discrimination",
+        "Other test files / full suite"
+      ]
+    },
+    "open_CG": []
+  },
+  "followup_101": {
+    "request": 101,
+    "changed_python": "tests/test_fb_cycle.py",
+    "sha256": "5eac9600457e3e7a5bb27c805c4a0d4c7f71417240162c97567d68154f862fa8",
+    "new_tests": [
+      {
+        "id": "C94",
+        "name": "test_cycle1_thinking_root_and_latest_follow_the_decided_adoption_chain",
+        "file": "tests/test_fb_cycle.py",
+        "line": 2772,
+        "cases": 1,
+        "condition": "Hold the original native evaluator after posting its selection, keeping real residual occupancy. Complete actor T, advance test clock by1, then complete passive T and publish both before any host drive. Follow BELIEF_ADOPTED.previous, check P then N numerics, material latest=chain tail; release occupancy and require one new activity rooted at that tail, a newer active intention, and no duplicate adopted root. Prior=(1/4,3/4): prefix joint=(2/5,3/5), final joint=(3/5,2/5), mass=5/8.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      },
+      {
+        "id": "C95",
+        "name": "test_cycle1_conflicted_candidate_generation_does_not_admit_reuse_activities",
+        "file": "tests/test_fb_cycle.py",
+        "line": 2846,
+        "cases": 2,
+        "condition": "Thinking1; complete native Wg, hold its Ep at starting/unentered, then create valid A. Deliver conflicting terminal or identical redelivery through the same Wg port. Clash rejects Ep entry, confirms physical stop and clears residual occupancy; repeated settle creates no activity/Ep/selection without additional adoption. Identical redelivery completes prior activity and admits exactly one next activity rooted at A. Wg stays single and A fact remains.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      }
+    ],
+    "conditions": [
+      {
+        "condition": "1 decided adoption order matches material latest and actual evaluation roots",
+        "test": "C94",
+        "basis": [
+          "K36-c3",
+          "K36-c5",
+          "K36-c-a2",
+          "K36-b(e)/(se)"
+        ],
+        "discriminators": "Strict actor-before-source intervals with noncommuting P/N; both native reports public before host advances; an actually live worker holds the only thinking slot until both adoptions exist. Chain.tail controls latest/root, initial vs updated numeric controls, newer intention active, exactly one adopted-root activity."
+      },
+      {
+        "condition": "2 conflicted reused candidate generation cannot open another activity",
+        "test": "C95",
+        "basis": [
+          "K36-c4",
+          "INV-7.b",
+          "K36-c-a2"
+        ],
+        "discriminators": "Same actual Wg port; incompatible terminal versus identical redelivery; old Ep is actually invoked to denied entry and its physical occupancy is confirmed gone before the no-growth assertions."
+      }
+    ],
+    "current_results": {
+      "state": "partial",
+      "request": 101,
+      "record": "scratchpad/sui0125/bt_tests101/k36_cycle_results101.json",
+      "args": [
+        "-ra",
+        "--strict-markers",
+        "tests/test_fb_cycle.py",
+        "-q",
+        "-n",
+        "0",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0125/bt_tests101",
+        "--tb=no",
+        "-r",
+        ""
+      ],
+      "source_path": "C:\\Users\\you11\\Desktop\\iku\\sui\\scratchpad\\sui1711\\work36\\src\\sui\\fb.py",
+      "by_file": {
+        "tests/test_fb_cycle.py": {
+          "failed": 171
+        }
+      },
+      "failed": 171,
+      "passed": 0,
+      "skipped": 0,
+      "failure_reasons": {
+        "K36-c public shape absent": 171
+      },
+      "other_failure_reasons": 0,
+      "collection_errors": 0,
+      "new_scene_results": {
+        "C94": {
+          "failed": 1
+        },
+        "C95": {
+          "failed": 2
+        }
+      },
+      "native_K36_c_validation": "not_run: master public-shape guard precedes new native fixtures/assertions",
+      "not_run": [
+        "Implemented K36-c source",
+        "Mutation discrimination",
+        "Other test files / full suite"
+      ]
+    },
+    "open_CG": []
+  },
+  "followup_102": {
+    "request": 102,
+    "changed_python": "tests/test_fb_cycle.py",
+    "sha256": "39d59e4311dc9fa70b50b9f55fb43683398c3fc9fe04d459465424ed7d033b16",
+    "changed_tests": [
+      {
+        "id": "C94",
+        "name": "test_cycle1_thinking_root_and_latest_follow_the_decided_adoption_chain",
+        "file": "tests/test_fb_cycle.py",
+        "line": 2843,
+        "cases": 1,
+        "condition": "Actor T then strict clock gap1 then passive T are both published before host drive. Follow previous to the adopted chain tail and require latest/root agreement, no duplicate root and newer active intention. R* numerics remain prefix=(2/5,3/5), final=(3/5,2/5), mass=5/8. Candidate G/q are computed independently from declared policy kernels and target marginals: both joint states name box, so I=0/G=0/q=1/2 for each candidate at both evaluations. Final selected root.K.belief must name the final adopted result record.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      },
+      {
+        "id": "C95",
+        "name": "test_cycle1_conflicted_candidate_generation_does_not_admit_reuse_activities",
+        "file": "tests/test_fb_cycle.py",
+        "line": 2918,
+        "cases": 2,
+        "condition": "Thinking1, native Wg complete and initial Ep starting/unentered; create valid A then redeliver the same or a conflicting Wg terminal through its actual port. Clash rejects Ep entry. Wait for work held=None and activity residual=()/counted=False, without requiring stop_confirmed (denied startup returns pending). Repeated settle adds no activity or successor; same-terminal control evaluates prior then A. Wg stays single and A remains saved.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      }
+    ],
+    "changes": {
+      "C94": {
+        "change": "Replace both standard P/EMPTY joint-state entropy assertions with an independent declaration-derived one-step oracle grouping joint states by target. Same-target information=0 and q=1/2 each; preserve adoption intervals/chain/joint/mass checks and add final K.belief binding to the adopted result.",
+        "helper_scope": "Complete single-execute policies, static target mapping, zero elapsed, no computation/reveal beyond emitted evidence; blank preferences, counting measure and gamma1. Sum equal observational cells before normalization. No production evaluation result is used to calculate expectations.",
+        "helpers": {
+          "declared_one_step_information_and_probabilities": 116,
+          "assert_declared_one_step_probabilities": 835
+        }
+      },
+      "C95": {
+        "change": "Replace stop_confirmed requirement after denied entry by held=None; keep residual empty/count false and repeated-settle no-growth assertions.",
+        "source": "Explicit user102 public startup rule: entry refusal returns pending and releases the held seat; it is not an actual started-worker stop."
+      },
+      "new_cases": 0,
+      "open_CG": []
+    },
+    "current_results": {
+      "state": "partial",
+      "request": 102,
+      "record": "scratchpad/sui0125/bt_tests102/k36_cycle_results102.json",
+      "args": [
+        "-ra",
+        "--strict-markers",
+        "tests/test_fb_cycle.py",
+        "-q",
+        "-n",
+        "0",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0125/bt_tests102",
+        "--tb=no",
+        "-r",
+        ""
+      ],
+      "source_path": "C:\\Users\\you11\\Desktop\\iku\\sui\\scratchpad\\sui1711\\work36\\src\\sui\\fb.py",
+      "by_file": {
+        "tests/test_fb_cycle.py": {
+          "failed": 171
+        }
+      },
+      "failed": 171,
+      "passed": 0,
+      "skipped": 0,
+      "failure_reasons": {
+        "K36-c public shape absent": 171
+      },
+      "other_failure_reasons": 0,
+      "collection_errors": 0,
+      "changed_scene_results": {
+        "C94": {
+          "failed": 1
+        },
+        "C95": {
+          "failed": 2
+        }
+      },
+      "pure_math_oracle": {
+        "state": "passed",
+        "checks": 5,
+        "record": "scratchpad/sui0125/bt_tests102/k36_math_oracle_results102.json",
+        "conditions": [
+          "same-target-(Fraction(1, 4), Fraction(3, 4))",
+          "same-target-(Fraction(3, 5), Fraction(2, 5))",
+          "distinct-target-P-EMPTY-joint-table-control",
+          "perfect-measurement-entropy-control",
+          "uninformative-half-kernel-control"
+        ],
+        "scope": "Test helper arithmetic on actual fixture declarations; no production evaluator called."
+      },
+      "native_K36_c_validation": "not_run: master public-shape guard precedes corrected native fixtures/assertions",
+      "not_run": [
+        "Implemented K36-c source",
+        "Mutation discrimination",
+        "Other test files / full suite"
+      ]
+    },
+    "open_CG": []
+  },
+  "followup_103": {
+    "request": 103,
+    "changed_python": "tests/test_fb_cycle.py",
+    "sha256": "e6ad8712b4d9c9c04b259a8c7696c0fd14eb6469d485225cbb0d7f1fe70abba3",
+    "changed_tests": [
+      {
+        "id": "C94",
+        "name": "test_cycle1_thinking_root_and_latest_follow_the_decided_adoption_chain",
+        "file": "tests/test_fb_cycle.py",
+        "line": 2850,
+        "cases": 1,
+        "condition": "Actor T then strict clock gap1 then passive T are both published before host drive. Follow previous to the adopted chain tail and require latest/root agreement, no duplicate root and newer active intention. R* numerics remain prefix=(2/5,3/5), final=(3/5,2/5), mass=5/8. Candidate G/q are computed independently from declared policy kernels and target marginals: both joint states name box, so I=0/G=0/q=1/2 for each candidate at both evaluations. Final selected root.K.belief must name the final adopted result record. Request103: actual step body return is witnessed by executor.wait_return; only after host drive inspect ExecutionStatus.result and the house-written execution_result execution/value. Never require StepExecutor to post WorkFinished.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      }
+    ],
+    "new_tests": [
+      {
+        "id": "C96",
+        "name": "test_cycle1_draw_with_only_wrong_family_notice_stops_and_releases_activity",
+        "file": "tests/test_fb_cycle.py",
+        "line": 2980,
+        "cases": 2,
+        "condition": "Entered native D is held just before post while valid A is adopted under thinking1. Probe substitutes only a well-formed WorkFinished(Unknown) for DrawReturned; post then body returns. After raw WORK_REPORT acceptance and physical stop, old activity is stopped/countFalse/residual empty, with no formal D terminal/DF/Ee. A admits a different activity that can select. Correct DrawReturned control stays running, completes the old selection, then admits A. The same native source/work/port are retained.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      }
+    ],
+    "changes": {
+      "C94": {
+        "change": "Remove expectation of a WorkFinished post from StepExecutor. Keep wait_return before advancing time/source, and after host drive verify ExecutionStatus.result points to a house execution_result with the exact E and T value. Preserve simultaneous publication/order/chain/math/root checks.",
+        "line": 2850
+      },
+      "C96": {
+        "name": "test_cycle1_draw_with_only_wrong_family_notice_stops_and_releases_activity",
+        "line": 2980,
+        "cases": 2,
+        "basis": [
+          "K36-c-a activity admission/counting",
+          "K36-c-b(a) stopped",
+          "M4/I8 notification family"
+        ],
+        "discriminators": "Event before D post, genuine A during held D, actual entry=True and actual body return, raw notice accepted, physical stop confirmed; wrong family yields stopped/countFalse/no formal draw terminal and lets A enter. Correct family continues old activity and then A.",
+        "probe": "ActivityTerminalPort wrong_draw_terminal mode transforms native DrawReturned into WorkFinished(Unknown), supplying actual public now() readings; arbitrary reason text not asserted. Other modes unchanged."
+      },
+      "open_CG": []
+    },
+    "current_results": {
+      "state": "partial",
+      "request": 103,
+      "record": "scratchpad/sui0125/bt_tests103/k36_cycle_results103.json",
+      "args": [
+        "-ra",
+        "--strict-markers",
+        "tests/test_fb_cycle.py",
+        "-q",
+        "-n",
+        "0",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0125/bt_tests103",
+        "--tb=no",
+        "-r",
+        ""
+      ],
+      "source_path": "C:\\Users\\you11\\Desktop\\iku\\sui\\scratchpad\\sui1711\\work36\\src\\sui\\fb.py",
+      "by_file": {
+        "tests/test_fb_cycle.py": {
+          "failed": 173
+        }
+      },
+      "failed": 173,
+      "passed": 0,
+      "skipped": 0,
+      "failure_reasons": {
+        "K36-c public shape absent": 173
+      },
+      "other_failure_reasons": 0,
+      "collection_errors": 0,
+      "changed_scene_results": {
+        "C94": {
+          "failed": 1
+        }
+      },
+      "new_scene_results": {
+        "C96": {
+          "failed": 2
+        }
+      },
+      "native_K36_c_validation": "not_run: master public-shape guard precedes corrected/new native fixtures/assertions",
+      "not_run": [
+        "Implemented K36-c source",
+        "Mutation discrimination",
+        "Unchanged pure math oracle from102",
+        "Other test files / full suite"
+      ]
+    },
+    "open_CG": []
+  },
+  "followup_104": {
+    "request": 104,
+    "changed_python": "tests/test_fb_cycle.py",
+    "sha256": "90745663d8215963a58c028f1a9aa79ea8a04a2a829674ac0c50ff03e79c15ed",
+    "new_tests": [
+      {
+        "id": "C97",
+        "name": "test_cycle1_before_write_adoption_never_becomes_a_root_until_saved",
+        "file": "tests/test_fb_cycle.py",
+        "line": 3038,
+        "cases": 1,
+        "condition": "Thinking1; initial prior activity selects and fully releases occupancy. Native passive T produces a valid update, but BELIEF_ADOPTED A is cut before_write. Check before/after repeated injected I/O failures that A is physically absent, no activity/root or new Ep exists, and materials latest/handed remain None. Retries retain the identical PreparedEntry. Restore storage; same A saves, exactly one different activity reads A, material latest=handed=A and updated numeric selection completes. Repeated settle cannot duplicate A or its root activity. Separate from C91 durable ack_loss.",
+        "result": "failed_expected_K36_c_public_shape_absent",
+        "native_K36_validation": "not_run: master public-shape guard precedes native fixtures/assertions"
+      }
+    ],
+    "changes": {
+      "C97": {
+        "name": "test_cycle1_before_write_adoption_never_becomes_a_root_until_saved",
+        "line": 3038,
+        "cases": 1,
+        "basis": [
+          "K36-c3",
+          "K36-c5",
+          "K36-c-a2"
+        ],
+        "failure_cut": "Public ledger.write raises before durable write for the same BELIEF_ADOPTED PreparedEntry. Initial failure plus two retries; cut restored in finally. Physical entry-store absence distinguishes this from ack_loss.",
+        "negative": "Only the completed initial activity remains; no root_point A, no new Ep, latest/handed=None while write fails. The first activity has already released its seat, so capacity cannot hide premature admission.",
+        "recovery_control": "Same A record/point is saved; one new adopted-root activity, latest=handed=A, correct R*/selection numbers and no duplicate after settlement.",
+        "scope_limit": "No later host progress required while I/O fails; status snapshots are taken after injected failures."
+      },
+      "open_CG": []
+    },
+    "current_results": {
+      "state": "partial",
+      "request": 104,
+      "record": "scratchpad/sui0125/bt_tests104/k36_cycle_results104.json",
+      "args": [
+        "-ra",
+        "--strict-markers",
+        "tests/test_fb_cycle.py",
+        "-q",
+        "-n",
+        "0",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0125/bt_tests104",
+        "--tb=no",
+        "-r",
+        ""
+      ],
+      "source_path": "C:\\Users\\you11\\Desktop\\iku\\sui\\scratchpad\\sui1711\\work36\\src\\sui\\fb.py",
+      "by_file": {
+        "tests/test_fb_cycle.py": {
+          "failed": 174
+        }
+      },
+      "failed": 174,
+      "passed": 0,
+      "skipped": 0,
+      "failure_reasons": {
+        "K36-c public shape absent": 174
+      },
+      "other_failure_reasons": 0,
+      "collection_errors": 0,
+      "new_scene_results": {
+        "C97": {
+          "failed": 1
+        }
+      },
+      "native_K36_c_validation": "not_run: master public-shape guard precedes the new native fixture/assertions",
+      "not_run": [
+        "Implemented K36-c source",
+        "Mutation discrimination",
+        "Unchanged pure math oracle from102",
+        "Other test files / full suite"
+      ]
+    },
+    "open_CG": []
+  },
+  "followup_105": {
+    "request": 105,
+    "scope": "Skeleton shared FStatus construction only; cycle file and its request104 result unchanged.",
+    "manifest": "tests/k36_status_fixture_migration.json",
+    "changed_python": "tests/test_fb_skeleton.py",
+    "sha256": "f82b48f9c00ca09429539e0387b62733f5fd7db11100dfc446014220c5bdea50",
+    "results": {
+      "state": "partial",
+      "record": "scratchpad/sui0125/bt_tests105/k36_status_results105.json",
+      "args": [
+        "-ra",
+        "--strict-markers",
+        "tests/test_fb_skeleton.py",
+        "-q",
+        "-n",
+        "0",
+        "-p",
+        "no:cacheprovider",
+        "--basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0125/bt_tests105",
+        "--tb=no",
+        "-r",
+        ""
+      ],
+      "source_path": "C:\\Users\\you11\\Desktop\\iku\\sui\\scratchpad\\sui1711\\work36\\src\\sui\\fb.py",
+      "passed": 82,
+      "failed": 98,
+      "skipped": 0,
+      "collection_errors": 0,
+      "failure_reasons": {
+        "K36-c public names/fields/version missing": 13,
+        "Prerequisite FStatus.policies missing": 8,
+        "Prerequisite Perception missing": 75,
+        "EvaluationStatus missing": 1,
+        "ThinkingMaterialStatus missing": 1
+      },
+      "other_failure_reasons": 0,
+      "static": "New keyword tuples, exact twelve field-key match, both callsites share status_examples, both expected export names present. Syntax and executed source hash checked.",
+      "native_new_status_construction": "not_run: work36/src lacks K36 prerequisite types/fields; the eight FStatus constructions stop first at missing policies. Export check stops at public-shape guard.",
+      "not_run": [
+        "Implemented K36 source",
+        "Other test files / full suite",
+        "Frozen model tests"
+      ]
+    },
+    "open_CG": []
+  }
+}

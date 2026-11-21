@@ -31,7 +31,7 @@ from fb_stage_map import STAGE_MAP
 from fb_targets import TARGETS
 from test_fb_skeleton import (ContractGap, PAPER, boot, contract, gap, reading,
                               segment_items, point, source, work_outcomes, test_registry,
-                              WitnessLauncher, require_boot_v3)
+                              WitnessLauncher, require_boot_v5)
 
 
 def test_need_structural_contract_gap():
@@ -369,8 +369,8 @@ class RealRig:
     def install_legal_boot(self, *, initial):
         event = boot(initial)
         if initial:
-            event = replace(event, declaration=replace(event.declaration, initial=replace(event.declaration.initial,
-                value=replace(event.declaration.initial.value, model=self.model_point))))
+            event = replace(event, declaration=replace(event.declaration, perception=replace(event.declaration.perception,
+                value=replace(event.declaration.perception.value, model=self.model_point))))
         self.boot_input = event
         clock_event = fb.ClockDeclared(declaration=replace(source(), run=self.clock.run))
         accept_and_save(self, self.envelope(100, clock_event, 10), c.CLOCK_NOTICE, 1)  # §6-9 K1
@@ -1297,7 +1297,7 @@ def test_stage1_raw_field(rid, rig):
     probe = RAW_FIELD_PROBES[rid]
     event = RAW_EXAMPLES[probe["example"]]
     if isinstance(event, fb.Boot):
-        require_boot_v3()
+        require_boot_v5()
     # object() is outside every declared outer type, including free JSON and nullable DTOs.
     bad = malformed_raw_example(probe)
     target = c.BOOT_DECLARATION if isinstance(event, fb.Boot) else c.CLOCK_NOTICE if isinstance(
@@ -1321,7 +1321,7 @@ def test_stage1_raw_branch(rid, rig):
     probe = RAW_BRANCH_PROBES[rid]
     event, foil = probe["event"], probe["foil"]
     if isinstance(event, fb.Boot):
-        require_boot_v3()
+        require_boot_v5()
     target = c.BOOT_DECLARATION if isinstance(event, fb.Boot) else c.SEGMENT_REPORT
     expected = wire(event.declaration if isinstance(event, fb.Boot) else event)
     other = wire(foil.declaration if isinstance(foil, fb.Boot) else foil)

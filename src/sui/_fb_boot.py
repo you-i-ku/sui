@@ -1,8 +1,8 @@
 """Boot から起動の計画を作る (紙 F-b §2-4-0・§2-5-9・§2-5-10・§6-5 G1〜G5、段 1)。
 
-保存した boot_declaration d から、観測モデルの記録 (observation_models の各項、§6-10 K26-a (ア)) →
-測る口の実適用 (route_config) → 続けて測る要求 k、initial があれば knowledge_origin → 最初の候補の生成の要求
-Qgen を、1 点ずつ保存する。
+保存した boot_declaration d から、観測モデルの記録 (observation_models の各項、§6-10 K26-a (ア)) と行う一歩の宣言の
+記録 (execution、K36) → 測る口の実適用 (route_config) → 続けて測る要求 k、感じる側 perception があれば knowledge_origin、
+考える側 initial があれば最初の候補の生成の要求 Qgen を、1 点ずつ保存する (K36 新しい決定 2: 感じる側と考える側を分ける)。
 各記録は最初に作った時に固定し (保存の再試行・窓口の作り直しで作り直さない)、後の記録が
 前の記録の Point を要る時だけ、その保存の後に作る。前提が足りない枝は対象つきの未完として
 持ち、正常な枝の完了と分ける。仕事の行は要求の保存の後に置く (FWork.request は Point)。
@@ -71,12 +71,16 @@ def plan_boot(state, declaration, d) -> BootPlan:
         plan.missing.append("capacity")
         return plan
     # 宣言の位置は宣言の中で一意に解決できること。曖昧な slot を名前や並び順で選ばない (:2112、R08)
-    initial = declaration.initial
+    initial, perception, execution = declaration.initial, declaration.perception, declaration.execution
     positions = [declaration.scope.slot, declaration.environment.slot,
                  *(name for r in declaration.routes
                    for name in (r.slot, r.value.allocation.slot, r.value.process_slot)),
-                 *((initial.slot, initial.value.allocation.slot, initial.value.process_slot,
-                    initial.value.reader_slot, initial.value.derivation.slot) if initial is not None else ()),
+                 *((perception.slot, perception.value.allocation.slot, perception.value.process_slot,
+                    perception.value.reader_slot, perception.value.derivation.slot) if perception is not None else ()),
+                 *((initial.slot, initial.value.allocation.slot, initial.value.process_slot)
+                   if initial is not None else ()),
+                 *((execution.slot, execution.value.allocation.slot)
+                   if execution is not None and isinstance(execution.value, _fb.ExecutionDeclaration) else ()),
                  *(m.slot for m in declaration.observation_models)]
     ambiguous = sorted({p for p in positions if positions.count(p) > 1})
     if ambiguous:
@@ -101,7 +105,6 @@ def plan_boot(state, declaration, d) -> BootPlan:
             plan.missing.append(f"observation_model:{model_slot.slot}:route")
         else:
             plan.steps.append(_model_step(model_slot))
-
     def allocation_ok(slot_value):
         a = slot_value.value
         return (slot_value.contract == _c.ALLOCATION and isinstance(a, _fb.Allocation)
@@ -127,24 +130,54 @@ def plan_boot(state, declaration, d) -> BootPlan:
         state.allocations[_fb.BootSlot(declaration=d, slot=route.allocation.slot)] = route.allocation.value.amount
         plan.steps += _route_steps(route_slot)
 
-    if declaration.initial is not None:
-        initial_slot = declaration.initial
-        initial = initial_slot.value
-        if initial_slot.contract != _c.INITIAL_PROCESS:
-            plan.missing.append("initial:contract")
-        elif not allocation_ok(initial.allocation):
-            plan.missing.append("initial:allocation")
-        elif not _declared(state, "generator", initial.generator.contract):
-            plan.missing.append("initial:missing_contract")
+    # 感じる側 (K36 新しい決定 2): モデル・読み手 (origin)・割当を自分で持つ。考える側が無くても見立ては直る
+    sensing = False
+    if execution is not None:
+        if execution.contract != _c.EXECUTION_DECLARATION or not isinstance(execution.value, _fb.ExecutionDeclaration):
+            plan.missing.append("execution:contract")
+        elif not allocation_ok(execution.value.allocation):
+            # 行う割当は宣言で明示する。省略・不正を追加の席で補わない (K36-c ①・K36-c-a ④ (a))
+            plan.missing.append("execution:allocation")
+        else:
+            a = execution.value.allocation
+            state.allocations[_fb.BootSlot(declaration=d, slot=a.slot)] = a.value.amount
+            plan.steps.append(_execution_step(execution))
+    if perception is not None:
+        value = perception.value
+        if perception.contract != _c.PERCEPTION or not isinstance(value, _fb.Perception):
+            plan.missing.append("perception:contract")
+        elif not allocation_ok(value.allocation):
+            plan.missing.append("perception:allocation")
         else:
             try:
-                state.ledger.entry(initial.model)
+                state.ledger.entry(value.model)
             except KeyError:
-                plan.missing.append("initial:model")
+                plan.missing.append("perception:model")
             else:
-                state.allocations[_fb.BootSlot(declaration=d, slot=initial.allocation.slot)] = \
-                    initial.allocation.value.amount
-                plan.steps += _initial_steps(state, initial_slot)
+                state.allocations[_fb.BootSlot(declaration=d, slot=value.allocation.slot)] = value.allocation.value.amount
+                plan.steps.append(_origin_step(perception))
+                sensing = True
+    if initial is not None:
+        value = initial.value
+        if initial.contract != _c.INITIAL_PROCESS or not isinstance(value, _fb.InitialProcess):
+            plan.missing.append("initial:contract")
+        elif perception is None or value.perception_slot != perception.slot:
+            # 考える側は感じる側の origin とモデルを参照する。感じる側の無い考える側は名指しの不足 (K36-a (オ))
+            plan.missing.append("initial:perception")
+        elif not allocation_ok(value.allocation):
+            plan.missing.append("initial:allocation")
+        elif not _declared(state, "generator", value.generator.contract):
+            plan.missing.append("initial:missing_contract")
+        elif value.continuation is not None and (value.continuation.contract != _c.REUSE_CANDIDATES
+                                                 or dict(value.continuation.args) != {}):
+            # 継続の方法は reuse_candidates/3 だけ (旧 /2 を黙って別の意味で読まない、P1・K36-c-b (エ))
+            plan.missing.append("initial:continuation")
+        elif sensing:
+            state.allocations[_fb.BootSlot(declaration=d, slot=value.allocation.slot)] = value.allocation.value.amount
+            # 最初の活動の入口 (K36-c-a ②): 容量を確かめて入場させ、その活動の中で Wg を 1 回起動する。この時はほかの
+            # 活動が無いので、確かめるのは考える割当が 1 席以上あること (0 なら最初の活動も入場しない = Qgen を置かない)
+            if value.allocation.value.amount.value >= 1:
+                plan.steps.append(_qgen_step(state, initial, perception.value))
     return plan
 
 
@@ -238,6 +271,25 @@ def _model_step(model_slot):
     return Step(name="observation_model:" + name, build=build)
 
 
+def _execution_step(execution_slot):
+    """行う一歩の宣言の記録 (`sui.fb.execution_declaration/2`、K36・K36-c ①): Boot の 1 項から独立した Prediction / MODEL。出どころは
+    bootstrap の札と BootSlot。行う一歩の固定の像 E の reading はこの記録を指す (宣言を正しいことの証明にしない)。"""
+    name = execution_slot.slot
+
+    def build(state, plan):
+        from ._fb_core import Slot
+        ledger = state.ledger
+        boot = ledger.record(plan.d).id
+        content = {"origin": "bootstrap", "declared_at": _encode(_fb.BootSlot(declaration=plan.d, slot=name)),
+                   "value": _encode(execution_slot.value)}
+        body = _Prediction(target="execution_declaration", about=(boot,), basis=(boot,),
+                           content=_Payload.json(content), contract=_c.EXECUTION_DECLARATION)
+        return Slot(contract=_c.EXECUTION_DECLARATION, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
+                    parents=_front(ledger, {plan.d}))
+
+    return Step(name="execution", build=build)
+
+
 def _route_steps(route_slot):
     route = route_slot.value
     name = route_slot.slot
@@ -303,18 +355,26 @@ def _route_steps(route_slot):
             Step(name="k:" + name, build=build_k, on_prepared=k_prepared)]
 
 
-def _initial_steps(state, initial_slot):
-    initial = initial_slot.value
-    name = initial_slot.slot
+def _origin_step(perception_slot):
+    """knowledge_origin (感じる側の読み手の位置、K36 新しい決定 2)。モデルは感じる側のもの。"""
+    perception = perception_slot.value
 
     def build_origin(state, plan):
         from ._fb_core import Slot, mono_ns
         # r は窓口がこの記録の成立を確かめた時の M の読み (§2-5-1 U2)。時刻なしだと F-a が文脈の
         # 境界と比べられない (chronology の unknown time)
-        body = _Observed(route="fb", content=_Payload.json({"model": initial.model}),
+        body = _Observed(route="fb", content=_Payload.json({"model": perception.model}),
                          contract=_KNOWLEDGE_ORIGIN, received_ns=mono_ns(state.clock))
         return Slot(contract=_KNOWLEDGE_ORIGIN, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
-                    parents=_front(state.ledger, {plan.d, initial.model}))
+                    parents=_front(state.ledger, {plan.d, perception.model}))
+
+    return Step(name="origin", build=build_origin)
+
+
+def _qgen_step(state, initial_slot, perception):
+    """最初の候補の生成の要求 Qgen (考える側)。読み手は感じる側の origin、モデルは感じる側のモデル。"""
+    initial = initial_slot.value
+    name = initial_slot.slot
 
     def build_qgen(state, plan):
         from ._fb_core import Slot
@@ -333,25 +393,26 @@ def _initial_steps(state, initial_slot):
             if "initial:args" not in plan.missing:
                 plan.missing.append("initial:args")
             return None
+        model = perception.model
         desc = _fb.Desc(
             work_id=_work_id(d, name, "candidate_generation", "initial:" + name),
             process=_fb.BootSlot(declaration=d, slot=initial.process_slot),
             trigger=frozenset({_fb.Trigger(point=d, slot=name)}),
             purpose="candidate_generation", stage_slot="initial:" + name, reader=origin,
             method=initial.generator.contract, output_contract=_c.CANDIDATE_GENERATION,
-            args=_fb.CandidateArgs(model=initial.model, generator_args=initial.generator.args, basis=()),
-            input_points=frozenset({d, origin, initial.model}),
+            args=_fb.CandidateArgs(model=model, generator_args=initial.generator.args, basis=()),
+            input_points=frozenset({d, origin, model}),
             # Prediction のモデルは出来事の祖先に入らないので境界に直接含める (§6-9 H5)
-            numerical_view=fixed_view(state, frozenset({origin, initial.model})),
+            numerical_view=fixed_view(state, frozenset({origin, model})),
             allocation=_fb.BootSlot(declaration=d, slot=initial.allocation.slot),
             permissions=frozenset({_fb.BootSlot(declaration=d, slot=name),
                                    _fb.BootSlot(declaration=d, slot=initial.allocation.slot)}))
         plan.points["desc:qgen"] = desc
         ledger = state.ledger
-        body = _Decided(inputs=(ledger.record(d).id, ledger.record(origin).id, ledger.record(initial.model).id),
+        body = _Decided(inputs=(ledger.record(d).id, ledger.record(origin).id, ledger.record(model).id),
                         content=_Payload.json({"desc": _encode(desc)}), contract=_c.CANDIDATE_REQUEST)
         return Slot(contract=_c.CANDIDATE_REQUEST, record=_record(state, body, _RefKind.DECISION, _Role.MODEL),
-                    parents=_front(ledger, {d, origin, initial.model}))
+                    parents=_front(ledger, {d, origin, model}))
 
     def qgen_prepared(state, plan, cid):
         from ._fb_core import add_work
@@ -359,8 +420,7 @@ def _initial_steps(state, initial_slot):
         add_work(state, _fb.Compute(request=cid, desc=plan.points["desc:qgen"]), plan.declaration.scope.value)
         open_plan(state, plan, initial_slot, cid)
 
-    return [Step(name="origin", build=build_origin),
-            Step(name="qgen", build=build_qgen, on_prepared=qgen_prepared)]
+    return Step(name="qgen", build=build_qgen, on_prepared=qgen_prepared)
 
 
 class _Closure:

@@ -73,9 +73,11 @@ class _WatchedStore:
 class State:
     """H と P。ホストが持ち、窓口を作り直しても残る。"""
 
-    def __init__(self, *, ledger, clock, workers, registry, launcher, sources=None):
+    def __init__(self, *, ledger, clock, workers, registry, launcher, sources=None, actors=None):
         self.lock = _RLock()
         self.sources = dict(sources or {})   # 口の源: route_epoch → FSource (K23。外から差す部品)
+        self.actors = dict(actors or {})     # 環境の相手: 名前 → FActor (K36。外から差す部品)
+        self.inflight: dict = {}       # route_epoch → 源を読みに行っている取りに行きの before の M の読み (K36 決定 12 の順)
         self.cursors: dict = {}        # route_epoch → 源の次に取り出す番号 (この run の中、0 から。taken の時だけ進む)
         self.samples: dict = {}        # route_epoch → 次の取得の操作の番号 (この run の中、0 から。公開まで進んだ取得の数、K25)
         self.raw_ids: dict = {}        # 封筒の番号 → 取得の前に用意した原文の名札 (Record.id、K25 (d))。受付で使って外す
@@ -110,6 +112,9 @@ class State:
         self.thinking: dict = {}       # P.units: Qgen の WorkId → 考える過程の計画 (_fb_think.ThinkPlan)
         self.updates: dict = {}        # P.units: Boot の封筒の番号 → 信念の更新の計画 (_fb_update.UpdatePlan)
         self.clock_sources: dict = {}  # P.units: 時計の知らせの Point → 発行する sui.clock.source/1 の Slot (K1)
+        self.acting: dict = {}         # P.units: Boot の封筒の番号 → 引受けと一歩の計画 (_fb_act.ActPlan、K36)
+        self.handed: dict = {}         # Boot の Point → 評価に渡した根の境界 (採用の系列の位置、戻さない。K36-c ③ (a))
+        self.admitted: dict = {}       # Boot の Point → 入場させた評価の活動の数 (活動の識別の番号、K36-c-a ④ (c))
 
 
 def mono_ns(clock) -> int:
@@ -142,6 +147,8 @@ def _raw_slots(state, event, r, at, record_id=None) -> list:
         pairs = ((_c.SEGMENT_REPORT, _encode(event)),)
     elif isinstance(event, _fb.WorkFinished):
         pairs = ((_c.WORK_REPORT, _encode(event)),)
+    elif isinstance(event, _fb.ExecutionReport):
+        pairs = ((_c.EXECUTION_RESULT, _encode(event)),)   # 家の人が残す一歩の結果 (K36、Z55)
     else:
         pairs = ((_c.DRAW_REPORT, _encode(event)),)
     return [Slot(contract=contract, record=_observed(state, contract, content, r, at, record_id), parents=frozenset())
@@ -204,7 +211,13 @@ def accept(state, envelope) -> None:
     # 呼出し元が持つ可変の JSON (claims・args など) を受付の時点の値で写し、その写しを確かめる。後から変えられても
     # 形の検査・保存・計画・同じ番号の照合は受け付けた同じ中身で行う (R02、K25-b ★ ④ = review K25-R4)
     envelope = freeze(envelope)
-    _check_event(envelope.event)
+    if isinstance(envelope.event, _fb.ExecutionReport):
+        # 一歩の結果のメモは家の人の perform が作った封筒と同じ番号・同じ bytes の時だけ (K36 決定 3・Z55)
+        with state.lock:
+            if state.acquired.get(envelope.number) != wire(envelope):
+                raise _fb.FbInputError(reason="shape", field="/event")
+    else:
+        _check_event(envelope.event)
     item = _item(envelope.event)
     if isinstance(item, _INTERVAL_EVIDENCE):
         raise _fb.FbInputError(reason="shape", field="/event/item")
@@ -249,7 +262,7 @@ def save(state, slot) -> None:
 def settle(state) -> None:
     """原報告を 1 点ずつ保存し、保存した Boot から起動の計画を置いて進め、考える過程を進める。
     Need はロックの外で固定した入力で呼ぶ (§6-9 H10: 差し替えられる方法が戻らない時に Post を止めない)。"""
-    from . import _fb_bind, _fb_boot, _fb_think, _fb_update
+    from . import _fb_act, _fb_bind, _fb_boot, _fb_think, _fb_update
     require_running(state)
     try:
         with state.lock:
@@ -267,6 +280,7 @@ def settle(state) -> None:
             _fb_think.advance(state)
             _fb_bind.bind(state)
             _fb_update.advance(state)
+            _fb_act.advance(state)
     finally:
         # 保存の故障で途中から例外を上げる時も、置いた行の Need は求めておく (行と義務は残る)
         with state.lock:
@@ -364,11 +378,15 @@ def status(state):
             receipts.append(_fb.ReceiptStatus(
                 envelope=number, received_ns=receipt.envelope.received_ns, state="accepted",
                 slots=tuple(_slot_status(slot) for slot in receipt.slots)))
-        from . import _fb_think, _fb_update
+        from . import _fb_act, _fb_think, _fb_update
         return _fb.FStatus(receipts=tuple(receipts), works=work_statuses(state),
                            readings=_fb_think.reading_statuses(state), pending=pending_statuses(state),
                            segments=segment_statuses(state), purposes=_fb_think.purpose_statuses(state),
-                           updates=_fb_update.statuses(state))
+                           updates=_fb_update.statuses(state), policies=_fb_act.policy_statuses(state),
+                           intentions=_fb_act.intention_statuses(state),
+                           executions=_fb_act.execution_statuses(state),
+                           evaluations=_fb_think.evaluation_statuses(state),
+                           thinking_materials=_fb_think.material_statuses(state))
 
 
 def pending_statuses(state) -> tuple:
@@ -380,7 +398,7 @@ def pending_statuses(state) -> tuple:
     out = []
     for plan in state.plans.values():
         for reason in plan.missing:
-            kind = "awaiting_evidence" if reason == "initial:model" else "missing_contract"
+            kind = "awaiting_evidence" if reason == "perception:model" else "missing_contract"
             out.append(item(kind, plan.d, _c.BOOT_DECLARATION, reason))
     for row in state.works.values():
         if row.missing is not None:
@@ -396,12 +414,25 @@ def pending_statuses(state) -> tuple:
             kind = "conflict" if reason.startswith("update:") else "missing_contract"
             out.append(item(kind, plan.boot.d, _c.BOOT_DECLARATION, reason))
         # 食い違った原報告に頼る採用 A* と、それで止まった更新 (紙 Z3)。保存の確認待ちの配送を含む食い違いは未確認
+        for ob in plan.obligations.values():
+            # 更新の仕事 Wu の後着の両立しない終わりの報告 (K36-b (チ))。確認待ちを含むものは未確認
+            if ob.desc is None or not _fb_update.terminal_clash(state, ob):
+                continue
+            target = ob.points.get("A") or ob.points.get("Q") or ob.report
+            if _fb_update.terminal_clash(state, ob, unconfirmed=False):
+                out.append(item("conflict", target, None, "update:terminal_conflict"))
+            else:
+                out.append(item("unchecked", target, None, "update:terminal_conflict:unconfirmed"))
         confirmed = _fb_update.conflicts(state, plan)
         for target in confirmed:
             out.append(item("conflict", target, None, "update:conflict"))
         for target in _fb_update.conflicts(state, plan, unconfirmed=True):
             if target not in confirmed:
                 out.append(item("unchecked", target, None, "update:conflict:unconfirmed"))
+    for act in state.acting.values():
+        # 比べられない根・同じ根の別の選択 (K36 決定 7・K36-a (ウ))。到着順で勝者を作らない
+        for selection, why in act.conflicts:
+            out.append(item("conflict", selection, _c.INTENTION, "intention:" + why))
     from ._fb_think import conflicts
     for plan in state.thinking.values():
         # 食い違いは印でなく、その都度、保存済みの報告から導く (FB2-R01-R2)。保存の確認待ちを含む食い違いは
@@ -489,6 +520,9 @@ def post(state, event) -> None:
     TypeError で断り、何も公開しない (K28 新しい決定 4)。家の人の acquire はこの口を通らない。"""
     if isinstance(_item(event), _PRODUCER_CLOSED):
         raise TypeError("acquisition frames come only from the host's acquire; interval evidence is not accepted")
+    if isinstance(event, _fb.ExecutionReport):
+        # 一歩の結果のメモは家の人だけが書く (K36 決定 3・Z55)。係の口からもホストの post からも受け付けない
+        raise _fb.FbInputError(reason="shape", field="/event")
     with state.lock:
         _publish(state, _envelopes(state, (event,), mono_ns(state.clock)))
 
@@ -528,8 +562,8 @@ def startable(state, row) -> bool:
 def _blocked(state, row) -> bool:
     """開始・入場の門: 考える過程の仕事 (上の段の食い違い・きっかけの採用の依存の食い違い) と、更新の仕事 (依存の
     食い違い)。"""
-    from . import _fb_think, _fb_update
-    return _fb_think.blocked(state, row) or _fb_update.blocked(state, row)
+    from . import _fb_act, _fb_think, _fb_update
+    return _fb_think.blocked(state, row) or _fb_update.blocked(state, row) or _fb_act.blocked(state, row)
 
 
 def drain(state) -> tuple:
@@ -694,13 +728,35 @@ def start_works(state) -> None:
                 row.phase, row.held, row.claim = "pending", None, None
 
 
+def _seat_holders(state, row) -> tuple:
+    """row と同じ割当の席を今持っている仕事の要求 (席が足りずに待っている仕事が、何を待っているかの名指し)。"""
+    slot = row.work.desc.allocation
+    return tuple(r.work.request for r in state.works.values()
+                 if r is not row and r.held is not None and r.work.desc.allocation == slot)
+
+
+def _blocked_by(state, row) -> tuple:
+    """開始待ちの仕事が何を待っているか: 一歩の門 (置き換えた引受け・食い違い・ほかの一歩。起動済みで未入場も) / 席が
+    足りない時は同じ割当の席を持っている仕事。"""
+    from ._fb_act import blocking
+    if row.ticket_used or row.phase not in ("pending", "starting"):
+        return ()
+    held = blocking(state, row)
+    if held:
+        return held
+    if row.phase == "pending" and not isinstance(row.work, PlannedWork) and _saved(state, row.work.request) \
+            and not _fits(state, row) and row.need is not None:
+        return _seat_holders(state, row)
+    return ()
+
+
 def work_statuses(state) -> tuple:
     out = []
     for row in state.works.values():
         desc = row.work.desc
         out.append(_fb.WorkStatus(
             work_id=desc.work_id, request=row.work.request, purpose=desc.purpose, phase=row.phase,
-            startable=startable(state, row), blocked_by=(), knowledge=row.knowledge,
+            startable=startable(state, row), blocked_by=_blocked_by(state, row), knowledge=row.knowledge,
             stop_confirmed=row.stopped, held=row.held,
             evidence=_fb.StatusBasis(view=None, basis=(row.work.request,))))
     return tuple(out)
@@ -758,6 +814,7 @@ class WorkContext:
         self.entered = False   # この口が開始札を取ったか
         self.invoked = False   # この口の本体が呼ばれたか
         self.returned = False  # 入場した本体が戻ったのをホストが観測したか (K29)
+        self.performed = False  # この口で一歩を行った (同じ一歩を二度始めない、K36)
 
     def enter(self) -> bool:
         with self._state.lock:
@@ -826,10 +883,24 @@ class WorkContext:
             raise RuntimeError("no clock source has been issued for this run")
         return _fb.ReadingClock(source=source, reading=_f.ClockReading(run=state.clock.run, time_ns=mono_ns(state.clock)))
 
+    def _reading_at(self, ns):
+        """入場の時の M の読み ns を、発行済みの時計の出どころと組にする (K36 決定 12 の一歩の始まり)。ロックの中で呼ぶ。"""
+        from . import f as _f
+        from ._fb_boot import _clock_source
+        source = _clock_source(self._state)
+        if source is None:
+            raise RuntimeError("no clock source has been issued for this run")
+        return _fb.ReadingClock(source=source, reading=_f.ClockReading(run=self._state.clock.run, time_ns=ns))
+
     def now(self):
         with self._state.lock:
             self._require_entered()
             return self._reading()
+
+    def perform(self, execution):
+        """一歩を行う仕事の口だけ (K36 決定 3)。中身は `_fb_act.perform`。"""
+        from . import _fb_act
+        return _fb_act.perform(self._state, self, self._row, execution)
 
     def acquire(self):
         """この測る仕事の口の源から次の番号の 1 件を取りに行き、その結果をホスト自身が預ける (K23・K25)。
@@ -858,68 +929,78 @@ class WorkContext:
                 source = state.sources.get(epoch)
                 before = self._reading()
                 raw_id = state.ids.new(_RefKind.OBSERVATION)   # 原文の名札 (空・取れなかった時は使わないまま)
-            item, raw, outcome, reason = None, None, "unavailable", "no source is attached to this route"
-            if source is not None:
-                try:
-                    item = source.read(cursor)
-                except Exception as exc:   # 源の故障を「空」に丸めない。理由を残して返す (ふつうの結果)
-                    item, reason = None, f"{type(exc).__name__}: {exc}"
+                # 源を読みに行っている間の始まり (K36 決定 12: 行う一歩との前後を決めるまで、その一歩の結果の採用を待つ)
+                state.inflight[epoch] = before.reading.time_ns
+            try:
+                return self._take(state, row, epoch, cursor, source, before, raw_id)
+            finally:
+                with state.lock:
+                    state.inflight.pop(epoch, None)
+
+    def _take(self, state, row, epoch, cursor, source, before, raw_id):
+        """acquire の源を読む所から公開まで (源の読みの鍵の中で呼ぶ)。"""
+        item, raw, outcome, reason = None, None, "unavailable", "no source is attached to this route"
+        if source is not None:
+            try:
+                item = source.read(cursor)
+            except Exception as exc:   # 源の故障を「空」に丸めない。理由を残して返す (ふつうの結果)
+                item, reason = None, f"{type(exc).__name__}: {exc}"
+            else:
+                if item is None:
+                    outcome, reason = "empty", ""
+                elif type(item) is not _fb.SourceItem:   # 形の合わない戻り値 = ふつうの結果 (K23-a (オ))
+                    item, reason = None, "the source returned a value that cannot be saved as received: not a SourceItem"
                 else:
-                    if item is None:
-                        outcome, reason = "empty", ""
-                    elif type(item) is not _fb.SourceItem:   # 形の合わない戻り値 = ふつうの結果 (K23-a (オ))
-                        item, reason = None, "the source returned a value that cannot be saved as received: not a SourceItem"
+                    # 組み立て (K25 (d2) ②): 凍らせた値を、受付と同じ 1 つの検査で確かめ、その値を預ける (源の持つ
+                    # 可変の claims が後から変わっても、確かめた中身と預ける中身がずれない)。「取れなかった」に
+                    # するのは、形が合わないと確かめた時 (FbInputError) だけ。凍らせる・確かめるを終えられなかった
+                    # 例外 (資源の不足・想定外の例外) は源の結果ではないので、何も公開せずに上げる (その回は損失、
+                    # K25 (d2)・Z42 (c)・Z49。ふつうの Post・回す役 K17 と同じ線)
+                    raw = freeze(_fb.Received(route_epoch=epoch, media_type=item.media_type, data=item.data,
+                                              claims=item.claims))
+                    try:
+                        _check_event(raw)
+                    except _fb.FbInputError as exc:
+                        item, raw = None, None
+                        reason = f"the source returned a value that cannot be saved as received: {exc}"
                     else:
-                        # 組み立て (K25 (d2) ②): 凍らせた値を、受付と同じ 1 つの検査で確かめ、その値を預ける (源の持つ
-                        # 可変の claims が後から変わっても、確かめた中身と預ける中身がずれない)。「取れなかった」に
-                        # するのは、形が合わないと確かめた時 (FbInputError) だけ。凍らせる・確かめるを終えられなかった
-                        # 例外 (資源の不足・想定外の例外) は源の結果ではないので、何も公開せずに上げる (その回は損失、
-                        # K25 (d2)・Z42 (c)・Z49。ふつうの Post・回す役 K17 と同じ線)
-                        raw = freeze(_fb.Received(route_epoch=epoch, media_type=item.media_type, data=item.data,
-                                                  claims=item.claims))
-                        try:
-                            _check_event(raw)
-                        except _fb.FbInputError as exc:
-                            item, raw = None, None
-                            reason = f"the source returned a value that cannot be saved as received: {exc}"
-                        else:
-                            outcome, reason = "taken", ""
-            with state.lock:
-                # 確定 ①: この 1 つの読みが after であり、原文と Frame の受信の時刻 (鍵を放さずに公開まで)
-                after = self._reading(before.source)
-                r, seq, called = after.reading.time_ns, state.samples.get(epoch, 0), source is not None
-                # ② 組み立て終える (共有の状態はまだ変えない)
-                result: dict = {"kind": outcome}
-                if outcome == "taken":
-                    result["received"] = str(raw_id)
-                elif outcome == "unavailable":
-                    result["reason"] = reason
-                frame = _fb.SegmentReport(segment=row.work.request, item_slot=f"frame:{seq}", item=_fb.MeasurementFrame(
-                    route_epoch=epoch, sample_seq=seq,
-                    measurement_id=_fb.MeasurementId(origin=after.reading.run, route_epoch=epoch, sample_seq=seq,
-                                                     component="source_acquisition"),
-                    measurement_interval=_fb.MeasurementInterval(clock=after.reading.run, start_ns=before.reading.time_ns,
-                                                                 end_ns=r, closure="[start,end]"),
-                    actual_time=after.reading,
-                    value={"cursor": cursor, "source_called": called, "clock_source": before.source, "result": result},
-                    quality=_fb.ContractValue(contract=_ContractRef("sui.f.measured_quality", "1"), value="measured"),
-                    gap=None,
-                    source_cursor=_fb.ContractValue(contract=_ContractRef("sui.f.sequence_cursor", "1"), value=seq)))
-                _check_event(frame)
-                envelopes = _envelopes(state, (raw, frame) if outcome == "taken" else (frame,), r)
-                take = Take(route_epoch=epoch, cursor=cursor, before_ns=before.reading.time_ns, after_ns=r,
-                            outcome=outcome, envelope=envelopes[0].number if outcome == "taken" else None,
-                            sample_seq=seq, source_called=called, clock_source=before.source,
-                            frame_envelope=envelopes[-1].number, received_id=raw_id if outcome == "taken" else None)
-                # ③ 公開: 組み上がった値を入れるだけ。原文の保存もホストの責務 (この仕事の口からの封筒)
-                if outcome == "taken":
-                    state.raw_ids[envelopes[0].number] = raw_id
-                    state.cursors[epoch] = cursor + 1
-                state.acquired[envelopes[-1].number] = wire(envelopes[-1])   # 窓口が acquire の封筒と見分ける (Z55)
-                _publish(state, envelopes)
-                row.reports.extend((e.number, e.received_ns) for e in envelopes)
-                state.samples[epoch] = seq + 1
-                row.takes.append(take)
+                        outcome, reason = "taken", ""
+        with state.lock:
+            # 確定 ①: この 1 つの読みが after であり、原文と Frame の受信の時刻 (鍵を放さずに公開まで)
+            after = self._reading(before.source)
+            r, seq, called = after.reading.time_ns, state.samples.get(epoch, 0), source is not None
+            # ② 組み立て終える (共有の状態はまだ変えない)
+            result: dict = {"kind": outcome}
+            if outcome == "taken":
+                result["received"] = str(raw_id)
+            elif outcome == "unavailable":
+                result["reason"] = reason
+            frame = _fb.SegmentReport(segment=row.work.request, item_slot=f"frame:{seq}", item=_fb.MeasurementFrame(
+                route_epoch=epoch, sample_seq=seq,
+                measurement_id=_fb.MeasurementId(origin=after.reading.run, route_epoch=epoch, sample_seq=seq,
+                                                 component="source_acquisition"),
+                measurement_interval=_fb.MeasurementInterval(clock=after.reading.run, start_ns=before.reading.time_ns,
+                                                             end_ns=r, closure="[start,end]"),
+                actual_time=after.reading,
+                value={"cursor": cursor, "source_called": called, "clock_source": before.source, "result": result},
+                quality=_fb.ContractValue(contract=_ContractRef("sui.f.measured_quality", "1"), value="measured"),
+                gap=None,
+                source_cursor=_fb.ContractValue(contract=_ContractRef("sui.f.sequence_cursor", "1"), value=seq)))
+            _check_event(frame)
+            envelopes = _envelopes(state, (raw, frame) if outcome == "taken" else (frame,), r)
+            take = Take(route_epoch=epoch, cursor=cursor, before_ns=before.reading.time_ns, after_ns=r,
+                        outcome=outcome, envelope=envelopes[0].number if outcome == "taken" else None,
+                        sample_seq=seq, source_called=called, clock_source=before.source,
+                        frame_envelope=envelopes[-1].number, received_id=raw_id if outcome == "taken" else None)
+            # ③ 公開: 組み上がった値を入れるだけ。原文の保存もホストの責務 (この仕事の口からの封筒)
+            if outcome == "taken":
+                state.raw_ids[envelopes[0].number] = raw_id
+                state.cursors[epoch] = cursor + 1
+            state.acquired[envelopes[-1].number] = wire(envelopes[-1])   # 窓口が acquire の封筒と見分ける (Z55)
+            _publish(state, envelopes)
+            row.reports.extend((e.number, e.received_ns) for e in envelopes)
+            state.samples[epoch] = seq + 1
+            row.takes.append(take)
         return _fb.Acquisition(route_epoch=epoch, cursor=cursor, before=before, after=after, outcome=outcome,
                                reason=reason, item=item)
 

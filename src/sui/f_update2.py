@@ -69,6 +69,23 @@ def fb_registry_v1() -> FRegistry:
     implementations = tuple(CapabilityImplementation(kind=kind, ref=ref, implementation=_ExecutedByEntrance(),
                                                      identity="sui.fb.first_loop/1:" + ref.name + "/" + ref.version)
                             for kind, ref, *_ in rows)
+    # K36: 一歩を行う方法 (実行は本体の係 fb.StepExecutor と家の人の perform) と、その結果を読む読み方
+    rows2 = (("method", c.EXECUTE_STEP, empty, c.EXECUTE_STEP_REQUESTED, c.EXECUTION_RESULT),
+             ("projection", c.EXECUTION_STEP_PROJECTION, ContractRef("sui.fb.args.execution_step_projection", "1"),
+              c.EXECUTION_RESULT, c.EXECUTION_DECLARATION))
+    declarations += tuple(CapabilityDeclaration(kind=kind, ref=ref, args_contract=args, input_contract=inp,
+                                                output_contract=out, dependencies=(), conditions=())
+                          for kind, ref, args, inp, out in rows2)
+    implementations += tuple(CapabilityImplementation(kind=kind, ref=ref, implementation=_ExecutedByEntrance(),
+                                                      identity="sui.fb.first_loop/1:" + ref.name + "/" + ref.version)
+                             for kind, ref, *_ in rows2)
+    # K36-a (ア): 必要量 = 仕事 1 つが走る間に席 1 つ (seats/1 の意味から導ける値。bootstrap の札・差し替えの口)
+    declarations += (CapabilityDeclaration(kind="method", ref=c.ONE_SEAT_PER_WORK, args_contract=empty,
+                                           input_contract=c.NEED_INPUT, output_contract=c.QUANTITY_VALUE,
+                                           dependencies=(), conditions=()),)
+    implementations += (CapabilityImplementation(
+        kind="method", ref=c.ONE_SEAT_PER_WORK, implementation=_OneSeatPerWork(),
+        identity="sui.fb.first_loop/1:" + c.ONE_SEAT_PER_WORK.name + "/" + c.ONE_SEAT_PER_WORK.version),)
     # K31: 最初の並べ方 (H9) の手順。F-a が候補の宣言を読む時に呼び直す (Z58 (2))。受け取った入力をそのまま返す
     candidate_input = ContractRef("sui.f.schema.candidate_input", "1")
     declarations += (CapabilityDeclaration(kind="generator", ref=c.MODEL_OPERATIONS, args_contract=empty,
@@ -116,6 +133,15 @@ class _ModelOperations:
         if not hasattr(input, "keys") or set(input) != {"actions", "basis", "draws"}:
             raise FInputError("shape", "not a candidate input", "/input")
         return input
+
+
+class _OneSeatPerWork:
+    """必要量 `sui.fb.one_seat_per_work/1` (紙 F-b K36-a (ア)): どの仕事も、走る間に席 1 つ。args は空。"""
+
+    def __call__(self, *, args, input, context):
+        if not hasattr(args, "keys") or dict(args) != {}:
+            raise FInputError("shape", "one_seat_per_work takes no arguments", "/args")
+        return {"contract": {"name": "sui.fb.seats", "version": "1"}, "value": 1}
 
 
 class _ExecutedByEntrance:
@@ -490,8 +516,10 @@ class _State:
         self.kind = None              # 系列が読む観測の種類: "claim" (区間の札) / "acquisition" (取りに行き)。混ぜない
         self.carrier_by_state, self.law_point, self.law = None, None, None
         self.applied = {}   # ClaimKey (segment, item_slot) → Predicate
-        self.frames = []    # 取りに行きの順序つきの適用 [MeasurementId の値, 意味] (K28 新しい決定 6)
-        self.seen = {}      # MeasurementId の正準 bytes → 意味 (同じ MID は 1 回だけ学ぶ)
+        self.frames = []    # 取りに行きと行った一歩の順序つきの適用 [MeasurementId の値 | 一歩の鍵, 意味] (K28 新しい決定 6・K36)
+        self.seen = {}      # MeasurementId (か一歩の E) の正準 bytes → 意味 (同じ測定は 1 回だけ学ぶ)
+        self.passive = []   # 適用した取りに行きの MeasurementId の値 (順に。番号の続きを確かめる)
+        self.history = []   # 適用した観測の (種類, 始め, 終わり, 行列, 重なりの宣言) (順の確かめ、K36 決定 12)
 
     def digest(self, model, origin) -> str:
         """application_digest (§19-1): モデル・origin・法則と、今の連言が表す行の集合 (連言を満たす正準 marks)。
@@ -595,11 +623,18 @@ def _apply(reader, state, model, binding, reading, desc) -> None:
     from . import _f_count as count
     from .f import CoverageClaim, FInputError, _Fraction, _decode
     c = _c()
-    b = _content(reader, binding, c.SEGMENT_BINDING)
     plan = _content(reader, reading, c.OBSERVATION_PLAN_2)
     if plan["model"] != model:
         raise _Issue("rejected", "observation_binding_mismatch", "reading of another model", evidence=(reading,))
     projection, generation = plan["projection"], plan["generation"]
+    if projection["contract"] == _enc(c.EXECUTION_STEP_PROJECTION):   # 結びつき B ではなく、一歩の結果のメモを読む
+        if state.kind not in (None, "acquisition"):
+            raise _Issue("rejected", "missing_contract", "executed steps and interval claims in one series",
+                         evidence=(binding, reading))
+        state.kind = "acquisition"   # 取りに行きと行った一歩は同じ「届いた / 届かない」の読み方の系列 (K36 決定 5)
+        _apply_execution(reader, state, model, binding, reading, plan, desc)
+        return
+    b = _content(reader, binding, c.SEGMENT_BINDING)
     kind = "acquisition" if projection["contract"] == _enc(c.ACQUISITION_SEQUENCE_PROJECTION) else "claim"
     if state.kind not in (None, kind):
         raise _Issue("rejected", "missing_contract", "acquisition frames and interval claims in one series",
@@ -815,10 +850,12 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc) ->
         if _dumps(known) != _dumps(meaning):   # 同じ取りに行きを別の読み方で読み直さない
             raise _Issue("rejected", "measurement_conflict", "the same acquisition read differently", evidence=(binding,))
         return                 # 同じ取りに行きの同じ意味の再提示は据え置き (2 回学ばない)
-    if mid.sample_seq != len(state.frames) or state.frames and (
-            state.frames[-1][0]["origin"], state.frames[-1][0]["route_epoch"]) != (_enc(mid.origin), mid.route_epoch):
+    if mid.sample_seq != len(state.passive) or state.passive and (
+            state.passive[-1]["origin"], state.passive[-1]["route_epoch"]) != (_enc(mid.origin), mid.route_epoch):
         raise _Issue("rejected", "observation_binding_mismatch",
                      "acquisitions must continue the applied prefix in order", evidence=(binding,))
+    interval = frame.measurement_interval
+    _check_order(state, "acquisition", interval.start_ns, interval.end_ns, m, None, binding)
     z = sum((m[i][j] * state.joint[j] for i in range(n) for j in range(n)), Fraction(0))
     if z == 0:
         raise _Issue("rejected", "model_falsified", "the model gives this acquisition no mass on the current support",
@@ -826,6 +863,110 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc) ->
     state.joint = tuple(sum((m[i][j] * state.joint[j] for j in range(n)), Fraction(0)) / z for i in range(n))
     state.mass *= z
     state.frames.append((_enc(mid), meaning))
+    state.passive.append(_enc(mid))
+    state.history.append(("acquisition", interval.start_ns, interval.end_ns, m, None))
+    state.seen[key] = meaning
+
+
+_OVERLAP_DECLARED = ("state_preserving", "serializable")
+
+
+def _product(a, b):
+    from fractions import Fraction
+    n = len(a)
+    return [[sum((a[i][k] * b[k][j] for k in range(n)), Fraction(0)) for j in range(n)] for i in range(n)]
+
+
+def _check_order(state, kind, start, end, matrix, overlap, binding) -> None:
+    """順の確かめ (紙 F-b K36 決定 12)。前に適用した別の種類の観測 (取りに行き ↔ 行った一歩) が、この観測の終わりより後に
+    始まっていれば、順を飛ばしている。区間が重なる時は、行った一歩の側の世界の宣言 (source_overlap・actor_overlap) が
+    両方とも「途中も変えない」か「1 回ずつの前後で表せる」で、実際に読んだセルの行列どうしが両方の順で同じ時だけ進める。"""
+    for other, o_start, o_end, o_matrix, o_overlap in state.history:
+        if other == kind:
+            continue
+        if o_start > end:
+            raise _Issue("rejected", "observation_binding_mismatch", "an earlier application started after this one",
+                         evidence=(binding,))
+        if o_end < start:
+            continue
+        declared = overlap if overlap is not None else o_overlap
+        if declared is None or any(x not in _OVERLAP_DECLARED for x in declared) \
+                or _product(matrix, o_matrix) != _product(o_matrix, matrix):
+            raise _Issue("rejected", "observation_binding_mismatch",
+                         "overlapping observations whose order is unknown", evidence=(binding,))
+
+
+def _apply_execution(reader, state, model, binding, reading, plan, desc) -> None:
+    """行った一歩 1 つ (家の人が残した結果のメモ) を、その節の核のうち観測のセルの outcome の和で今の joint に掛ける
+    (紙 F-b K36 決定 5)。宣言を解き (読み方・結果のメモ・行う一歩の宣言・モデルの核)、段 4 で行える観測の一歩 (outcome の
+    行列がどれも対角・所要 0・観測が呼んだ 3 つの組で、宣言のセルと一致) かを確かめ、セルの行列の和 M で
+    q = M q / z・質量 × z。同じ一歩 (同じ E) の同じ意味は据え置き、違う意味は食い違い。z = 0 は model_falsified。"""
+    from fractions import Fraction
+    from .f import _dumps
+    c = _c()
+    pargs = plan["projection"]["args"]
+    if not hasattr(pargs, "keys") or set(pargs.keys()) != {"execution_declaration"} \
+            or _json(plan["generation"]) != {"contract": _enc(c.EXECUTE_STEP), "args": {}}:
+        raise _Issue("rejected", "missing_contract", "execution projection", fields=("/projection",),
+                     evidence=(reading,))
+    if binding not in desc["input_points"]:
+        raise _Issue("rejected", "observation_binding_mismatch", "the executed step is not an input of the request",
+                     evidence=(binding,))
+    report = _content(reader, binding, c.EXECUTION_RESULT)
+    E = report.get("execution") if hasattr(report, "get") else None
+    value = _json(report.get("value")) if hasattr(report, "get") else None
+    legal = {"taken": {"result": "taken", "source_called": True}, "empty": {"result": "empty", "source_called": True},
+             "unavailable_called": {"result": "unavailable", "source_called": True}}
+    if report.get("outcome") != "observed" or value not in legal.values() or not hasattr(E, "get") \
+            or E.get("model") != model or E.get("reading") != pargs["execution_declaration"]:
+        raise _Issue("rejected", "observation_binding_mismatch", "executed step result", evidence=(binding,))
+    declared = _content(reader, pargs["execution_declaration"], c.EXECUTION_DECLARATION)
+    kid = E["u"]
+    try:
+        document = reader.record(model).body.content.as_json()["document"]
+        kernel, = [k for k in document["kernels"] if k["id"] == kid]
+        cells = _json(declared["value"]["cells"])[kid]
+        overlap = (declared["value"]["source_overlap"], declared["value"]["actor_overlap"])
+        entered, finished = report["entered"]["value"]["reading"]["time_ns"], report["finished"]["value"]["reading"]["time_ns"]
+    except (KeyError, TypeError, ValueError):
+        raise _Issue("rejected", "missing_contract", "executed step declaration", evidence=(binding,)) from None
+    outcomes = {o["id"]: o for o in kernel["outcomes"]}
+    n = len(state.joint)
+
+    def matrix(o):
+        return [[Fraction(*x) if isinstance(x, list) else Fraction(x) for x in row] for row in o["matrix"]]
+    # 段 4 で行える観測の一歩だけ (状態を変えない・所要 0・観測のセルが宣言と一致、決定 5)
+    if any(o["elapsed_ns"] != 0 or o["evidence"] is None or _json(o["evidence"]["value"]) not in legal.values()
+           or any(matrix(o)[i][j] for i in range(n) for j in range(n) if i != j) for o in outcomes.values()) \
+            or sorted(x for cell in cells for x in cell["outcomes"]) != sorted(outcomes) \
+            or any(_json(outcomes[x]["evidence"]["value"]) != _json(cell["observation"]["value"])
+                   for cell in cells for x in cell["outcomes"]):
+        raise _Issue("rejected", "missing_contract", "the step is not a state-preserving observation step",
+                     evidence=(binding,))
+    found = [cell for cell in cells if _json(cell["observation"]["value"]) == value]
+    if len(found) != 1:
+        raise _Issue("rejected", "missing_contract", "no observation cell reads this result", evidence=(binding,))
+    m = [[Fraction(0)] * n for _ in range(n)]
+    for name in found[0]["outcomes"]:
+        for i, row in enumerate(matrix(outcomes[name])):
+            for j, x in enumerate(row):
+                m[i][j] += x
+    meaning = {"projection": _enc(c.EXECUTION_STEP_PROJECTION), "kernel": _json(kernel), "cells": cells, "value": value}
+    key = _dumps({"execution": _json(E)})
+    known = state.seen.get(key)
+    if known is not None:
+        if _dumps(known) != _dumps(meaning):
+            raise _Issue("rejected", "measurement_conflict", "the same step read differently", evidence=(binding,))
+        return
+    _check_order(state, "execution", entered, finished, m, overlap, binding)
+    z = sum((m[i][j] * state.joint[j] for i in range(n) for j in range(n)), Fraction(0))
+    if z == 0:
+        raise _Issue("rejected", "model_falsified", "the model gives this step result no mass on the current support",
+                     evidence=(binding,))
+    state.joint = tuple(sum((m[i][j] * state.joint[j] for j in range(n)), Fraction(0)) / z for i in range(n))
+    state.mass *= z
+    state.frames.append(({"execution": _json(E)}, meaning))
+    state.history.append(("execution", entered, finished, m, overlap))
     state.seen[key] = meaning
 
 
