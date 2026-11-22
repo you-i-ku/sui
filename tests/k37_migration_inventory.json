@@ -1,0 +1,620 @@
+{
+  "issue": "K37",
+  "request": 106,
+  "scope": "work37/tests; frozen simulation files excluded",
+  "method": "AST function bodies in test_fb_*.py; model_point / perception.value.model / args.model references; nested closures grouped with owner. This is a reference inventory, not a claim that all these tests must change.",
+  "items": [
+    {
+      "file": "tests/test_fb_acquisition_loop.py",
+      "function": "test_unentered_update_port_cannot_record_evidence_but_entered_port_can",
+      "line": 237,
+      "evidence_lines": [
+        250,
+        270
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "function": "belief1_status",
+      "line": 275,
+      "evidence_lines": [
+        277
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "function": "test_belief1_production_TET_adopts_in_order_and_matches_enumeration_and_K26",
+      "line": 318,
+      "evidence_lines": [
+        340,
+        353,
+        356
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "function": "test_belief1_explicit_correspondence_reorders_state_coordinates",
+      "line": 386,
+      "evidence_lines": [
+        400
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "function": "test_belief1_invalid_declarations_are_not_valid_updates_or_numerical_noops",
+      "line": 651,
+      "evidence_lines": [
+        708
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "function": "test_belief1_U_requires_the_next_item_of_the_adopted_prefix",
+      "line": 876,
+      "evidence_lines": [
+        913,
+        927
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "function": "test_belief1_U_rejects_mixed_acquisition_and_Claim_series_including_prior",
+      "line": 1125,
+      "evidence_lines": [
+        1137,
+        1139
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "function": "__init__",
+      "line": 173,
+      "evidence_lines": [
+        205,
+        217
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_bundle.py",
+      "function": "test_bundle1_host_wrapper_cannot_admit_twice_or_revoke_the_live_owner",
+      "line": 330,
+      "evidence_lines": [
+        363
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_bundle.py",
+      "function": "test_bundle1_host_observes_exceptional_return_and_preserves_K29_rejection",
+      "line": 369,
+      "evidence_lines": [
+        385
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "expected_declaration",
+      "line": 112,
+      "evidence_lines": [
+        113
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "test_cand1_native_declaration_uses_model_order_public_read_and_distinct_clock_reads",
+      "line": 141,
+      "evidence_lines": [
+        144,
+        147
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "test_cand1_output_uses_the_requested_contract",
+      "line": 155,
+      "evidence_lines": [
+        159
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "test_cand1_unsupported_method_is_failure_not_empty_or_no_candidates",
+      "line": 165,
+      "evidence_lines": [
+        173
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "test_cand1_malformed_model_is_execution_failure_not_a_fictitious_candidate_result",
+      "line": 195,
+      "evidence_lines": [
+        198
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "test_cand1_success_and_failures_read_two_clocks_and_only_replace_unavailable_side",
+      "line": 205,
+      "evidence_lines": [
+        208
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "test_cand1_same_worker_reads_each_new_model_from_its_current_port",
+      "line": 234,
+      "evidence_lines": [
+        238,
+        242
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "test_cand1_post_failure_escapes_without_a_second_failure_report",
+      "line": 245,
+      "evidence_lines": [
+        248
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "test_cand1_host_records_native_model_use_and_advances_to_evaluation_request",
+      "line": 343,
+      "evidence_lines": [
+        353
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "test_cand1_host_distinguishes_empty_operations_array_from_non_array_failure",
+      "line": 385,
+      "evidence_lines": [
+        394,
+        397,
+        399
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "test_cand1_main_loop_uses_native_candidates_and_native_generator_registration",
+      "line": 510,
+      "evidence_lines": [
+        532
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "function": "__init__",
+      "line": 315,
+      "evidence_lines": [
+        327,
+        330
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_cycle.py",
+      "function": "test_cycle1_unsupported_selected_step_is_not_silently_dropped_or_executed",
+      "line": 964,
+      "evidence_lines": [
+        981,
+        984
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_cycle.py",
+      "function": "test_cycle1_nonobservational_steps_do_not_block_an_overlapping_passive_observation",
+      "line": 1596,
+      "evidence_lines": [
+        1605,
+        1608
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_cycle.py",
+      "function": "__init__",
+      "line": 422,
+      "evidence_lines": [
+        438,
+        444
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_cycle.py",
+      "function": "replace_model",
+      "line": 485,
+      "evidence_lines": [
+        491,
+        494
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_cycle.py",
+      "function": "assert_fixed_image",
+      "line": 675,
+      "evidence_lines": [
+        680
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_exact.py",
+      "function": "__init__",
+      "line": 482,
+      "evidence_lines": [
+        500,
+        503
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_host.py",
+      "function": "with_model",
+      "line": 22,
+      "evidence_lines": [
+        24
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_loop.py",
+      "function": "assert_update",
+      "line": 222,
+      "evidence_lines": [
+        227,
+        238
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_loop.py",
+      "function": "test_continuation_uses_adopted_joint_in_math_input_and_information",
+      "line": 351,
+      "evidence_lines": [
+        382
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_loop.py",
+      "function": "test_continuation_preserves_adopted_state_order_in_asymmetric_information",
+      "line": 421,
+      "evidence_lines": [
+        436
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_loop.py",
+      "function": "__init__",
+      "line": 142,
+      "evidence_lines": [
+        153,
+        157
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_loop.py",
+      "function": "__init__",
+      "line": 1274,
+      "evidence_lines": [
+        1348
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_measure.py",
+      "function": "__init__",
+      "line": 265,
+      "evidence_lines": [
+        293,
+        297
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_port_life.py",
+      "function": "operate",
+      "line": 95,
+      "evidence_lines": [
+        96
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_port_life.py",
+      "function": "positive",
+      "line": 101,
+      "evidence_lines": [
+        109,
+        111
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_port_life.py",
+      "function": "test_portlife1_read_rechecks_after_public_ledger_read_and_does_not_return_body",
+      "line": 295,
+      "evidence_lines": [
+        309,
+        317
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_port_life.py",
+      "function": "test_portlife1_frozen_reader_and_prepared_remain_usable_after_compute_return",
+      "line": 415,
+      "evidence_lines": [
+        429,
+        430
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "function": "make_read1",
+      "line": 163,
+      "evidence_lines": [
+        193
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "function": "test_read1_boot_saves_each_slotted_model_as_an_independent_prediction",
+      "line": 306,
+      "evidence_lines": [
+        344
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "function": "test_read1_saving_a_model_without_initial_is_neither_acquisition_nor_belief_adoption",
+      "line": 348,
+      "evidence_lines": [
+        357
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "function": "test_read1_model_point_requires_observation_prediction",
+      "line": 997,
+      "evidence_lines": [
+        997
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "test_initial_plan_saved_with_origin_qgen_and_unstarted_wg",
+      "line": 635,
+      "evidence_lines": [
+        643
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "__init__",
+      "line": 299,
+      "evidence_lines": [
+        308,
+        317
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "install_legal_boot",
+      "line": 369,
+      "evidence_lines": [
+        373
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_stage1.py",
+      "function": "assert_initial_slots_saved_from_original_declaration",
+      "line": 387,
+      "evidence_lines": [
+        393
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "test_model_operations_follow_original_model_order",
+      "line": 639,
+      "evidence_lines": [
+        652
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "test_boot_to_selected_actual_records_and_parent_equations",
+      "line": 656,
+      "evidence_lines": [
+        674,
+        692,
+        699,
+        700,
+        701,
+        707
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "test_fb2_r08_definite_empty_reply_survives_clash_without_new_publications",
+      "line": 2510,
+      "evidence_lines": [
+        2536
+      ],
+      "category": "singleton_point_assertion",
+      "action": "Keep the singleton numeric ruler. If this scene is extended to additions, obtain model from host.belief_pool at the frozen request boundary instead of Boot.model.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "candidate",
+      "line": 224,
+      "evidence_lines": [
+        228,
+        230
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    },
+    {
+      "file": "tests/test_fb_stage2.py",
+      "function": "__init__",
+      "line": 289,
+      "evidence_lines": [
+        310,
+        314
+      ],
+      "category": "singleton_fixture_or_direct_worker_input",
+      "action": "Keep explicit one-candidate declarations / direct F-a and worker inputs. No candidate addition is requested here; numeric expectations stay unchanged.",
+      "status": "reviewed_proposal_no_existing_file_edited"
+    }
+  ],
+  "counts": {
+    "singleton_fixture_or_direct_worker_input": 29,
+    "singleton_point_assertion": 23
+  },
+  "numeric_oracles_preserved": [
+    "test_fb_cycle.enumerate_updates",
+    "test_fb_cycle.declared_one_step_information_and_probabilities",
+    "test_fb_acquisition_loop.sequence_answer"
+  ],
+  "actual_migration": "New PoolRig inherits the public native CycleRig; births use fb.start; update/thinking/execution with additions resolve via the new common pool. Existing files are left unchanged as requested: inventory and migration proposal only."
+}

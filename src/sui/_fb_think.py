@@ -58,11 +58,15 @@ class ThinkPlan:
     activity: str = ""           # 評価の活動の識別 (入場の時から変えない。くじの続きは親と同じ、K36-c ②・K36-c-a ④ (c))
     root_fixed: bool = False     # 根が決まった (継続の評価は入口で、最初の活動は o で。それまでは未確定、K36-c-a ②)
     boundary: object = None      # 継続の評価が入口で決めた境界 (o はこの境界で固める、K36-c ③)
+    model: object = None         # 評価する見立てのモデル = 根の境目で効いている候補の並びのモデル (K37 決定 7)
+    origin: object = None        # その並びの読み手 (knowledge_origin、K37)
+    generates: bool = False      # この活動が自分で候補を作る (最初の活動と、候補を作っていない並びの最初の評価、K37)
 
 
 def _model(plan):
-    """考える過程が読む見立てのモデル = 感じる側のモデル (K36 新しい決定 2: 考える側は感じる側のモデルを参照する)。"""
-    return plan.boot.declaration.perception.value.model
+    """考える過程が読む見立てのモデル = 根の境目で効いている候補の並びのモデル (K36 新しい決定 2・K37 決定 7。最初の並びは
+    感じる側のモデル)。活動を作る時に決める (`open_plan`・`admit`)。"""
+    return plan.model
 
 
 # --- 考える力の配り方 (継続の方法 reuse_candidates/3 の意味、K36-c ③・K36-c-a ②。人が置く最初の配り方。どの時点の
@@ -87,7 +91,7 @@ def _activity_rows(state, plans) -> list:
     """活動の仕事の行 (最初の活動の Wg と、各計画の評価の仕事)。"""
     rows = []
     for p in plans:
-        if not p.round and p.parent is None and p.wg in state.works:
+        if p.generates and p.parent is None and p.wg in state.works:
             rows.append(state.works[p.wg])
         rows.extend(state.works[d.work_id] for d in p.descs.values() if d.work_id in state.works)
     return rows
@@ -129,13 +133,36 @@ def _undetermined(state, boot) -> list:
             if not any(p.root_fixed for p in plans) and not _ended(state, plans)]
 
 
-def _new_root(state, boot, boundary):
-    """boundary に実際に見えるいちばん後の採用が、評価に渡した根の境界より後なら (根, 並びの位置)。無ければ None
-    (まだ評価に渡していない材料が無い、K36-c ③ (a))。根の見つけ方は最初の活動の o と同じ (`_fb_update.visible_root`)。"""
-    from ._fb_update import adoptions, visible_root
+def _pool_root(state, boot, boundary):
+    """境目で効いている並びと、その並びの評価の根 (並び, 根, 並びの位置) (K36-c ③・K37 決定 3・7)。根は境目に実際に見える
+    いちばん後の採用 (`_fb_update.visible_root`。保存の確認待ちも置き場にあれば数える)。最初の並びでまだ採用が無ければ根は
+    None (事前)。並びを解けない・いちばん後の採用がその並びのものでない (足した並びの作り直しの採用がまだ) 時は None
+    (新しい並びと古い採用値を混ぜない)。入場 (`admit`) と最初の活動の o (`_fix_first_root`) が同じこの判定を使う。"""
+    from ._fb_pool import resolve
+    from ._fb_update import adopted_model, adoptions, visible_root
+    try:
+        pool = resolve(state, boot, boundary)
+    except _fb.CandidatePoolError:
+        return None
     root = visible_root(state, boot, boundary)
-    index = adoptions(state, boot).index(root) if root is not None else -1
-    return (root, index) if index > state.handed.get(boot.d, -1) else None
+    if root is None:
+        return (pool, None, -1) if pool.initial else None
+    if adopted_model(state, boot, root) != pool.model:
+        return None
+    return pool, root, adoptions(state, boot).index(root)
+
+
+def _new_root(state, boot, boundary):
+    """boundary で効いている並びの根が、評価に渡した材料の境界より後なら (並び, 根, 並びの位置)。無ければ None (まだ評価に
+    渡していない材料が無い、K36-c ③ (a))。"""
+    found = _pool_root(state, boot, boundary)
+    return found if found is not None and found[1] is not None and found[2] > state.handed.get(boot.d, -1) else None
+
+
+def _consume(state, boot, index) -> None:
+    """評価に渡した材料の境界を進める (戻さない、K36-c ③)。根を決めた時と、候補を作る活動を入場させた時 (その材料で候補を
+    作り始めた。失敗・NoCandidates でも同じ材料から作り直さない、K36-c-a ②)。"""
+    state.handed[boot.d] = max(state.handed.get(boot.d, -1), index)
 
 
 def _set_root(state, plan, root, index) -> None:
@@ -144,7 +171,7 @@ def _set_root(state, plan, root, index) -> None:
     if plan.round:
         plan.points["cause"] = root   # 継続の評価のきっかけは根の採用 (EQ の Trigger と o の親)
     plan.root_fixed = True
-    state.handed[plan.boot.d] = max(state.handed.get(plan.boot.d, -1), index)
+    _consume(state, plan.boot, index)
 
 
 def _continuing(boot) -> bool:
@@ -163,7 +190,9 @@ def admit(state) -> list:
     候補の生成の報告の食い違い・読む見立ての依存の食い違い)、o を作れ (時計の宣言、`_clock_ready`)、数えている活動が
     考える割当の席の数より少ない (b) 時だけ、1 起動につき 1 本入場させ、その場で根と評価に渡した境界を決める。決め
     られなければ活動を作らない (入場したのに根が決まらない隙間を作らない、レビュー K36-c R2・R3・R7)。o はこの時の
-    境界で固める。入場させた計画の列を返す。"""
+    境界で固める。根はその境界で効いている候補の並びの採用だけ (K37 決定 7)。その並びの候補 (CG) がまだ無ければ、
+    入場した活動が最初の活動と同じ形で候補を作り、根は CG の後の o の境界で決める (それまで根は未確定)。入場させた
+    計画の列を返す。"""
     out = []
     for boot in {id(p.boot): p.boot for p in state.thinking.values()}.values():
         first = _first(state, boot)
@@ -175,19 +204,73 @@ def admit(state) -> list:
         chosen = _new_root(state, boot, boundary)
         if chosen is None:
             continue
+        pool, root, index = chosen
+        # 候補は並びのモデルについて作る (候補の宣言はモデルを名指す)。その並びの候補がまだ無ければ、この活動が作る
+        made = [p for p in state.thinking.values() if p.boot is boot and p.generates and p.model == pool.model]
+        source = next((p for p in made if "cg" in p.points), None)
+        if source is None and any(not _ended(state, [p]) for p in made):
+            continue   # その並びの候補を作っている途中
         number = state.admitted.get(boot.d, 0) + 1
-        plan = ThinkPlan(boot=boot, initial=first.initial, slot=first.slot, qgen=first.qgen, wg=first.wg,
-                         round=":eval:" + str(number), done={first.wg}, points={"cg": first.points["cg"]},
-                         boundary=boundary)
+        round_ = ":eval:" + str(number)
+        if source is not None:
+            # 候補の生成元 (Qgen・Wg・CG) は 1 組: 使い回す候補を作った活動のもの。食い違いの判定 (`_rows`・`_halted`) は
+            # この組の仕事を見る
+            plan = ThinkPlan(boot=boot, initial=first.initial, slot=first.slot, qgen=source.qgen, wg=source.wg,
+                             round=round_, done={source.wg}, points={"cg": source.points["cg"]}, boundary=boundary,
+                             model=pool.model, origin=pool.origin)
+        else:
+            # 候補を作る活動は最初の活動と同じ形: 根は候補の宣言 CG の後の o の境界で決める (CG が評価の固定根に見える
+            # ように。それまでは根が未確定で、ほかの評価を入場させない)。きっかけは今見えた、その並びの採用
+            plan = ThinkPlan(boot=boot, initial=first.initial, slot=first.slot, qgen=first.qgen, round=round_,
+                             wg=_work_id(boot.d, first.slot, "candidate_generation", "initial:" + first.slot + round_),
+                             points={"cause": root}, model=pool.model, origin=pool.origin, generates=True)
         if _halted(state, plan):
             continue   # この材料・候補では評価の歩が止まる: 活動を作らない (同じ判定で入口と歩をそろえる)
         state.admitted[boot.d] = number
         plan.activity = first.wg + plan.round
-        _set_root(state, plan, *chosen)
-        plan.steps = _context_steps(state, plan)
+        if source is not None:
+            _set_root(state, plan, root, index)
+        else:
+            _consume(state, boot, index)   # この材料で候補を作り始めた (根は o で決める)
+        plan.steps = _context_steps(state, plan) if source is not None else [_qgen_step(plan)]
         state.thinking[plan.activity] = plan
         out.append(plan)
     return out
+
+
+def _qgen_step(plan):
+    """候補をまだ作っていない並びの、最初の評価の候補の生成の要求 Qgen (K37 決定 7)。最初の活動の Qgen と同じ形で、
+    モデルと読み手はその並びのもの、きっかけは入場の時に見えたその並びの採用。Wg の後は最初の活動と同じく CG → 文脈
+    (根は o の境界で決める、`_fix_first_root`)。"""
+    drafted = {}
+
+    def build(state, plan):
+        from ._fb_core import Slot
+        d, origin, model, initial = plan.boot.d, plan.origin, plan.model, plan.initial
+        desc = _fb.Desc(
+            work_id=plan.wg, process=_fb.BootSlot(declaration=d, slot=initial.process_slot),
+            trigger=frozenset({_fb.Trigger(point=plan.points["cause"], slot="adopted")}),
+            purpose="candidate_generation", stage_slot="initial:" + plan.slot + plan.round, reader=origin,
+            method=initial.generator.contract, output_contract=_c.CANDIDATE_GENERATION,
+            args=_fb.CandidateArgs(model=model, generator_args=initial.generator.args, basis=()),
+            input_points=frozenset({d, origin, model}),
+            numerical_view=_fixed_view(state, frozenset({origin, model})),
+            allocation=_fb.BootSlot(declaration=d, slot=initial.allocation.slot),
+            permissions=frozenset({_fb.BootSlot(declaration=d, slot=plan.slot),
+                                   _fb.BootSlot(declaration=d, slot=initial.allocation.slot)}))
+        drafted["desc"] = desc
+        ledger = state.ledger
+        uses = {d, origin, model, plan.points["cause"]}
+        body = _Decided(inputs=tuple(ledger.record(p).id for p in sorted(uses)),
+                        content=_Payload.json({"desc": _encode(desc)}), contract=_c.CANDIDATE_REQUEST)
+        return Slot(contract=_c.CANDIDATE_REQUEST, record=_record(state, body, _RefKind.DECISION, _Role.MODEL),
+                    parents=_front(ledger, uses))
+
+    def prepared(state, plan, cid):
+        from ._fb_core import add_work
+        plan.qgen = cid
+        add_work(state, _fb.Compute(request=cid, desc=drafted["desc"]), plan.boot.declaration.scope.value)
+    return _Step(name="qgen", build=build, on_prepared=prepared)
 
 
 def _clock_ready(state) -> bool:
@@ -197,19 +280,23 @@ def _clock_ready(state) -> bool:
     return source is not None and state.ledger.record(source).body.content.as_json().get("measurement") is not None
 
 
-def _fix_first_root(state, plan, boundary) -> None:
+def _fix_first_root(state, plan, boundary) -> bool:
     """最初の活動の根を、o の境界に実際に見えるいちばん後の採用で決める (無ければ事前、K36-c-a ②・(ノ) ⑥)。保存の
-    確認待ちの採用も、置き場にあれば数える (レビュー K36-c R2)。継続の評価の根は入口で決まっている (admit)。"""
-    from ._fb_update import adoptions, visible_root
-    root = visible_root(state, plan.boot, boundary)
-    _set_root(state, plan, root, adoptions(state, plan.boot).index(root) if root is not None else -1)
+    確認待ちの採用も、置き場にあれば数える (レビュー K36-c R2)。継続の評価の根は入口で決まっている (admit)。その境界で
+    効いている並びが、候補を作ったモデルの並びでなければ決めない (False。別の並びの採用値を混ぜない、K37 決定 7)。"""
+    found = _pool_root(state, plan.boot, boundary)
+    if found is None or found[0].model != plan.model:
+        return False
+    _set_root(state, plan, found[1], found[2])
+    return True
 
 
 def open_plan(state, boot, initial_slot, qgen) -> None:
     """Qgen の Publish と同じ歩で、考える過程の計画を置く (M3: Qgen の保存の前から Wg の義務を持つ)。"""
     desc = boot.points["desc:qgen"]
     state.thinking[desc.work_id] = ThinkPlan(boot=boot, initial=initial_slot.value, slot=initial_slot.slot,
-                                             qgen=qgen, wg=desc.work_id, activity=desc.work_id)
+                                             qgen=qgen, wg=desc.work_id, activity=desc.work_id,
+                                             model=desc.args.model, origin=desc.reader, generates=True)
 
 
 # --- 最初の終わりと終わりの記録 T (§2-4-10 (5)、INV-15) ---
@@ -473,8 +560,11 @@ def _context_steps(state, plan):
                 if plan.boundary is not None:
                     plan.points["X"] = plan.boundary
                 else:
-                    plan.points["X"] = frozenset(state.ledger.heads())
-                    _fix_first_root(state, plan, plan.points["X"])
+                    boundary = frozenset(state.ledger.heads())
+                    if not _fix_first_root(state, plan, boundary):
+                        _short(plan, "context:pool")
+                        return None
+                    plan.points["X"] = boundary
             source_holder["source"] = source
             ns = mono_ns(state.clock)
             value = _f.FClockReadingFact(source=source, reading=_f.ClockReading(run=state.clock.run, time_ns=ns))
@@ -489,7 +579,7 @@ def _context_steps(state, plan):
 
     def build_context(state, plan):
         from ._fb_core import Slot, mono_ns
-        origin = plan.boot.points["origin"]
+        origin = plan.origin
         # 段 2 の道で行う確認は無い (行った確認は順に残す、§6-9 H1)
         value = _f.FContextObserved(knowledge_origin=origin, observation_reading=plan.points["o"],
                                     judgment_reading=plan.points["j"], check_events=())
@@ -507,7 +597,7 @@ def _context_steps(state, plan):
         if _preferences(state, plan):
             _short(plan, "eq:preferences")   # 好みの記録があるのに白紙として扱わない (§6-9 H2)
             return None
-        origin, context, cg = plan.boot.points["origin"], plan.points["context"], plan.points["cg"]
+        origin, context, cg = plan.origin, plan.points["context"], plan.points["cg"]
         # 固定根は出来事の境界 (o の時点の X と文脈)。モデル・CG は FFactsRequest の型つき参照から辿る (F-a の
         # read_draw は selection のくじの祖先に固定根を要るので、Prediction を固定根に入れると必ず破れる)
         fixed = tuple(sorted(state.ledger.maximal(frozenset({context, *plan.points["X"]}))))
@@ -528,7 +618,7 @@ def _context_steps(state, plan):
                      {context, _model(plan), cg, origin}, view)
 
     def eq_parents(plan, desc):
-        return {plan.boot.points["origin"], plan.points["context"], plan.points["cg"], _model(plan)}
+        return {plan.origin, plan.points["context"], plan.points["cg"], _model(plan)}
 
     return [reading_step("o"), reading_step("j"), _Step(name="context", build=build_context),
             _request_step("EQ", _c.EVALUATION_REQUESTED, _fb.Compute, eq_desc, eq_parents)]
@@ -680,7 +770,7 @@ def _draw_steps(state, plan):
                                  law=_f.UNIFORM_BITS, args={"offset": plan.offset, "after": plan.after})
         inputs = {pr} | ({plan.after} if plan.after is not None else set())
         return _desc(plan, "selection_draw", "draw:" + plan.slot, _fb.Trigger(point=pr, slot="prepared"),
-                     plan.boot.points["origin"], plan.initial.draw.contract, _c.DRAW_REPORT,
+                     plan.origin, plan.initial.draw.contract, _c.DRAW_REPORT,
                      _fb.DrawArgs(prepared=pr, stream_id=_stream_id(plan), request=request),
                      inputs, plan.points["Xnum"])
 
@@ -706,7 +796,7 @@ def _continue(parent):
                                   if k not in _BLOCK_POINTS and not k.startswith("T:")},
                           prepared=parent.prepared, problem=parent.problem, parent=parent, offset=offset,
                           after=parent.points["DF"], ordinal=parent.ordinal, activity=parent.activity,
-                          root_fixed=parent.root_fixed)
+                          root_fixed=parent.root_fixed, model=parent.model, origin=parent.origin)
         key = child.wg + child.round
         if key not in state.thinking:
             child.steps = _draw_steps(state, child)
@@ -756,7 +846,7 @@ def _ee_steps(state, plan):
     def ee_desc(state, plan):
         eq, pr, df = plan.points["EQ"], plan.points["PR"], plan.points["DF"]
         return _desc(plan, "evaluation", "evaluate:" + plan.slot, _fb.Trigger(point=df, slot="draw"),
-                     plan.boot.points["origin"], _c.EVALUATE_FROM_DRAW, _fc.MATH_ARTIFACT_V2,
+                     plan.origin, _c.EVALUATE_FROM_DRAW, _fc.MATH_ARTIFACT_V2,
                      _fb.EvaluationArgs(evaluation_request=eq, prepared=pr, draw=df,
                                         budget=plan.initial.evaluate_budget),
                      {eq, pr, df, plan.points["artifact:PR"]}, plan.points["Xnum"])
@@ -983,7 +1073,7 @@ def reading_statuses(state) -> tuple:
     終わりの記録 T を付ける (M1「各項目に判定に使った根拠の Point」)。"""
     out = []
     for plan in state.thinking.values():
-        origin = plan.boot.points.get("origin")
+        origin = plan.origin
         for purpose, name, reached in _STAGE_PRODUCT:
             if plan.parent is not None and purpose != "evaluation":
                 continue   # 続きの計画は自分のかたまりの評価だけを出す (準備・候補は親の計画、K35 決定 9 (d))
@@ -1016,7 +1106,7 @@ def purpose_statuses(state) -> tuple:
         out.append(_fb.PurposeStatus(
             obligation=plan.qgen, o_id="C-OG.run[Wg]", condition="handle", role="compare",
             process=_fb.BootSlot(declaration=plan.boot.d, slot=initial.process_slot),
-            reader=plan.boot.points.get("origin"), target=plan.qgen, part=None,
+            reader=plan.origin, target=plan.qgen, part=None,
             handled=True, handed_to=None, unmet=True,
             evidence=_fb.StatusBasis(view=None, basis=(plan.qgen,))))
     return tuple(out)

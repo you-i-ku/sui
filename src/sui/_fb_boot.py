@@ -149,8 +149,9 @@ def plan_boot(state, declaration, d) -> BootPlan:
         elif not allocation_ok(value.allocation):
             plan.missing.append("perception:allocation")
         else:
+            from ._fb_pool import initial_model
             try:
-                state.ledger.entry(value.model)
+                state.ledger.entry(initial_model(declaration))
             except KeyError:
                 plan.missing.append("perception:model")
             else:
@@ -177,7 +178,7 @@ def plan_boot(state, declaration, d) -> BootPlan:
             # 最初の活動の入口 (K36-c-a ②): 容量を確かめて入場させ、その活動の中で Wg を 1 回起動する。この時はほかの
             # 活動が無いので、確かめるのは考える割当が 1 席以上あること (0 なら最初の活動も入場しない = Qgen を置かない)
             if value.allocation.value.amount.value >= 1:
-                plan.steps.append(_qgen_step(state, initial, perception.value))
+                plan.steps.append(_qgen_step(state, initial))
     return plan
 
 
@@ -356,29 +357,32 @@ def _route_steps(route_slot):
 
 
 def _origin_step(perception_slot):
-    """knowledge_origin (感じる側の読み手の位置、K36 新しい決定 2)。モデルは感じる側のもの。"""
-    perception = perception_slot.value
+    """knowledge_origin (感じる側の読み手の位置、K36 新しい決定 2)。モデルは最初の並びのモデル (`_fb_pool.initial_model`)。"""
 
     def build_origin(state, plan):
         from ._fb_core import Slot, mono_ns
+        from ._fb_pool import initial_model
+        model = initial_model(plan.declaration)
         # r は窓口がこの記録の成立を確かめた時の M の読み (§2-5-1 U2)。時刻なしだと F-a が文脈の
         # 境界と比べられない (chronology の unknown time)
-        body = _Observed(route="fb", content=_Payload.json({"model": perception.model}),
+        body = _Observed(route="fb", content=_Payload.json({"model": model}),
                          contract=_KNOWLEDGE_ORIGIN, received_ns=mono_ns(state.clock))
         return Slot(contract=_KNOWLEDGE_ORIGIN, record=_record(state, body, _RefKind.OBSERVATION, _Role.MEMBRANE),
-                    parents=_front(state.ledger, {plan.d, perception.model}))
+                    parents=_front(state.ledger, {plan.d, model}))
 
     return Step(name="origin", build=build_origin)
 
 
-def _qgen_step(state, initial_slot, perception):
-    """最初の候補の生成の要求 Qgen (考える側)。読み手は感じる側の origin、モデルは感じる側のモデル。"""
+def _qgen_step(state, initial_slot):
+    """最初の候補の生成の要求 Qgen (考える側)。読み手とモデルは最初の並びのもの (`_fb_pool.initial_pool`)。"""
     initial = initial_slot.value
     name = initial_slot.slot
 
     def build_qgen(state, plan):
         from ._fb_core import Slot
-        d, origin = plan.d, plan.points["origin"]
+        from ._fb_pool import initial_pool
+        first = initial_pool(state, plan)
+        d, origin, model = plan.d, first.origin, first.model
         generator = next(x for x in state.registry.declarations
                          if x.kind == "generator" and x.ref == initial.generator.contract)
         # G4: basis はその生成器の版つき args 契約が決める。args の参照を持たない契約
@@ -393,7 +397,6 @@ def _qgen_step(state, initial_slot, perception):
             if "initial:args" not in plan.missing:
                 plan.missing.append("initial:args")
             return None
-        model = perception.model
         desc = _fb.Desc(
             work_id=_work_id(d, name, "candidate_generation", "initial:" + name),
             process=_fb.BootSlot(declaration=d, slot=initial.process_slot),

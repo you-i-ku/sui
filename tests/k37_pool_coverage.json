@@ -1,0 +1,1098 @@
+{
+  "issue": "K37",
+  "request": 109,
+  "spec": {
+    "path": "C:/Users/you11/Desktop/iku/sui/specs/関所F_Fb_今の約束.md",
+    "version": "v1.76",
+    "read": "K37/K37-a/K37-b and body v2 read in request106; full K37-c read in request107; K22 reread in full and K28-b(イ) read as the original input-boundary clause. Request108 reads full K37-d :3577.",
+    "ranges": [
+      "3573-3577",
+      "5151-5204"
+    ],
+    "acceptance_note": "v2 body starts at (2); the acceptance criterion is in the K37 row :3573."
+  },
+  "prior_sources_read": [
+    {
+      "path": "C:/Users/you11/Desktop/iku/sui/specs/関所F_Fb_今の約束.md",
+      "range": "Z53 :3811; Z63 :3823; K22 :3522; K26 :3530; K28 :3543; K36 :3566 and body :5010-5148",
+      "read": "full named rows / full K36 body"
+    },
+    {
+      "path": "specs/S4b2_変わる速さと届き方を学ぶ.md",
+      "range": "section3-3 :92-98",
+      "read": "full section"
+    }
+  ],
+  "public_spelling": {
+    "documented_at": "tests/test_fb_pool.py:1",
+    "method_signatures": [
+      "FThreadHost.add_candidate(*, boot, candidate, alpha, boundary=None) -> CandidateAddition",
+      "FThreadHost.belief_pool(*, boot, boundary=None) -> BeliefPool",
+      "FThreadHost.pool_belief(*, boot, boundary=None) -> PoolBelief"
+    ],
+    "types": [
+      "BeliefCandidate",
+      "CandidateAddition",
+      "BeliefPool",
+      "PoolMember",
+      "PoolState",
+      "PoolBelief",
+      "CandidatePosterior",
+      "CandidateInputError",
+      "CandidatePoolError"
+    ],
+    "note": "Names accepted by K37-c. Exception messages remain free; the three reason tokens and latest-confirmed semantics are now paper-defined."
+  },
+  "coverage": [
+    {
+      "id": "AC-single-joint-belief",
+      "spec_line": 3573,
+      "claim": "One joint belief on disjoint candidate/state blocks; singleton numeric compatibility",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_singleton_and_reread_keep_joint_mass_information_and_probabilities",
+          "line": 534
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "line": 580
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "AC-add-explicit-origin-prior",
+      "spec_line": 3573,
+      "claim": "New candidate alpha and old weights times 1-alpha, replay the same raw history; no observation for addition",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_addition_is_decision_and_model_not_observation_and_alpha_is_origin_probability",
+          "line": 552
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "line": 580
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_addition_without_new_raw_record_rebuilds_once_and_next_observation_is_separate",
+          "line": 676
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "AC-common-causal-pool",
+      "spec_line": 3573,
+      "claim": "Update/thinking/execution share a boundary-resolved pool; preserve old facts and reject missing meanings",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
+          "line": 824
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_inflight_old_pool_request_result_and_fixed_adoption_never_rewind_current_pool",
+          "line": 702
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading",
+          "line": 780
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_incomparable_additions_do_not_win_by_delivery_or_record_order",
+          "line": 734
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_missing_pool_record_names_dependency_instead_of_boot_fallback",
+          "line": 747
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "D1",
+      "spec_line": 5165,
+      "claim": "Direct sum; target is law identity plus original target, never candidate ID as an observation",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "line": 580
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_law_identity_is_part_of_target_but_candidate_alias_is_not",
+          "line": 600
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_identical_declaration_in_another_record_is_same_law_and_same_predictive_value",
+          "line": 616
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "D2",
+      "spec_line": 5166,
+      "claim": "Saved Prediction/MODEL pool and addition Decision; append only",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_addition_is_decision_and_model_not_observation_and_alpha_is_origin_probability",
+          "line": 552
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_inflight_old_pool_request_result_and_fixed_adoption_never_rewind_current_pool",
+          "line": 702
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "D3",
+      "spec_line": 5167,
+      "claim": "Freeze boundary first; include pool reference closure; incomparable additions and stale results cannot win by order",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "line": 580
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_incomparable_additions_do_not_win_by_delivery_or_record_order",
+          "line": 734
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_inflight_old_pool_request_result_and_fixed_adoption_never_rewind_current_pool",
+          "line": 702
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
+          "line": 824
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "D4",
+      "spec_line": 5168,
+      "claim": "Fresh-origin replay preserves adoption provenance and recovers whole-zero. Started conflicts remain pending outside the Q* input gate; a conflicting input Frame is unreachable by public acquire per K28-b(イ).",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "line": 580
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_addition_without_new_raw_record_rebuilds_once_and_next_observation_is_separate",
+          "line": 676
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_zero_evidence_is_distinct_from_a_missing_reading_and_has_no_conditional",
+          "line": 643
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_started_conflict_stays_pending_but_does_not_block_acquisition_replay",
+          "line": 839
+        }
+      ],
+      "state": "passed",
+      "public_path_limit": "K22 conflicting input Frame cannot be produced by the host acquisition port; Started is a boundary-only control, not evidence for exercising that usage gate."
+    },
+    {
+      "id": "D5",
+      "spec_line": 5169,
+      "claim": "Old positive-evidence conditional invariant; weighted blocks scale; zero component has no conditional",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "line": 580
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_zero_evidence_is_distinct_from_a_missing_reading_and_has_no_conditional",
+          "line": 643
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_new_zero_evidence_component_has_no_conditional_and_does_not_falsify_whole",
+          "line": 667
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "D6",
+      "spec_line": 5170,
+      "claim": "Old E keeps raw operation u; use each added component kernel or explicitly reject missing reading",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading",
+          "line": 780
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_rechecks_overlapping_raw_intervals_in_each_added_block",
+          "line": 803
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "D7",
+      "spec_line": 5171,
+      "claim": "Joint model-averaged evaluation; common pool through the full native cycle",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_law_identity_is_part_of_target_but_candidate_alias_is_not",
+          "line": 600
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_identical_declaration_in_another_record_is_same_law_and_same_predictive_value",
+          "line": 616
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
+          "line": 824
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "D8",
+      "spec_line": 5172,
+      "claim": "Alpha is a mandatory probability at pool origin; 0<alpha<1; repeated additions preserve old origin ratios",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_addition_is_decision_and_model_not_observation_and_alpha_is_origin_probability",
+          "line": 552
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "line": 580
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_invalid_endpoint_or_outside_alpha_is_rejected_without_saved_effects",
+          "line": 633
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_public_surface_and_explicit_alpha",
+          "line": 517
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S01",
+      "spec_line": 5188,
+      "claim": "K37 body (6), scene 1",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_singleton_and_reread_keep_joint_mass_information_and_probabilities",
+          "line": 534
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S02",
+      "spec_line": 5189,
+      "claim": "K37 body (6), scene 2",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_singleton_CE1_is_the_existing_two_observation_answer",
+          "line": 523
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S03",
+      "spec_line": 5190,
+      "claim": "K37 body (6), scene 3",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "line": 580
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S04",
+      "spec_line": 5191,
+      "claim": "K37 body (6), scene 4",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_inflight_old_pool_request_result_and_fixed_adoption_never_rewind_current_pool",
+          "line": 702
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S05",
+      "spec_line": 5192,
+      "claim": "K37 body (6), scene 5",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading",
+          "line": 780
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S06",
+      "spec_line": 5193,
+      "claim": "K37 body (6), scene 6",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_missing_pool_record_names_dependency_instead_of_boot_fallback",
+          "line": 747
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S07",
+      "spec_line": 5194,
+      "claim": "K37 body (6), scene 7",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_zero_evidence_is_distinct_from_a_missing_reading_and_has_no_conditional",
+          "line": 643
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S08",
+      "spec_line": 5195,
+      "claim": "Conflicting acquisition Frames cannot be constructed through the public acquire path (K28-b(イ)); Started boundaries can clash but are outside Q* inputs. Their pending conflict remains while candidate replay proceeds.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_started_conflict_stays_pending_but_does_not_block_acquisition_replay",
+          "line": 839
+        }
+      ],
+      "state": "input_report_conflict_unreachable_by_public_acquire; outside_gate_boundary_control_written",
+      "original_input_boundary_source": {
+        "line": 3545,
+        "clause": "K28-b(イ)"
+      },
+      "control_result": "both Started redelivery/conflict cases passed; conflicting input Frame remains unreachable by public acquire"
+    },
+    {
+      "id": "S09",
+      "spec_line": 5196,
+      "claim": "K37 body (6), scene 9",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
+          "line": 824
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S10",
+      "spec_line": 5197,
+      "claim": "K37 body (6), scene 10",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_singleton_and_reread_keep_joint_mass_information_and_probabilities",
+          "line": 534
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S11",
+      "spec_line": 5198,
+      "claim": "K37 body (6), scene 11",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_law_identity_is_part_of_target_but_candidate_alias_is_not",
+          "line": 600
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S12",
+      "spec_line": 5199,
+      "claim": "K37 body (6), scene 12",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "line": 580
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S13",
+      "spec_line": 5200,
+      "claim": "K37 body (6), scene 13",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_zero_evidence_is_distinct_from_a_missing_reading_and_has_no_conditional",
+          "line": 643
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S14",
+      "spec_line": 5201,
+      "claim": "K37 body (6), scene 14",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_addition_without_new_raw_record_rebuilds_once_and_next_observation_is_separate",
+          "line": 676
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S15",
+      "spec_line": 5202,
+      "claim": "K37 body (6), scene 15",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_saved_addition_with_pending_replay_never_exposes_new_pool_with_old_belief",
+          "line": 761
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S16",
+      "spec_line": 5203,
+      "claim": "K37 body (6), scene 16",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_rechecks_overlapping_raw_intervals_in_each_added_block",
+          "line": 803
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S17",
+      "spec_line": 5204,
+      "claim": "K37 body (6), scene 17",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_invalid_endpoint_or_outside_alpha_is_rejected_without_saved_effects",
+          "line": 633
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S06-incomparable",
+      "spec_line": 5193,
+      "claim": "Both incomparable-addition delivery orders",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_incomparable_additions_do_not_win_by_delivery_or_record_order",
+          "line": 734
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S11-alias-record",
+      "spec_line": 5198,
+      "claim": "Same declaration in another saved model record is not another target",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_identical_declaration_in_another_record_is_same_law_and_same_predictive_value",
+          "line": 616
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S13-new-zero",
+      "spec_line": 5200,
+      "claim": "A newly added zero-evidence component has no conditional while the whole remains positive",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_new_zero_evidence_component_has_no_conditional_and_does_not_falsify_whole",
+          "line": 667
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S14-source-inflight",
+      "spec_line": 5201,
+      "claim": "Addition while native source read is gated; later raw observation is separate evidence",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_addition_during_native_source_read_and_new_raw_observation_have_separate_causes",
+          "line": 690
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "S16-missing",
+      "spec_line": 5203,
+      "claim": "Missing kernel/cell/correspondence never becomes zero/identity",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading",
+          "line": 780
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "K37-c-1",
+      "spec_line": 3576,
+      "claim": "Initial pool Point is Boot; initial candidate id is perception slot. Startup caches Boot before later getters/additions.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_initial_pool_identity_and_cached_getters_do_not_advance_the_host",
+          "line": 852
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "K37-c-2",
+      "spec_line": 3576,
+      "claim": "Kernel intersection, closed operation/policy references; unequal metadata at the same outcome id rejects the addition.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_common_kernel_intersection_prunes_operations_and_policies_to_closed_references",
+          "line": 869
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_shared_outcome_id_with_different_metadata_is_not_addable",
+          "line": 886
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "K37-c-3",
+      "spec_line": 3576,
+      "claim": "Per-pool knowledge_origin and reader/model agreement; reader does not change inside the same pool.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_pool_boundary_replaces_origin_and_reader_then_keeps_them_within_pool",
+          "line": 900
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "K37-c-4",
+      "spec_line": 3576,
+      "claim": "Native U numeric reconstruction compared with independent path enumeration; no source-line inspection.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "line": 580
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "K37-c-5",
+      "spec_line": 3576,
+      "claim": "Added-pool passive projection args are exactly pool, observation_model, time_projection.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_pool_boundary_replaces_origin_and_reader_then_keeps_them_within_pool",
+          "line": 900
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "K37-c-6",
+      "spec_line": 3576,
+      "claim": "Every candidate correspondence is checked even when that component has zero evidence; execution readings also check it.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_zero_evidence_component_still_requires_its_declared_correspondence",
+          "line": 949
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading",
+          "line": 780
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "K37-c-7",
+      "spec_line": 3576,
+      "claim": "Latest confirmed adoption of that pool; initial prior when absent; added pool pending differs from same-pool write pending.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_latest_confirmed_belief_stays_visible_while_same_pool_adoption_write_is_pending",
+          "line": 933
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_saved_addition_with_pending_replay_never_exposes_new_pool_with_old_belief",
+          "line": 761
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_initial_pool_identity_and_cached_getters_do_not_advance_the_host",
+          "line": 852
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "K37-c-8",
+      "spec_line": 3576,
+      "claim": "Exact declared reasons incomparable_additions, unreadable_record, replay_pending.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_incomparable_additions_do_not_win_by_delivery_or_record_order",
+          "line": 734
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_missing_pool_record_names_dependency_instead_of_boot_fallback",
+          "line": 747
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_saved_addition_with_pending_replay_never_exposes_new_pool_with_old_belief",
+          "line": 761
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "K37-c-9",
+      "spec_line": 3576,
+      "claim": "Entry-name inputs and Prediction semantic refs extend event parents; fixed-save confirmation retries remain executable.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_addition_is_decision_and_model_not_observation_and_alpha_is_origin_probability",
+          "line": 552
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_inflight_old_pool_request_result_and_fixed_adoption_never_rewind_current_pool",
+          "line": 702
+        }
+      ],
+      "state": "passed"
+    },
+    {
+      "id": "K37-d-R1",
+      "spec_line": 3577,
+      "claim": "Two sequential additions without intermediate replay; native FiniteUpdater executes with its actual bounded reader; intermediate pool and model are readable; independent evidence mass 353/4320.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_two_additions_without_intermediate_replay_use_the_actual_work_reader",
+          "line": 983
+        }
+      ],
+      "contrast": "Original T,E,T native history; no test-owned reader/closure is supplied to the worker.",
+      "state": "passed"
+    },
+    {
+      "id": "K37-d-R2",
+      "spec_line": 3577,
+      "claim": "A candidate acquisition model must name the observed route; another declared slot and an absent slot stop without a new adoption or model_falsified.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_candidate_observation_model_must_name_the_observed_route",
+          "line": 1023
+        }
+      ],
+      "contrast": "Three route_slot variants, same-route positive control; a distinct real route has zero allocation; the original route is proven to adopt before addition.",
+      "state": "passed"
+    },
+    {
+      "id": "K37-d-R3",
+      "spec_line": 3577,
+      "claim": "Reused candidate declaration tracks the actual Qgen/Wg/CG source after pool change.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_candidate_reuse_checks_its_own_generator_after_pool_change",
+          "line": 1044
+        }
+      ],
+      "contrast": "Late conflict from the new source blocks reuse; old-source conflict and identical new-source redelivery allow reuse of the new CG.",
+      "state": "passed"
+    },
+    {
+      "id": "K37-d-R4",
+      "spec_line": 3577,
+      "claim": "A failed generation after pool change consumes the material; no immediate or later same-material replacement activity or generation request.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_failed_generation_after_pool_change_does_not_readmit_the_same_material",
+          "line": 1101
+        }
+      ],
+      "contrast": "Native CandidateGenerator with one public-port read fault vs successful generation. Compare activity/request sets captured before the terminal; after completion no residual occupancy hides a retry.",
+      "state": "passed"
+    },
+    {
+      "id": "K37-d-08",
+      "spec_line": 3577,
+      "claim": "U rejects a pool transition whose new pool ancestry lacks the real prior model.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_U_pool_boundary_requires_the_previous_model_in_its_ancestry",
+          "line": 1160
+        }
+      ],
+      "contrast": "Public saved Q* clone; positive and negative use identical expanded real records and declared boundary. Only prior changes to an actual descendant adoption with the same T,E history. No fabricated prior or raw report.",
+      "state": "passed"
+    },
+    {
+      "id": "K37-d-09",
+      "spec_line": 3577,
+      "claim": "U requires the old observation prefix at the head, in the same order, across a pool boundary.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_U_pool_replay_requires_the_same_raw_prefix_in_the_same_order",
+          "line": 1188
+        }
+      ],
+      "contrast": "Actual native original Q* issues; two saved clones change only observations: omit the prefix or reverse it. Same valid pool, prior, reading plans and raw records remain visible.",
+      "state": "passed"
+    },
+    {
+      "id": "K37-d-12",
+      "spec_line": 3577,
+      "claim": "An old-pool adoption A1 remains unhanded while the only thinking seat is held by real residual occupancy. Add a candidate, postpone replay adoption, then free that seat: no Ep or evaluation root A1 is admitted. Once replay A2 arrives, evaluation proceeds on A2 and the new pool model.",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_unconsumed_old_adoption_waits_for_replay_when_the_thinking_seat_opens",
+          "line": 1231,
+          "role": "primary unconsumed-material contrast; executed in request109"
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_thinking_waits_for_the_new_pool_adoption_with_a_free_thinking_seat",
+          "line": 1203,
+          "role": "already-consumed-material control; last executed in request108, not claimed to reach mutation12"
+        }
+      ],
+      "contrast": "Native evaluator is gated after post but before return; the prior-root initial selection is saved while its residual still holds the seat. Assert latest=A1, unevaluated=True and handed!=A1 before addition. Replay launch returns not_started, so no I/O abort masks house progress. Release the native body, run public rounds/Wg callbacks, then restore replay launch and prove root=A2.",
+      "state": "passed_primary_case_request109",
+      "request109_note": "The request108 free-seat case had already consumed A1 and could stop before mutation12; it is retained as a behavioral control only."
+    }
+  ],
+  "native_controls": [
+    {
+      "file": "tests/test_fb_pool.py",
+      "function": "test_pool1_oracle_nonuniform_replay_and_two_additions_control",
+      "line": 456
+    },
+    {
+      "file": "tests/test_fb_pool.py",
+      "function": "test_pool1_existing_native_boot_workers_and_raw_history_control",
+      "line": 469
+    },
+    {
+      "file": "tests/test_fb_pool.py",
+      "function": "test_pool1_existing_native_thinking_target_oracle_control",
+      "line": 481
+    },
+    {
+      "file": "tests/test_fb_pool.py",
+      "function": "test_pool1_law_target_information_ruler_control",
+      "line": 490
+    },
+    {
+      "file": "tests/test_fb_pool.py",
+      "function": "test_pool1_existing_native_raw_dependency_scene_control",
+      "line": 508
+    }
+  ],
+  "unchanged_scope": [
+    {
+      "claim": "Singleton numerical results, mass, information, G and q remain the same",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_singleton_and_reread_keep_joint_mass_information_and_probabilities",
+          "line": 534
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_singleton_CE1_is_the_existing_two_observation_answer",
+          "line": 523
+        }
+      ]
+    },
+    {
+      "claim": "Native SourceMeasurer/acquire, opaque source data, FiniteUpdater and fixed request/record retries remain real",
+      "tests": [
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_inflight_old_pool_request_result_and_fixed_adoption_never_rewind_current_pool",
+          "line": 702
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_started_conflict_stays_pending_but_does_not_block_acquisition_replay",
+          "line": 839
+        },
+        {
+          "file": "tests/test_fb_pool.py",
+          "function": "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
+          "line": 824
+        }
+      ]
+    },
+    {
+      "claim": "No removal, inner-parameter learning, automatic family choice or unlimited performance claim",
+      "state": "out_of_scope_by_paper_5153_5160"
+    }
+  ],
+  "historical_K37a_mapping": {
+    "DC01": "D4,D8",
+    "DC02": "D3,D6,D7",
+    "DC03": "D3",
+    "DC04": "D4",
+    "DC05": "D1,D5,D8; replacement/extension is not claimed"
+  },
+  "migration_inventory": "tests/k37_migration_inventory.json",
+  "open_contract_gaps": [],
+  "verification_limit": "Request107 runs against the K37 implementation through public APIs. No production source body was opened; source-line centralization and mutation-test results are not independently inspected here.",
+  "verification": {
+    "state": "passed",
+    "request": 109,
+    "scope": "New request109 case only; existing 68 cases not rerun in this request.",
+    "command": "..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_pool.py::test_pool1_unconsumed_old_adoption_waits_for_replay_when_the_thinking_seat_opens -n 0 -q --tb=short --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109/k37_results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109/cache",
+    "exit_code": 0,
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "elapsed_pytest_seconds": 14.99,
+    "results_xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109/k37_results.xml",
+    "checks": "JUnit confirms one case in tests.test_fb_pool, zero failures/errors/skips. Coverage function names/line references refreshed.",
+    "processes": "Targeted pytest exited successfully; native fixture threads joined in teardown. No task-owned background command remains."
+  },
+  "recent_sources": [
+    {
+      "path": "C:/Users/you11/Desktop/iku/sui/specs/関所F_Fb_今の約束.md",
+      "line": 3576,
+      "read": "full K37-c row"
+    },
+    {
+      "path": "C:/Users/you11/Desktop/iku/sui/specs/関所F_Fb_今の約束.md",
+      "line": 3545,
+      "read": "K28-b(イ), relevant clause"
+    },
+    {
+      "path": "C:/Users/you11/Desktop/iku/sui/specs/関所F_Fb_今の約束.md",
+      "line": 3522,
+      "read": "full K22 row"
+    },
+    {
+      "path": "C:/Users/you11/Desktop/iku/sui/specs/関所F_Fb_今の約束.md",
+      "line": 3577,
+      "read": "full K37-d row, R1-R4 and mutation-table 08/09/12"
+    }
+  ],
+  "verification_history": [
+    {
+      "request": 106,
+      "state": "partial",
+      "command": "../../../.venv/Scripts/python -B -m pytest tests/test_fb_pool.py -n 0 -q --tb=no -rN --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests106 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests106/k37_results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests106/cache",
+      "exit_code": 1,
+      "total": 48,
+      "passed": 7,
+      "failed": 41,
+      "errors": 0,
+      "failure_reasons": {
+        "K37 public shape missing": 41
+      },
+      "results_xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests106/k37_results.xml",
+      "after_API_guard": "not_run; implementation absent",
+      "background_processes": "none from this task; pytest exited and native control fixture threads joined",
+      "failed_cases": [
+        "test_pool1_public_surface_and_explicit_alpha",
+        "test_pool1_singleton_CE1_is_the_existing_two_observation_answer",
+        "test_pool1_singleton_and_reread_keep_joint_mass_information_and_probabilities[no-thinking-prior]",
+        "test_pool1_singleton_and_reread_keep_joint_mass_information_and_probabilities[no-thinking-one]",
+        "test_pool1_singleton_and_reread_keep_joint_mass_information_and_probabilities[no-thinking-ce1-prefix]",
+        "test_pool1_singleton_and_reread_keep_joint_mass_information_and_probabilities[thinking-prior]",
+        "test_pool1_singleton_and_reread_keep_joint_mass_information_and_probabilities[thinking-one]",
+        "test_pool1_singleton_and_reread_keep_joint_mass_information_and_probabilities[thinking-ce1-prefix]",
+        "test_pool1_addition_is_decision_and_model_not_observation_and_alpha_is_origin_probability",
+        "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates[biased-posterior-first]",
+        "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates[fresh-origin-first]",
+        "test_pool1_law_identity_is_part_of_target_but_candidate_alias_is_not[same-law-alias]",
+        "test_pool1_law_identity_is_part_of_target_but_candidate_alias_is_not[different-law]",
+        "test_pool1_identical_declaration_in_another_record_is_same_law_and_same_predictive_value",
+        "test_pool1_invalid_endpoint_or_outside_alpha_is_rejected_without_saved_effects[alpha0]",
+        "test_pool1_invalid_endpoint_or_outside_alpha_is_rejected_without_saved_effects[alpha1]",
+        "test_pool1_invalid_endpoint_or_outside_alpha_is_rejected_without_saved_effects[alpha2]",
+        "test_pool1_invalid_endpoint_or_outside_alpha_is_rejected_without_saved_effects[alpha3]",
+        "test_pool1_zero_evidence_is_distinct_from_a_missing_reading_and_has_no_conditional[whole-still-zero]",
+        "test_pool1_zero_evidence_is_distinct_from_a_missing_reading_and_has_no_conditional[recovers-old-whole-zero]",
+        "test_pool1_new_zero_evidence_component_has_no_conditional_and_does_not_falsify_whole",
+        "test_pool1_addition_without_new_raw_record_rebuilds_once_and_next_observation_is_separate",
+        "test_pool1_addition_during_native_source_read_and_new_raw_observation_have_separate_causes",
+        "test_pool1_inflight_old_pool_request_result_and_fixed_adoption_never_rewind_current_pool[request]",
+        "test_pool1_inflight_old_pool_request_result_and_fixed_adoption_never_rewind_current_pool[response]",
+        "test_pool1_inflight_old_pool_request_result_and_fixed_adoption_never_rewind_current_pool[adoption-before_write]",
+        "test_pool1_inflight_old_pool_request_result_and_fixed_adoption_never_rewind_current_pool[adoption-ack_loss]",
+        "test_pool1_incomparable_additions_do_not_win_by_delivery_or_record_order[left-first]",
+        "test_pool1_incomparable_additions_do_not_win_by_delivery_or_record_order[right-first]",
+        "test_pool1_missing_pool_record_names_dependency_instead_of_boot_fallback",
+        "test_pool1_saved_addition_with_pending_replay_never_exposes_new_pool_with_old_belief[before_write]",
+        "test_pool1_saved_addition_with_pending_replay_never_exposes_new_pool_with_old_belief[ack_loss]",
+        "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading[declared-control]",
+        "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading[missing-operation]",
+        "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading[missing-cell]",
+        "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading[missing-correspondence]",
+        "test_pool1_replay_rechecks_overlapping_raw_intervals_in_each_added_block[new-block-does-not-commute]",
+        "test_pool1_replay_rechecks_overlapping_raw_intervals_in_each_added_block[all-blocks-commute]",
+        "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
+        "test_pool1_addition_never_clears_a_K22_raw_dependency_conflict[identical-redelivery-control]",
+        "test_pool1_addition_never_clears_a_K22_raw_dependency_conflict[raw-started-conflict]"
+      ]
+    },
+    {
+      "request": 107,
+      "state": "passed",
+      "command": "..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_pool.py tests/test_fb_skeleton.py -n 2 -q --tb=short --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests107 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests107/k37_results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests107/cache",
+      "exit_code": 0,
+      "total": 235,
+      "passed": 235,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "per_file": {
+        "tests/test_fb_pool.py": 55,
+        "tests/test_fb_skeleton.py": 180
+      },
+      "elapsed_pytest_seconds": 123.24,
+      "results_xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests107/k37_results.xml",
+      "checks": "JUnit confirms 235 tests, zero failures/errors/skips; all mapped test functions exist and line references refreshed.",
+      "processes": "pytest completed; fixture teardown joined native worker threads. Four stalled read-only shell commands were interrupted and their exits confirmed."
+    },
+    {
+      "request": 108,
+      "state": "passed",
+      "command": "..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_pool.py -n 2 -q --tb=short --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests108 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests108/k37_results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests108/cache",
+      "exit_code": 0,
+      "total": 68,
+      "passed": 68,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "per_file": {
+        "tests/test_fb_pool.py": 68
+      },
+      "elapsed_pytest_seconds": 142.15,
+      "results_xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests108/k37_results.xml",
+      "checks": "JUnit confirms 68 tests in tests.test_fb_pool and zero failures/errors/skips. All mapped test functions exist and line references refreshed.",
+      "processes": "Both pytest runs exited successfully. Native fixture worker threads joined in teardown; no task-owned background command remains."
+    }
+  ],
+  "corrections107": {
+    "A": "Ledger event parents plus Decided.inputs / Prediction.about and basis, resolving both Record.id and entry-name refs.",
+    "B": "Started boundary conflicts stay pending but do not block acquisition Q* replay; actual conflicting Frame cannot be made by public acquire (K28-b(イ)).",
+    "C": "PoolRig.start/direct cache Boot during explicit startup so add/read operations do not advance the house implicitly.",
+    "exports": "test_fb_skeleton exact export set includes the nine K37 public names."
+  },
+  "limitations108": [
+    "Only public behavior and stored declarations were inspected; source bodies and the reviewer/mutation harness implementations were not read.",
+    "U-only 08/09 use test-owned saved request clones as malformed public inputs. R1 uses only the actual native worker reader, not that snapshot helper.",
+    "The mutation variants themselves and source-line coverage are not run here; structural input contrasts and native positive controls establish the tested behavior."
+  ],
+  "reachability108": {
+    "12": "Executed with free thinking quota, real replay request held by public not_started launch, and other house work still progressing; restore launch and verify new-pool selection.",
+    "R1": "Executed using actual native work reader; no test snapshot/closure supplied to that work.",
+    "R2": "Executed: matching route, other declared route, absent route.",
+    "R3": "Executed: added-pool Wg clash, unrelated initial Wg clash, identical added-pool Wg redelivery.",
+    "R4": "Executed: native successful/failed generation; pre-terminal activity/request baseline catches immediate retries too.",
+    "08": "Reachable at public compute_finite_update using a saved malformed Q* clone with a real descendant prior, and a valid contrast sharing declared records/boundary.",
+    "09": "Reachable at public compute_finite_update using saved Q* clones differing only by omitted/reversed observations, with the actual original Q* as the successful contrast."
+  },
+  "reachability109": {
+    "12": "A1 explicitly verified unevaluated and not handed off while the sole seat is counted with residual native work; seat is then released while new-pool replay remains pending. This supplies the missing precondition from request108."
+  }
+}

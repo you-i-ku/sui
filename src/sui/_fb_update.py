@@ -61,9 +61,13 @@ class Obligation:
     reading: str | None = None   # Q* の入力の 0〜seq を K26 の読み口で読んだ段 (read / model_zero / unreadable、表示用)
     reasons: tuple = ()          # U の不適合・不足の理由の語 (閉じた一覧、表示用)
     fields: tuple = ()           # U の不適合・不足の欄 (表示用)
-    kind: str = "frame"          # frame (取りに行きの Frame / 札) / execution (行った一歩の結果、K36)
+    kind: str = "frame"          # frame (取りに行きの Frame / 札) / execution (行った一歩の結果、K36) / rebuild (K37)
     interval: tuple | None = None   # ホストの時計の (始め, 終わり) の読み (順の判定、K36 決定 12)
     result: object = None        # 一歩の結果のメモ (ExecutionReport、execution の時だけ)
+    pool: object = None          # この Q* が読む候補の並び (`_fb_pool.Pool`。Q* の Publish で固定、作り直しは作った時)
+    evidence: tuple = ()         # U の不適合・不足が名指した Point (名指しの公開、K37)
+    superseded: bool = False     # 止まった結末だが、候補を足した後の作り直しが読み直した (系列を止めない、K37 決定 4)
+    relist: list | None = None   # 作り直し (rebuild) が読み直す観測の義務の列 (Q* の Publish で固定)
 
 
 @_dataclass
@@ -78,7 +82,12 @@ class UpdatePlan:
     obligations: dict = _field(default_factory=dict)   # 原報告の Point → Obligation (見つけた順)
     chain: list = _field(default_factory=list)         # 保存を確認した採用 A* の Point (採用した順)。最後が系列の頭
     kind: str = "segment"        # δ の方法: segment (区間の札、saved_segment_update/1) / acquisition (取りに行き)
-    stopped: tuple | None = None   # 系列の採用が止まった (理由の語, 一歩の結果の Point)。待っても解けない (K36 決定 12・13)
+    # 系列の採用が止まった (理由の語, 観測の Point, 名指しの Point の列, その並びの model)。待っても解けない (K36 決定 12・13)。
+    # 止まりはその並びの下でだけ効く (候補を足した後は新しい並びで導き直す、K37 決定 4)
+    stopped: tuple | None = None
+    initial: object = None       # 最初の並び (起動の宣言の 1 枚、`_fb_pool.initial_pool`)
+    current: object = None       # 今の境目 (置き場の頭) で効いている候補の並び (解けなければ None、K37 決定 3)
+    applied: list = _field(default_factory=list)   # 系列の頭の数値に読んだ観測の義務 (順に。作り直しで並び直す、K37 決定 4)
 
 
 class _Pair:
@@ -126,76 +135,91 @@ def _check_args(boot, args):
     return None
 
 
-# --- 法則と読み方 (K3: Boot・時計・route の保存 → law → reading の順) ---
+# --- 法則と読み方 (K3: Boot・時計・route の保存 → law → reading の順)。どれも解いた並び (`_fb_pool.Pool`) から作る (K37) ---
 
-def _law_step():
+def _reading_name(base, pool):
+    """並び pool の読み方の記録の歩の名前 (最初の並びは名前のまま、足した並びは並びのモデルを添える)。"""
+    return base if pool.initial else base + ":" + pool.model
+
+
+def _reading_steps(plan, pool):
+    """並び pool の読み方の記録の歩 (K37: 並びごとの読み方は、その並びの解決から作る)。区間の札は法則 → 読み方、取りに行きは
+    (最初の並びの物語の対応 →) 読み方と、行った一歩の読み方。"""
+    if plan.kind == "segment":
+        return [_law_step(pool), _reading_step(pool)]
+    steps = ([_correspondence_step(pool)] if pool.initial else []) + [_acquisition_reading_step(pool)]
+    if "execution" in plan.args:
+        steps.append(_execution_reading_step(pool))
+    return steps
+
+
+def _law_step(pool):
     def build(state, plan):
         from ._fb_core import Slot
         source = _clock_source(state)
         law = plan.args["law"]
         names = [name for ch in law["channels"] for name in ch["route_slots"]]
         configs = [plan.boot.points.get("route_config:" + name) for name in names]
-        if source is None or plan.boot.points.get("origin") is None or None in configs:
+        if source is None or None in configs:
             return None
         d, routes = plan.boot.d, {r.slot: r.value for r in plan.boot.declaration.routes}
         channels = [{"id": ch["id"],
                      "process": _encode(_fb.BootSlot(declaration=d, slot=routes[ch["route_slots"][0]].process_slot)),
                      "route_configs": sorted(plan.boot.points["route_config:" + n] for n in ch["route_slots"]),
                      "domain": {"clock": _f._encode(state.clock.run), **ch["domain"]}} for ch in law["channels"]]
-        content = {"model": plan.perception.model, "extends": None, "carrier_by_state": law["carrier_by_state"],
+        content = {"model": pool.model, "extends": None, "carrier_by_state": law["carrier_by_state"],
                    "channels": channels, "rows": law["rows"], "frame_relation": "independent_given_carrier"}
         ledger = state.ledger
-        uses = (plan.perception.model, d, *sorted(set(configs)), source)
-        body = _Prediction(target="count_law", about=(ledger.record(plan.perception.model).id,),
+        uses = (pool.model, d, *sorted(set(configs)), source)
+        body = _Prediction(target="count_law", about=(ledger.record(pool.model).id,),
                            basis=tuple(ledger.record(p).id for p in uses),
                            content=_Payload.json(content), contract=_c.FINITE_JOINT_COUNT_LAW)
         return Slot(contract=_c.FINITE_JOINT_COUNT_LAW, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
                     parents=_front(ledger, {d, *configs, source}))
-    return _Step(name="law", build=build)
+    return _Step(name=_reading_name("law", pool), build=build)
 
 
-def _reading_step():
+def _reading_step(pool):
     def build(state, plan):
         from ._fb_core import Slot
-        law = plan.points["law"]
+        law = plan.points[_reading_name("law", pool)]
         claims = [{"meaning": e["meaning"], "law": law, "channel": e["channel"]} for e in plan.args["claims"]]
-        content = {"model": plan.perception.model,
+        content = {"model": pool.model,
                    "projection": {"contract": _f._encode(_c.FINITE_SEGMENT_PROJECTION),
                                   "args": {"frame": None, "claims": claims,
                                            "time_projection": {"contract": _f._encode(_c.SEGMENT_VALUE_ONLY),
                                                                "args": {}}}},
                    "generation": {"contract": _f._encode(_c.BOOTSTRAP_GENERATION), "args": plan.args["generation"]}}
         ledger = state.ledger
-        law_slot = next(s.slot for s in plan.steps if s.name == "law")
-        body = _Prediction(target="observation_plan", about=(ledger.record(plan.perception.model).id,),
-                           basis=(ledger.record(plan.perception.model).id, ledger.record(law).id),
+        law_slot = next(s.slot for s in plan.steps if s.name == _reading_name("law", pool))
+        body = _Prediction(target="observation_plan", about=(ledger.record(pool.model).id,),
+                           basis=(ledger.record(pool.model).id, ledger.record(law).id),
                            content=_Payload.json(content), contract=_c.OBSERVATION_PLAN_2)
         return Slot(contract=_c.OBSERVATION_PLAN_2, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
                     parents=law_slot.parents)
-    return _Step(name="reading", build=build)
+    return _Step(name=_reading_name("reading", pool), build=build)
 
 
 def _plan(state, boot):
-    """δ の方法の名前と版で計画を選ぶ (P9)。読めない方法も計画を置いて不足を示す (計画を作らずに黙らない、K28 の B1)。"""
+    """δ の方法の名前と版で計画を選ぶ (P9)。読めない方法も計画を置いて不足を示す (計画を作らずに黙らない、K28 の B1)。
+    読み方の記録は最初の並び (起動の宣言の 1 枚、`_fb_pool.initial_pool`) から作る。"""
+    from ._fb_pool import initial_pool
     perception_slot = boot.declaration.perception
     perception = perception_slot.value
     method = perception.derivation.method
     plan = UpdatePlan(boot=boot, perception=perception, slot=perception_slot.slot, args=_plain(method.args))
+    plan.initial = plan.current = initial_pool(state, boot)
     if method.contract == _c.SAVED_SEGMENT_UPDATE:
         reason = _check_args(boot, plan.args)
-        steps = [_law_step(), _reading_step()]
     elif method.contract == _c.SAVED_ACQUISITION_UPDATE:
         plan.kind = "acquisition"
         reason = _check_acquisition_args(boot, plan.args)
-        steps = [_correspondence_step(), _acquisition_reading_step()]
-        if reason is None and "execution" in plan.args:
-            steps.append(_execution_reading_step())
     else:
-        reason, steps = "delta:method", []
+        reason = "delta:method"
     if reason is not None:
         _hold(plan, reason)
     else:
-        plan.steps = steps
+        plan.steps = _reading_steps(plan, plan.initial)
     return plan
 
 
@@ -231,66 +255,282 @@ def _check_acquisition_args(boot, args):
     return None
 
 
-def _correspondence_step():
-    """物語の対応の記録 (`sui.fb.state_correspondence/1`、Prediction / MODEL): 見立てのモデルの Point と、その口の観測モデルの
-    記録の Point を解いて、起動の宣言の pairs と一緒に保存する (K28-a (ア))。読み方より先。"""
+def _correspondence_step(pool):
+    """物語の対応の記録 (`sui.fb.state_correspondence/1`、Prediction / MODEL): 最初の並びのモデルの Point と、その口の観測モデル
+    の記録の Point を解いて、起動の宣言の pairs と一緒に保存する (K28-a (ア))。読み方より先。足した並びの候補ごとの対応は
+    並びの記録が持つ (K37)。"""
+    member, = pool.members
+
     def build(state, plan):
         from ._fb_core import Slot
         observation = plan.boot.points.get("observation_model:" + plan.args["observation_model"])
-        if observation is None or plan.boot.points.get("origin") is None:
+        if observation is None:
             return None
         ledger = state.ledger
-        content = {"model": plan.perception.model, "observation_model": observation,
-                   "pairs": plan.args["correspondence"]["pairs"]}
-        body = _Prediction(target="state_correspondence", about=(ledger.record(plan.perception.model).id,),
-                           basis=(ledger.record(plan.perception.model).id, ledger.record(observation).id),
+        content = {"model": pool.model, "observation_model": observation, "pairs": member["pairs"]}
+        body = _Prediction(target="state_correspondence", about=(ledger.record(pool.model).id,),
+                           basis=(ledger.record(pool.model).id, ledger.record(observation).id),
                            content=_Payload.json(content), contract=_c.STATE_CORRESPONDENCE)
         return Slot(contract=_c.STATE_CORRESPONDENCE, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
                     parents=_front(ledger, {plan.boot.d}))
     return _Step(name="correspondence", build=build)
 
 
-def _acquisition_reading_step():
-    """読み方 (`sui.f.observation_plan/2`): projection = `acquisition_sequence_projection/1` {observation_model, correspondence,
-    time_projection}、generation = `acquisition_generation/1` {}。"""
+def _acquisition_reading_step(pool):
+    """読み方 (`sui.f.observation_plan/2`): projection = `acquisition_sequence_projection/1`、generation =
+    `acquisition_generation/1` {}。最初の並びは {observation_model, correspondence, time_projection}、足した並びは
+    {pool, observation_model, time_projection} (各候補の観測モデルと物語の対応は並びの記録が持ち、observation_model は
+    取りに行きの列を読む口の宣言 = 起動の観測モデルの記録、K37 決定 6)。"""
     def build(state, plan):
         from ._fb_core import Slot
         observation = plan.boot.points["observation_model:" + plan.args["observation_model"]]
-        correspondence = plan.points["correspondence"]
-        content = {"model": plan.perception.model,
-                   "projection": {"contract": _f._encode(_c.ACQUISITION_SEQUENCE_PROJECTION),
-                                  "args": {"observation_model": observation, "correspondence": correspondence,
-                                           "time_projection": {"contract": _f._encode(_VALUE_ONLY), "args": {}}}},
-                   "generation": {"contract": _f._encode(_c.ACQUISITION_GENERATION), "args": {}}}
+        time_projection = {"contract": _f._encode(_VALUE_ONLY), "args": {}}
         ledger = state.ledger
-        body = _Prediction(target="observation_plan", about=(ledger.record(plan.perception.model).id,),
-                           basis=(ledger.record(plan.perception.model).id, ledger.record(observation).id,
-                                  ledger.record(correspondence).id),
+        if pool.initial:
+            correspondence = plan.points["correspondence"]
+            args = {"observation_model": observation, "correspondence": correspondence,
+                    "time_projection": time_projection}
+            basis = (pool.model, observation, correspondence)
+        else:
+            args = {"pool": pool.point, "observation_model": observation, "time_projection": time_projection}
+            basis = (pool.model, pool.point, observation)
+        content = {"model": pool.model,
+                   "projection": {"contract": _f._encode(_c.ACQUISITION_SEQUENCE_PROJECTION), "args": args},
+                   "generation": {"contract": _f._encode(_c.ACQUISITION_GENERATION), "args": {}}}
+        body = _Prediction(target="observation_plan", about=(ledger.record(pool.model).id,),
+                           basis=tuple(ledger.record(p).id for p in basis),
                            content=_Payload.json(content), contract=_c.OBSERVATION_PLAN_2)
         return Slot(contract=_c.OBSERVATION_PLAN_2, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
-                    parents=_front(ledger, {plan.boot.d}))
-    return _Step(name="reading", build=build)
+                    parents=_front(ledger, {pool.decision or plan.boot.d}))
+    return _Step(name=_reading_name("reading", pool), build=build)
 
 
-def _execution_reading_step():
+def _execution_reading_step(pool):
     """行った一歩の読み方 (`sui.f.observation_plan/2`、K36 決定 5): projection = `execution_step_projection/1`
-    {execution_declaration} (その一歩の節の核と、行う一歩の宣言のセル)、generation = `execute_step/1` {}。"""
+    {execution_declaration} (その一歩の節の核と、行う一歩の宣言のセル)、generation = `execute_step/1` {}。モデルは並びのモデル
+    (足した並びでは、各候補をその候補の核で読む、K37 決定 6)。"""
     def build(state, plan):
         from ._fb_core import Slot
         declaration = plan.boot.points.get("execution")
         if declaration is None:
             return None
-        content = {"model": plan.perception.model,
+        content = {"model": pool.model,
                    "projection": {"contract": _f._encode(_c.EXECUTION_STEP_PROJECTION),
                                   "args": {"execution_declaration": declaration}},
                    "generation": {"contract": _f._encode(_c.EXECUTE_STEP), "args": {}}}
         ledger = state.ledger
-        body = _Prediction(target="observation_plan", about=(ledger.record(plan.perception.model).id,),
-                           basis=(ledger.record(plan.perception.model).id, ledger.record(declaration).id),
+        body = _Prediction(target="observation_plan", about=(ledger.record(pool.model).id,),
+                           basis=(ledger.record(pool.model).id, ledger.record(declaration).id),
                            content=_Payload.json(content), contract=_c.OBSERVATION_PLAN_2)
         return Slot(contract=_c.OBSERVATION_PLAN_2, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
-                    parents=_front(ledger, {plan.boot.d}))
-    return _Step(name="execution_reading", build=build)
+                    parents=_front(ledger, {pool.decision or plan.boot.d}))
+    return _Step(name=_reading_name("execution_reading", pool), build=build)
+
+
+# --- 候補の並び (紙 F-b K37 決定 1〜8) ---
+
+def _reading_point(plan, pool, kind):
+    """並び pool で観測の種類 (frame / execution) を読む読み方の記録の Point。まだ保存していなければ None。"""
+    return plan.points.get(_reading_name("execution_reading" if kind == "execution" else "reading", pool))
+
+
+def _pool_of(plan, ob):
+    """その義務が読む並び: Q* を作った時の並び、まだなら今の並び (解けなければ最後に解けた最初の並び、表示用)。"""
+    if ob.pool is not None:
+        return ob.pool
+    return plan.current if plan.current is not None else plan.initial
+
+
+def _model_of(plan, ob):
+    return _pool_of(plan, ob).model
+
+
+def _origin_of(plan, ob):
+    return _pool_of(plan, ob).origin
+
+
+def _stop(plan, reason, binding, targets=()) -> None:
+    """系列の採用を止める (待っても解けない)。止まりは今の並びの下でだけ効く。"""
+    plan.stopped = (reason, binding, tuple(dict.fromkeys(targets)), plan.current.model)
+
+
+def _resolve(state, plan) -> None:
+    """今の境目 (置き場の頭) で効いている並びを解く (K37 決定 3。解くのは `_fb_pool.resolve` の 1 か所)。新しい並びなら、
+    その読み方の記録の歩を足す (並びの解決から作る)。前の並びの下で止まった系列は、新しい並びで導き直す。解けなければ
+    (比べられない足し・読めない記録) 新しい要求を作らない (前の並びへ黙って戻らない)。"""
+    from ._fb_pool import resolve
+    try:
+        pool = resolve(state, plan.boot, state.ledger.heads())
+    except _fb.CandidatePoolError:
+        plan.current = None
+        return
+    plan.current = pool
+    if plan.stopped is not None and plan.stopped[3] != pool.model:
+        plan.stopped = None
+    names = {s.name for s in plan.steps}
+    plan.steps += [step for step in _reading_steps(plan, pool) if step.name not in names]
+
+
+def _head_model(plan):
+    """系列の頭 (最後に採用を確かめた A*) の並びの model。採用がまだなら最初の並びのモデル。"""
+    for ob in plan.obligations.values():
+        if plan.chain and ob.points.get("A") == plan.chain[-1]:
+            return _model_of(plan, ob)
+    return plan.initial.model
+
+
+def _relist(plan) -> list:
+    """作り直しが読み直す観測 (K37 決定 4): 系列の頭の数値に読んだ観測 (順に) と、止まった結末の観測 (前の並びで質量 0
+    などで止まったもの。新しい並びで読めれば読む)。まだ要求を作っていない観測は、作り直しの後にふつうに読む。"""
+    stuck = [o for o in plan.obligations.values() if o.kind != "rebuild" and o.final not in (None, "adopted")
+             and o not in plan.applied]
+    stuck.sort(key=lambda o: (o.interval[0], o.seq if o.seq is not None else 0))
+    return [*plan.applied, *stuck]
+
+
+def _need_rebuild(plan) -> None:
+    """今の並びが系列の頭の並びと違えば、足した決定をきっかけに作り直しの義務を 1 つ置く (K37 決定 4: 足したこと自体は
+    観測に数えない、観測の無い要求)。まだ要求を作っていない、追い越された並びの作り直しは置かない (記録は無い)。"""
+    pool = plan.current
+    if pool is None or pool.model == _head_model(plan):
+        return
+    for key, ob in list(plan.obligations.items()):
+        if ob.kind == "rebuild" and ob.desc is None and ob.pool.model != pool.model:
+            del plan.obligations[key]
+    if pool.decision not in plan.obligations:
+        ob = Obligation(report=pool.decision, binding=pool.decision, kind="rebuild", pool=pool, interval=(0, 0))
+        ob.steps = [_q_step(ob)]
+        plan.obligations[pool.decision] = ob
+
+
+def _next_rebuild(state, plan):
+    """作り直しの要求を作れるか (K37 決定 4・K36 決定 12): 読み直す観測が今の並びの各候補で読め、区間の重なる別の種類の
+    観測どうしが、宣言と各候補のかたまりの交換で順に依らない時だけ。そうでなければ名指して止める。"""
+    rebuild = plan.obligations.get(plan.current.decision)
+    if rebuild is None or rebuild.desc is not None or rebuild.final is not None:
+        return None
+    relist = _relist(plan)
+    for ob in relist:
+        blocks = _blocks(state, plan, ob)
+        if isinstance(blocks, _Unread):
+            _stop(plan, blocks.reason, ob.binding, blocks.targets)
+            return None
+    decl = _declaration_of(plan)
+    for i, a in enumerate(relist):
+        for b in relist[i + 1:]:
+            if a.kind == b.kind or a.interval[1] < b.interval[0]:
+                continue
+            step = a if a.kind == "execution" else b
+            bad = _noncommuting(plan.current, _blocks(state, plan, a), _blocks(state, plan, b))
+            if a.interval[0] > b.interval[1] or decl is None \
+                    or "undeclared" in (decl.source_overlap, decl.actor_overlap) or bad:
+                _stop(plan, "observation_order_unknown", step.binding, bad)
+                return None
+    rebuild.relist = relist
+    return rebuild
+
+
+def pool_head(plan, pool, seen):
+    """境目 seen に見える、その並びの最新の採用 A* (保存を確かめたもの)。無ければ None。"""
+    models = {ob.points["A"]: _model_of(plan, ob) for ob in plan.obligations.values() if "A" in ob.points}
+    return next((a for a in reversed(plan.chain) if models.get(a) == pool.model and a in seen), None)
+
+
+def pool_stop(state, plan, pool, seen):
+    """その並びの系列が、境目 seen に見える観測で止まっているか (待っても解けない、K37 決定 3・4)。止まっていれば
+    (理由の語, 名指しの Point の列)。系列の止まり (順が分からない・読めない・質量 0) と、U の不適合・不足・依存の食い違い
+    などの結末。候補を足した後の作り直しが読み直した結末は数えない。"""
+    if plan.stopped is not None and plan.stopped[3] == pool.model and plan.stopped[1] in seen:
+        return plan.stopped[0], tuple(dict.fromkeys((*plan.stopped[2], plan.stopped[1])))
+    bad = _clashed_reports(state)
+    for ob in plan.obligations.values():
+        own = ob.pool if ob.pool is not None else plan.current
+        if ob.superseded or ob.final in (None, "adopted") or own is None or own.model != pool.model \
+                or ob.report not in seen:
+            continue
+        if ob.final == "conflicted":
+            uses = ob.desc.input_points if ob.desc is not None else frozenset(o.report for o in _covered(plan, ob))
+            targets = tuple(sorted(bad & uses)) or (ob.report,)
+        else:
+            targets = ob.evidence or (ob.points.get("Q") or ob.report,)
+        return (ob.reasons[0] if ob.reasons else ob.final), tuple(targets)
+    return None
+
+
+def _covered(plan, ob) -> list:
+    """その義務が読む観測の義務 (作り直しは読み直す列、ほかは自分)。"""
+    if ob.kind != "rebuild":
+        return [ob]
+    return ob.relist if ob.relist is not None else _relist(plan)
+
+
+# --- 今の並びで観測を読むセルの行列 (候補ごとのかたまり。入口 U と同じ関数で作る、K37 決定 6) ---
+
+class _Unread:
+    """今の並びで読めない観測の名指し (理由の語, 名指しの Point の列)。"""
+
+    def __init__(self, reason, targets=()):
+        self.reason, self.targets = reason, tuple(targets)
+
+
+def _declaration_of(plan):
+    from ._fb_act import declaration
+    return declaration(plan.boot)
+
+
+def _sampling(plan):
+    route = next(r.value for r in plan.boot.declaration.routes if r.slot == plan.args["route"])
+    return route.config.sampling_contract
+
+
+def _frame_blocks(state, plan, symbol):
+    """受け身の取りに行き 1 回 (観測の語 symbol) の、候補ごとのかたまり (各候補の状態の順、正規化する前のセルの和)。"""
+    from . import f_update2 as u2
+    try:
+        out = []
+        for m in plan.current.members:
+            ev = (m["model"],)
+            control, phi = u2.member_reading(m, route=plan.current.route, evidence_model=ev, evidence_pairs=ev)
+            out.append(u2.passive_block(control, phi, symbol, sampling=_sampling(plan), evidence=ev))
+        return out
+    except u2._Issue as issue:
+        return _Unread(issue.code, issue.evidence)
+
+
+def _step_blocks(state, plan, u, value):
+    """行った一歩 (核 u、観測 value) の、候補ごとのかたまり。各候補はその候補が宣言したその操作の核で読む。足した並びでは、
+    読めない候補の宣言 (観測モデル・物語の対応) もここで名指す (入口 U と同じ)。読むセルが無ければ exception_reading_missing。"""
+    from . import f_update2 as u2
+    cells = [u2._json(_f._encode(cell)) for cell in _declaration_of(plan).cells.get(u, ())]
+    try:
+        kernels = []
+        for m in plan.current.members:
+            ev = (m["model"],)
+            if not plan.current.initial:
+                u2.member_reading(m, route=plan.current.route, evidence_model=ev, evidence_pairs=ev)
+            kernels.append((m, u2.step_kernel(m["document"], u, cells, evidence=ev)[1]))
+    except u2._Issue as issue:
+        return _Unread(issue.code, issue.evidence)
+    found = [cell for cell in cells if cell["observation"]["value"] == u2._json(value)]
+    if len(found) != 1:
+        return _Unread("exception_reading_missing")
+    return [u2.cell_sum(matrices, found[0]["outcomes"], m["size"]) for m, matrices in kernels]
+
+
+def _blocks(state, plan, ob):
+    """観測の義務 ob を今の並びで読むセルの、候補ごとのかたまり。読めなければ _Unread。"""
+    from . import _fb_read
+    if ob.kind == "execution":
+        return _step_blocks(state, plan, ob.result.execution.u, ob.result.value)
+    frame = _frame_value(state, ob.report)
+    return _frame_blocks(state, plan, _fb_read._SYMBOLS[(frame.value["result"]["kind"], bool(frame.value["source_called"]))])
+
+
+def _noncommuting(pool, a, b) -> list:
+    """2 つの観測のかたまりが両方の順で同じでない候補のモデル (どちらかが読めなければ全部の候補)。"""
+    if isinstance(a, _Unread) or isinstance(b, _Unread):
+        return [m["model"] for m in pool.members]
+    return [m["model"] for m, x, y in zip(pool.members, a, b) if _product(x, y) != _product(y, x)]
 
 
 # --- 義務 (J1) と系列の頭 (K9・K13) ---
@@ -395,14 +635,18 @@ def _raw_saved(state, report) -> bool:
 
 
 def _next_acquisition(plan, state):
-    """次に Q* を作る義務 (K28 新しい決定 5・K36 決定 12): 受け身の取りに行きは番号 i = 採用を確認した取りに行きの数の
+    """次に Q* を作る義務 (K28 新しい決定 5・K36 決定 12): 受け身の取りに行きは番号 i = 系列の頭の数値に読んだ取りに行きの数の
     Frame (0〜i - 1 は採用されて確認済み、原文も保存済みの時だけ)、行った一歩は入場の順の最初の未採用。両方あれば時計の
     読みの前後で決め、重なりは宣言とセルの行列の交換で決める (決まらなければ系列を止める)。採用以外の結末・進行中・
-    確認待ち・順の来る観測の保存待ちがあれば待つ。印でなく状態で決める。"""
-    if plan.stopped is not None or _pending_clash(state, plan) or _head(plan) == "wait" \
-            or any(ob.final not in (None, "adopted") for ob in plan.obligations.values()):
+    確認待ち・順の来る観測の保存待ちがあれば待つ。印でなく状態で決める。今の並びが系列の頭の並びと違えば、先に作り直し
+    (K37 決定 4)。"""
+    if plan.current is None or plan.stopped is not None or _pending_clash(state, plan) or _head(plan) == "wait":
         return None
-    passive_done = sum(1 for ob in plan.obligations.values() if ob.kind == "frame" and ob.final == "adopted")
+    if _head_model(plan) != plan.current.model:
+        return _next_rebuild(state, plan)
+    if any(ob.final not in (None, "adopted") and not ob.superseded for ob in plan.obligations.values()):
+        return None
+    passive_done = sum(1 for ob in plan.applied if ob.kind == "frame")
     frame = next((ob for ob in plan.obligations.values() if ob.kind == "frame" and ob.seq == passive_done), None)
     if frame is not None and (frame.desc is not None or not _raw_saved(state, frame.report)):
         return None
@@ -432,28 +676,24 @@ def _next_acquisition(plan, state):
     return frame
 
 
-def _matrix_of(state, plan, ob):
-    return step_matrix(state, plan, ob) if ob.kind == "execution" else frame_matrix(state, plan, ob)
-
-
 def _applied_clash(state, plan, ob) -> bool:
-    """もう採用した別の種類の観測 (取りに行き ↔ 行った一歩) と ob の区間が重なり、宣言が述べていないか、セルの行列が
-    両方の順で同じでない (K36 決定 12)。そうなら系列の採用を「順が分からない」で止める (待っても解けない。名指しは一歩)。
-    入口 U の順の確かめと同じ規則 (区間の端の読みが同じなら重なり)。"""
-    from ._fb_act import declaration
-    decl = declaration(plan.boot)
-    for other in plan.obligations.values():
-        if other.kind == ob.kind or other.final != "adopted":
+    """系列の頭の数値に読んだ別の種類の観測 (取りに行き ↔ 行った一歩) と ob の区間が重なり、宣言が述べていないか、セルの
+    かたまりが両方の順で同じでない候補がある (K36 決定 12)。そうなら系列の採用を「順が分からない」で止める (待っても
+    解けない。名指しは一歩と、交換しない候補)。入口 U の順の確かめと同じ規則 (区間の端の読みが同じなら重なり)。"""
+    decl = _declaration_of(plan)
+    for other in plan.applied:
+        if other.kind == ob.kind:
             continue
+        step = ob if ob.kind == "execution" else other
         if other.interval[0] > ob.interval[1]:
             # もう採用した観測が、この観測の終わりより後に始まっている = 順を飛ばす (入口 U と同じ規則、レビュー R6)
-            plan.stopped = ("observation_order_unknown", ob.binding if ob.kind == "execution" else other.binding)
+            _stop(plan, "observation_order_unknown", step.binding)
             return True
         if other.interval[1] < ob.interval[0]:
             continue
-        a, b = _matrix_of(state, plan, ob), _matrix_of(state, plan, other)
-        if decl is None or "undeclared" in (decl.source_overlap, decl.actor_overlap) or _product(a, b) != _product(b, a):
-            plan.stopped = ("observation_order_unknown", ob.binding if ob.kind == "execution" else other.binding)
+        bad = _noncommuting(plan.current, _blocks(state, plan, ob), _blocks(state, plan, other))
+        if decl is None or "undeclared" in (decl.source_overlap, decl.actor_overlap) or bad:
+            _stop(plan, "observation_order_unknown", step.binding, bad)
             return True
     return False
 
@@ -474,32 +714,38 @@ def _pending_clash(state, plan) -> bool:
     まだ採用していない取りに行き (更新を頼んだものも含む) が重なり、世界の宣言が述べていないか、実際に読んだセルの行列が
     両方の順で同じでない組 (読むセルの無い例外との重なりも) について、その組の両方より確かに前の未採用の観測が無い時だけ、
     その観測と後に続く採用を「順が分からない」で止める (頼んだ更新の採用の判断も作らない。待っても解けない)。前に確かな
-    観測があれば、それを先に採用し、次の回にもう一度見る (後の組を理由に前の採用を止めない、レビュー R9)。"""
-    pending = [ob for ob in plan.obligations.values() if ob.final is None]
+    観測があれば、それを先に採用し、次の回にもう一度見る (後の組を理由に前の採用を止めない、レビュー R9)。行列は今の並びの
+    候補ごとのかたまり (K37)。"""
+    pending = [ob for ob in plan.obligations.values() if ob.final is None and ob.kind != "rebuild"]
     for step in (ob for ob in pending if ob.kind == "execution"):
-        unreadable = step_matrix(state, plan, step) is None
+        b = _blocks(state, plan, step)
         for frame in (ob for ob in pending if ob.kind == "frame"):
             if frame.interval[1] < step.interval[0] or frame.interval[0] > step.interval[1]:
                 continue
-            if not unreadable and _commute(state, plan, frame, step):
+            commute, bad = _commute(state, plan, frame, b)
+            if commute:
                 continue
             if any(_strictly_before(o, frame) and _strictly_before(o, step) for o in pending
                    if o is not frame and o is not step):
                 continue   # この組より前の観測がまだ採用されていない: 先に進める
-            plan.stopped = ("exception_reading_missing" if unreadable else "observation_order_unknown", step.binding)
+            if isinstance(b, _Unread):
+                _stop(plan, b.reason, step.binding, b.targets)
+            else:
+                _stop(plan, "observation_order_unknown", step.binding, bad)
             return True
     return False
 
 
 def _readable(state, plan, step):
-    """読むセルの無い一歩の結果 (例外の読み方が無い) は、その系列の採用を止める (K36 決定 13、待っても解けない)。"""
-    m = step_matrix(state, plan, step)
-    if m is None:
-        plan.stopped = ("exception_reading_missing", step.binding)
+    """読むセルの無い一歩の結果 (例外の読み方が無い)・今の並びのどれかの候補で読めない一歩は、その系列の採用を止める
+    (K36 決定 13・K37 決定 6、待っても解けない)。"""
+    blocks = _blocks(state, plan, step)
+    if isinstance(blocks, _Unread):
+        _stop(plan, blocks.reason, step.binding, blocks.targets)
         return None
-    if not any(x for row in m for x in row):
+    if not any(x for block in blocks for row in block for x in row):
         # 読めるセルの行列が 0: どの見立てでも質量 0 (U は model_falsified で断る)。系列はここで止まる
-        plan.stopped = ("model_zero", step.binding)
+        _stop(plan, "model_zero", step.binding)
         return None
     return step
 
@@ -508,9 +754,9 @@ def _unsaved_step_before(state, plan, frame) -> bool:
     """入場した観測の一歩のうち、結果がまだ保存されていない (行っている途中・保存待ち) もので、この取りに行き frame との
     順が今は決まらないものがあるか (K36 決定 12)。frame が一歩の入場より前に終わっていれば前 (待たない)。結果の記録の読みが
     分かっていて frame がそれより後に始まれば一歩が前 (結果の保存を待つ)。それ以外は重なりで、世界の宣言が述べていて、
-    frame の行列が一歩の結果の読みうるどのセルの行列とも両方の順で同じ時だけ待たない (どの結果でも順で答えが変わらない)。
-    観測でない一歩 (宣言した無作用・未接続) は順に関わらない。"""
-    from ._fb_act import classify, declaration, result_of
+    frame のかたまりが一歩の結果の読みうるどのセルのかたまりとも両方の順で同じ時だけ待たない (どの結果でも順で答えが
+    変わらない)。観測でない一歩 (宣言した無作用・未接続) は順に関わらない。"""
+    from ._fb_act import classify, result_of
     for act in state.acting.values():
         if act.boot is not plan.boot:
             continue
@@ -527,39 +773,22 @@ def _unsaved_step_before(state, plan, frame) -> bool:
                     continue
                 if receipt not in (None, "published") and frame.interval[0] > receipt.envelope.event.finished.reading.time_ns:
                     return True
-                decl = declaration(plan.boot)
+                decl = _declaration_of(plan)
                 if decl is None or "undeclared" in (decl.source_overlap, decl.actor_overlap):
                     return True
-                a = frame_matrix(state, plan, frame)
-                if any(_product(a, b) != _product(b, a) for b in _cell_matrices(state, plan.boot, E)):
+                a = _blocks(state, plan, frame)
+                if any(_noncommuting(plan.current, a, _step_blocks(state, plan, E.u, cell.observation.value))
+                       for cell in decl.cells.get(E.u, ())):
                     return True
     return False
-
-
-def _cell_matrices(state, boot, E):
-    """一歩 E の節の核の、宣言のセルごとの行列 (モデルの状態の順、正規化する前の和)。"""
-    from fractions import Fraction
-    from . import _fb_act
-    k = _fb_act.kernel(state, E.model, E.u)
-    outcomes = {o["id"]: _fb_act._matrix(o) for o in k["outcomes"]}
-    out = []
-    for cell in _fb_act.declaration(boot).cells.get(E.u, ()):
-        n = len(next(iter(outcomes.values())))
-        m = [[Fraction(0)] * n for _ in range(n)]
-        for name in cell.outcomes:
-            for i, row in enumerate(outcomes[name]):
-                for j, x in enumerate(row):
-                    m[i][j] += x
-        out.append(m)
-    return out
 
 
 def _passive_open_before(state, plan, passive_done, step) -> bool:
     """受け身の取りに行きで、まだ義務になっていないもののうち、一歩 step との順が今は決まらないものがあるか (K36 決定 12)。
     公開して保存待ちのもので、始まりが一歩の終わり以前のものは待つ (義務になれば区間で比べられる)。源を読みに行っている
-    途中のものは、始まりが一歩の終わり以前なら重なり (終わりは一歩の後)、世界の宣言が述べていて、一歩のセルの行列が
-    その取りに行きの読みうるどのセルの行列とも両方の順で同じ時だけ待たない。"""
-    from ._fb_act import declaration
+    途中のものは、始まりが一歩の終わり以前なら重なり (終わりは一歩の後)、世界の宣言が述べていて、一歩のかたまりが
+    その取りに行きの読みうるどの観測のかたまりとも両方の順で同じ時だけ待たない。"""
+    from . import _fb_read
     end_ns = step.interval[1]
     route = plan.boot.points.get("route_config:" + plan.args["route"])
     for row in state.works.values():
@@ -571,76 +800,12 @@ def _passive_open_before(state, plan, passive_done, step) -> bool:
     started = state.inflight.get(_epoch(plan))
     if started is None or started > end_ns:
         return False
-    decl = declaration(plan.boot)
+    decl = _declaration_of(plan)
     if decl is None or "undeclared" in (decl.source_overlap, decl.actor_overlap):
         return True
-    b = step_matrix(state, plan, step)
-    return b is None or any(_product(a, b) != _product(b, a) for a in _passive_cell_matrices(state, plan))
-
-
-def _passive_cell_matrices(state, plan):
-    """受け身の観測モデルの、セルごとの行列 (見立ての状態の順に並べ替えた、正規化する前の和)。"""
-    from fractions import Fraction
-    model = next(m.value for m in plan.boot.declaration.observation_models if m.slot == plan.args["observation_model"])
-    control, = model.controls
-    states = [s["id"] for s in state.ledger.record(plan.perception.model).body.content.as_json()["document"]["states"]]
-    pairs = dict(plan.args["correspondence"]["pairs"])
-    phi = [states.index(pairs[a]) for a in model.states]
-    n = len(states)
-    out = []
-    for cell in control.cells:
-        m = [[Fraction(0)] * n for _ in range(n)]
-        for o in control.kernel.outcomes:
-            if o.id in cell.outcomes:
-                for i in range(n):
-                    for j in range(n):
-                        m[phi[i]][phi[j]] += o.matrix[i][j]
-        out.append(m)
-    return out
-
-
-def frame_matrix(state, plan, ob):
-    """受け身の取りに行き ob の、その回のセルの行列 (見立ての状態の順に並べ替えた、正規化する前の和)。"""
-    from fractions import Fraction
-    model = next(m.value for m in plan.boot.declaration.observation_models if m.slot == plan.args["observation_model"])
-    control, = model.controls
-    frame = _frame_value(state, ob.report)
-    called = bool(frame.value["source_called"])
-    result = frame.value["result"]["kind"]
-    from . import _fb_read
-    symbol = _fb_read._SYMBOLS[(result, called)]
-    cell = next((x for x in control.cells if _fb_read._symbol(x.observation) == symbol), None)
-    members = set(cell.outcomes) if cell is not None else set()
-    states = [s["id"] for s in state.ledger.record(plan.perception.model).body.content.as_json()["document"]["states"]]
-    pairs = dict(plan.args["correspondence"]["pairs"])
-    phi = [states.index(pairs[a]) for a in model.states]
-    n = len(states)
-    m = [[Fraction(0)] * n for _ in range(n)]
-    for o in control.kernel.outcomes:
-        if o.id in members:
-            for i in range(n):
-                for j in range(n):
-                    m[phi[i]][phi[j]] += o.matrix[i][j]
-    return m
-
-
-def step_matrix(state, plan, ob):
-    """行った一歩 ob の、その回のセルの行列 (モデルの状態の順、正規化する前の和)。読むセルが無ければ None。"""
-    from fractions import Fraction
-    from . import _fb_act
-    E = ob.result.execution
-    names = _fb_act.cell_outcomes(plan.boot, E.u, ob.result.value)
-    if names is None:
-        return None
-    k = _fb_act.kernel(state, E.model, E.u)
-    n = len(state.ledger.record(E.model).body.content.as_json()["document"]["states"])
-    m = [[Fraction(0)] * n for _ in range(n)]
-    for o in k["outcomes"]:
-        if o["id"] in names:
-            for i, row in enumerate(_fb_act._matrix(o)):
-                for j, x in enumerate(row):
-                    m[i][j] += x
-    return m
+    b = _blocks(state, plan, step)
+    return any(_noncommuting(plan.current, _frame_blocks(state, plan, symbol), b)
+               for symbol in sorted(set(_fb_read._SYMBOLS.values())))
 
 
 def _product(a, b):
@@ -649,15 +814,14 @@ def _product(a, b):
     return [[sum((a[i][k] * b[k][j] for k in range(n)), Fraction(0)) for j in range(n)] for i in range(n)]
 
 
-def _commute(state, plan, frame, step) -> bool:
+def _commute(state, plan, frame, step_blocks):
     """重なりの適用条件 (K36 決定 12): 宣言が両方の相手について「途中も状態を変えない」か「1 回ずつの前後で表せる」と
-    述べ、実際に読んだセルの行列どうしが両方の順で同じ。"""
-    from ._fb_act import declaration
-    decl = declaration(plan.boot)
-    if decl is None or "undeclared" in (decl.source_overlap, decl.actor_overlap):
-        return False
-    a, b = frame_matrix(state, plan, frame), step_matrix(state, plan, step)
-    return b is not None and _product(a, b) == _product(b, a)
+    述べ、実際に読んだセルのかたまりどうしが、どの候補でも両方の順で同じ。(交換するか, 交換しない候補のモデル)。"""
+    decl = _declaration_of(plan)
+    if decl is None or "undeclared" in (decl.source_overlap, decl.actor_overlap) or isinstance(step_blocks, _Unread):
+        return False, []
+    bad = _noncommuting(plan.current, _blocks(state, plan, frame), step_blocks)
+    return not bad, bad
 
 
 def execution_reading(state, boot, point, report):
@@ -753,7 +917,9 @@ def _conflicted(state, plan, ob, bad) -> bool:
         return False
     if ob.desc is not None:
         return not bad.isdisjoint(ob.desc.input_points)
-    return ob.report in bad or bool(plan.chain) and not bad.isdisjoint(uses_of(state, plan.chain[-1]))
+    # 作り直しは読み直す観測の原報告に頼る (K22 の食い違いは並びが替わっても解除しない、K37 決定 4)
+    return any(o.report in bad for o in _covered(plan, ob)) \
+        or bool(plan.chain) and not bad.isdisjoint(uses_of(state, plan.chain[-1]))
 
 
 def adoptions(state, boot) -> list:
@@ -771,6 +937,18 @@ def adoptions(state, boot) -> list:
             if ob.points.get("decision") == "A" and _undecided(ob) and step.slot.prepared.cid not in plan.chain:
                 out.append(step.slot.prepared.cid)
     return out
+
+
+def adopted_model(state, boot, cid):
+    """その Boot の採用 A* (保存の確認待ちの準備した CID も) が採用した見立てのモデル (並びのモデル、K37)。知らなければ None。"""
+    for plan in state.updates.values():
+        if plan.boot is not boot:
+            continue
+        for ob in plan.obligations.values():
+            step = next((s for s in ob.steps if s.name == "decide"), None)
+            if ob.points.get("A") == cid or step is not None and step.slot is not None and step.slot.prepared.cid == cid:
+                return _model_of(plan, ob)
+    return None
 
 
 def visible_root(state, boot, boundary):
@@ -858,7 +1036,7 @@ def _names(plan, ob):
     key = {"delta": {"declaration": d, "slot": plan.perception.derivation.slot},
            "delta_contract": _encode(plan.perception.derivation.method.contract),
            "process": {"declaration": d, "slot": plan.perception.process_slot},
-           "origin": plan.boot.points["origin"], "raw_report": ob.report, "role": "trigger",
+           "origin": plan.initial.origin, "raw_report": ob.report, "role": "trigger",
            "purpose": "belief_update"}
     stage = "update:" + _hashlib.sha256(_dumps({"domain": "sui.fb.delta_stage/1", **key})).hexdigest()
     work = "sui.fb.work:" + _hashlib.sha256(_dumps({"domain": "sui.fb.delta_work/1", **key,
@@ -866,32 +1044,47 @@ def _names(plan, ob):
     return stage, work
 
 
-def _inputs(state, plan, ob, prior) -> frozenset:
+def _inputs(state, plan, ob, prior, pool) -> frozenset:
     """Q* が読む記録 (U が一次事実から作り直すのに要る全部): この観測の B・原報告・測る要求・読み方・法則・モデルと、
-    前の採用があればその A*・R*・Q* と、その Q* が読んだ全部 (系列をさかのぼった閉包)。"""
+    前の採用があればその A*・R*・Q* と、その Q* が読んだ全部 (系列をさかのぼった閉包)。候補を足した並びでは、並びとその
+    参照の閉包 (並びの記録・来歴の並びと足した決定・候補の記録とモデル・読み手) も入れる (K37 決定 3)。作り直しは
+    足した決定と、読み直す観測の全部。"""
     ledger = state.ledger
-    b = ledger.record(ob.binding).body.content.as_json()
-    if ob.kind == "execution":
-        # 行った一歩の結果 (K36 決定 5): 結果のメモ・読み方・行う一歩の宣言の記録・モデル
-        out = {plan.boot.d, plan.boot.points["origin"], plan.perception.model, plan.points["execution_reading"],
-               ob.binding, ob.result.execution.reading}
-    elif plan.kind == "acquisition":
-        # 取りに行きの列 (K28 (2)(e)): 観測モデル・物語の対応・読み方と、この回の Frame・B・取れた回の原文。0〜i - 1 の
-        # Frame・B・原文は、前の採用の Q* が読んだ全部 (下の系列をさかのぼった閉包) に入っている
-        out = {plan.boot.d, plan.boot.points["origin"], plan.perception.model, plan.points["correspondence"],
-               plan.points["reading"], plan.boot.points["observation_model:" + plan.args["observation_model"]],
-               ob.binding, ob.report, b["segment"], b["route"]}
-        received = _received(_frame_value(state, ob.report))
-        if received is not None:
-            out.add(ledger.entries_of(received)[0].cid)
+    if plan.kind == "segment":
+        b = ledger.record(ob.binding).body.content.as_json()
+        out = {plan.boot.d, pool.origin, pool.model, plan.points[_reading_name("law", pool)],
+               _reading_point(plan, pool, "frame"), ob.binding, ob.report, b["segment"], b["route"]}
     else:
-        out = {plan.boot.d, plan.boot.points["origin"], plan.perception.model, plan.points["law"], plan.points["reading"],
-               ob.binding, ob.report, b["segment"], b["route"]}
+        out = {plan.boot.d, pool.origin, pool.model} | (set() if pool.initial else set(pool.records))
+        if ob.kind == "rebuild":
+            out.add(ob.report)
+        for o in _covered(plan, ob):
+            out |= _observation_inputs(state, plan, pool, o)
     if prior is not None:
         adopted = ledger.record(prior).body.content.as_json()
         previous = ledger.record(adopted["request"]).body.content.as_json()["desc"]
         out |= {prior, adopted["result"], adopted["request"], adopted["acquisition"], *previous["input_points"]}
     return frozenset(out)
+
+
+def _observation_inputs(state, plan, pool, ob) -> set:
+    """観測 1 つを並び pool で読むのに要る記録。"""
+    ledger = state.ledger
+    if ob.kind == "execution":
+        # 行った一歩の結果 (K36 決定 5): 結果のメモ・読み方・行う一歩の宣言の記録 (足した並びでは E のモデルも)
+        out = {_reading_point(plan, pool, "execution"), ob.binding, ob.result.execution.reading}
+        return out if pool.initial else out | {ob.result.execution.model}
+    # 取りに行きの列 (K28 (2)(e)): 観測モデル・物語の対応・読み方と、この回の Frame・B・取れた回の原文。0〜i - 1 の
+    # Frame・B・原文は、前の採用の Q* が読んだ全部 (系列をさかのぼった閉包) に入っている
+    b = ledger.record(ob.binding).body.content.as_json()
+    out = {_reading_point(plan, pool, "frame"), plan.boot.points["observation_model:" + plan.args["observation_model"]],
+           ob.binding, ob.report, b["segment"], b["route"]}
+    if pool.initial:
+        out.add(plan.points["correspondence"])
+    received = _received(_frame_value(state, ob.report))
+    if received is not None:
+        out.add(ledger.entries_of(received)[0].cid)
+    return out
 
 
 def _q_step(ob):
@@ -905,25 +1098,33 @@ def _q_step(ob):
         prior = _head(plan)
         if prior == "wait":
             return None
-        d, initial, origin = plan.boot.d, plan.perception, plan.boot.points["origin"]
+        # 読む並び: 作り直しは足した並び、ほかは今の境目で効いている並び (解けなければ作らない)
+        pool = ob.pool if ob.kind == "rebuild" else plan.current
+        if pool is None:
+            return None
+        d, initial, origin, model = plan.boot.d, plan.perception, pool.origin, pool.model
+        observations = []
+        for o in _covered(plan, ob):
+            reading = _reading_point(plan, pool, o.kind)
+            if reading is None:
+                return None   # その並びの読み方の記録の保存待ち
+            observations.append(_fb.ObservationUse(binding=o.binding, reading=reading))
         stage, work_id = _names(plan, ob)
-        inputs = _inputs(state, plan, ob, prior)
+        inputs = _inputs(state, plan, ob, prior, pool)
         desc = _fb.Desc(
             work_id=work_id,
             process=_fb.BootSlot(declaration=d, slot=initial.process_slot),
             trigger=frozenset({_fb.Trigger(point=ob.report, slot="trigger")}),
             purpose="belief_update", stage_slot=stage, reader=origin,
             method=_c.FINITE_UPDATE_COMPUTE, output_contract=_c.UPDATE_RESPONSE,
-            args=_fb.UpdateArgs(model=initial.model, prior=prior, observations=(
-                _fb.ObservationUse(binding=ob.binding, reading=plan.points[
-                    "execution_reading" if ob.kind == "execution" else "reading"]),)),
+            args=_fb.UpdateArgs(model=model, prior=prior, observations=tuple(observations)),
             input_points=inputs, numerical_view=_fixed_view(state, inputs),
             allocation=_fb.BootSlot(declaration=d, slot=initial.allocation.slot),
             permissions=frozenset({_fb.BootSlot(declaration=d, slot=initial.derivation.slot),
                                    _fb.BootSlot(declaration=d, slot=initial.allocation.slot)}))
         # Desc を義務に置く (= 要求を作った印) のは、記録の準備が通った後 (紙 §2-4 :323「『済み』の印だけ先に
         # 置かない」)。ここで置くと、下の読みや準備が失敗した時に、入り直しで同じ義務の Q* を作り直せなくなる
-        drafted["desc"] = desc
+        drafted["desc"], drafted["pool"] = desc, pool
         ledger = state.ledger
         body = _Decided(inputs=tuple(ledger.record(p).id for p in sorted(inputs)),
                         content=_Payload.json({"desc": _encode(desc)}), contract=_c.WORK_REQUESTED)
@@ -933,7 +1134,12 @@ def _q_step(ob):
     def prepared(state, plan_ob, cid):
         from ._fb_core import add_work
         plan, ob = plan_ob
-        ob.desc = drafted["desc"]
+        ob.desc, ob.pool = drafted["desc"], drafted["pool"]
+        if ob.kind == "rebuild":
+            # 作り直しが読み直した止まった結末は、もう系列を止めない (K37 決定 4)
+            for other in plan.obligations.values():
+                if other is not ob and other.final not in (None, "adopted"):
+                    other.superseded = True
         add_work(state, _fb.Compute(request=cid, desc=ob.desc), plan.boot.declaration.scope.value)
 
     return _Step(name="Q", build=build, on_prepared=prepared)
@@ -1022,7 +1228,7 @@ def _acquire_steps():
         if ob.acquired_ns is None:
             state.ledger.record(r)   # 本文を実際に読む
             a = mono_ns(state.clock)
-            state.acquisitions.append(AcquisitionObservation(origin=plan.boot.points["origin"],
+            state.acquisitions.append(AcquisitionObservation(origin=_origin_of(plan, ob),
                                                              contents=frozenset({r}), acquired_ns=a))
             ob.acquired_ns = a   # 済んだ実際の取得は 1 回。この後で記録の準備に失敗しても、同じ取得のまま入り直す
         a = ob.acquired_ns
@@ -1035,7 +1241,7 @@ def _acquire_steps():
     def build_acquired(state, plan_ob):
         from ._fb_core import Slot, mono_ns
         plan, ob = plan_ob
-        origin, r, clock = plan.boot.points["origin"], ob.points["R"], ob.points["a"]
+        origin, r, clock = _origin_of(plan, ob), ob.points["R"], ob.points["a"]
         value = _f.ContentAcquired(origin=origin, contents=(r,), clock=clock)
         body = _Observed(route="fb", content=_Payload.json(_f._encode(value)), contract=_fc.CONTENT_ACQUIRED,
                          received_ns=mono_ns(state.clock))
@@ -1062,12 +1268,13 @@ def _adopt_step():
                 return None
         head = plan.chain[-1] if plan.chain else None
         ledger = state.ledger
-        origin, q, r, g = plan.boot.points["origin"], ob.points["Q"], ob.points["R"], ob.points["G"]
+        origin, q, r, g = _origin_of(plan, ob), ob.points["Q"], ob.points["R"], ob.points["G"]
+        model = _model_of(plan, ob)
         if ob.desc.args.prior == head:
             ob.points["decision"] = "A"
-            content = {"origin": origin, "model": plan.perception.model, "previous": head, "request": q,
+            content = {"origin": origin, "model": model, "previous": head, "request": q,
                        "result": r, "acquisition": g}
-            uses = {origin, plan.perception.model, q, r, g} | ({head} if head else set())
+            uses = {origin, model, q, r, g} | ({head} if head else set())
             body = _Decided(inputs=tuple(ledger.record(p).id for p in sorted(uses)),
                             content=_Payload.json(content), contract=_c.BELIEF_ADOPTED)
             return Slot(contract=_c.BELIEF_ADOPTED, record=_record(state, body, _RefKind.DECISION, _Role.MODEL),
@@ -1115,6 +1322,7 @@ def _finish(state, plan, ob, row) -> None:
         issues = value["value"]["issues"] if hasattr(value["value"], "items") else ()
         ob.reasons = tuple(dict.fromkeys(str(i["code"]) for i in issues))   # 表示用 (B1)。自由な文は載せない
         ob.fields = tuple(dict.fromkeys(str(f) for i in issues for f in i["fields"]))
+        ob.evidence = tuple(dict.fromkeys(str(e) for i in issues for e in i.get("evidence", ())))   # 名指し (K37)
         return
     issued = _check_issued(state, ob, row, number, outcome)
     if isinstance(issued, str):
@@ -1140,10 +1348,15 @@ def advance(state) -> None:
         _advance(state, plan)
         if "reading" not in plan.points:
             continue
+        _resolve(state, plan)   # 今の境目で効いている並び (K37 決定 3)。新しい並びの読み方の記録もここで保存する
+        if plan.current is not None and not plan.current.initial:
+            _advance(state, plan)
         _discover(state, plan)
-        if plan.kind == "acquisition" and plan.stopped is None:
-            # 採用の判断を作る前に、届いている未採用の観測どうしの順を決める (K36 決定 12、レビュー R8)
-            _pending_clash(state, plan)
+        if plan.kind == "acquisition" and plan.current is not None:
+            _need_rebuild(plan)
+            if plan.stopped is None:
+                # 採用の判断を作る前に、届いている未採用の観測どうしの順を決める (K36 決定 12、レビュー R8)
+                _pending_clash(state, plan)
         for ob in plan.obligations.values():
             if plan.kind == "acquisition" and ob.kind == "frame" and ob.desc is not None and ob.reading is None:
                 ob.reading = _read_stage(state, plan, ob)   # 表示用。読めなければ settle ごと抜けて次で読み直す
@@ -1167,6 +1380,11 @@ def advance(state) -> None:
                 ob.points[decision] = ob.points["decide"]
                 if decision == "A":
                     plan.chain.append(ob.points["A"])
+                    # 系列の頭の数値に読んだ観測: 作り直しは読み直した列に並び直す (K37 決定 4)
+                    if ob.kind == "rebuild":
+                        plan.applied = list(ob.relist)
+                    elif plan.kind == "acquisition":
+                        plan.applied.append(ob)
             if ob.final == "adopted" and not ob.points.get("continued"):
                 _continue(state, plan, ob)
 
@@ -1189,13 +1407,17 @@ def statuses(state) -> tuple:
         saved = [_saved_point(state, t.frame_envelope) is not None
                  and (t.envelope is None or _saved_point(state, t.envelope) is not None) for t in takes]
         through = next((i - 1 for i, ok in enumerate(saved) if not ok), len(saved) - 1)
-        adopted_frames = sum(1 for ob in plan.obligations.values() if ob.kind == "frame" and ob.final == "adopted")
+        adopted_frames = sum(1 for ob in plan.applied if ob.kind == "frame")
         tails = {"published_through": takes[-1].sample_seq, "saved_through": through if through >= 0 else None,
                  # 受け身の取りに行きの採用だけを数える (一歩の結果の採用は別、レビュー R4)
                  "adopted_through": adopted_frames - 1 if adopted_frames else None}
         for take, ok in zip(takes, saved):
             frame = _saved_point(state, take.frame_envelope)
-            ob = plan.obligations.get(frame) if frame is not None else None
+            own = plan.obligations.get(frame) if frame is not None else None
+            # 候補を足した後の作り直しがこの回を読み直していれば、その結末を見せる (どの並びで読んだかは model、K37)
+            covering = [o for o in plan.obligations.values()
+                        if o.kind == "rebuild" and o.desc is not None and own is not None and own in o.relist]
+            ob = covering[-1] if covering else own
             reasons, fields = (), ()
             if ob is not None and ob.final is not None:
                 outcome, reasons, fields = ob.final, ob.reasons, ob.fields
@@ -1220,10 +1442,12 @@ def statuses(state) -> tuple:
             else:
                 outcome = "ready"
             out.append(_fb.BeliefUpdateStatus(
-                model=plan.perception.model, origin=plan.boot.points.get("origin"), route_epoch=take.route_epoch,
-                sample_seq=take.sample_seq, obligation=ob.binding if ob is not None else None,
+                model=(_pool_of(plan, ob) if ob is not None else plan.initial).model,
+                origin=(_pool_of(plan, ob) if ob is not None else plan.initial).origin,
+                route_epoch=take.route_epoch, sample_seq=take.sample_seq,
+                obligation=own.binding if own is not None else None,
                 request=ob.points.get("Q") if ob is not None else None, outcome=outcome,
-                reading=ob.reading if ob is not None else None, reasons=reasons, fields=fields, **tails))
+                reading=own.reading if own is not None else None, reasons=reasons, fields=fields, **tails))
     return tuple(out)
 
 

@@ -306,9 +306,9 @@ def _intention_step():
 # --- 方策の進み (決定 8) ---
 
 def _enter_node(state, intention, node_id, trigger) -> None:
-    """節 node_id に着いた: execute なら一歩を足し、end で終わり、choose は未接続で止まる。"""
-    perception = intention.boot.declaration.perception.value
-    found = _nodes(state, perception.model, intention.selected.choice.policy)
+    """節 node_id に着いた: execute なら一歩を足し、end で終わり、choose は未接続で止まる。方策は選んだ評価のモデルの
+    もの (K37 決定 7)。"""
+    found = _nodes(state, intention.think.model, intention.selected.choice.policy)
     if found is None:
         intention.outcome, intention.reason = "stopped", "policy_unknown"
         return
@@ -335,14 +335,19 @@ def _request_step(execution, kid):
 
     def build(state, intention):
         from ._fb_core import Slot
+        from ._fb_pool import resolve
         boot = intention.boot
-        d, origin = boot.d, boot.points["origin"]
         reading = boot.points.get("execution")
         if reading is None or intention.points.get("intention") is None or held_back(state, intention):
             return None
+        try:
+            # E の見立てのモデル = E を固める境目で効いている候補の並びのモデル (K37 決定 3・6)。解けなければ待つ
+            pool = resolve(state, boot, state.ledger.heads())
+        except _fb.CandidatePoolError:
+            return None
+        d, origin = boot.d, pool.origin
         initial = boot.declaration.initial
         execution_allocation = boot.declaration.execution.value.allocation
-        perception = boot.declaration.perception.value
         selected = intention.selected
         chain = _chain(state, boot)
         point = intention.points["intention"]
@@ -351,11 +356,12 @@ def _request_step(execution, kid):
             draw=selected.root.draw_point, intention=point, policy=selected.choice.policy, node=execution.node,
             occurrence=execution.occurrence, action=selected.choice,
             kernel=_f.KernelRef(name="finite_kernel", version="1", args={"id": kid}), u=kid,
-            model=perception.model, reading=reading, prior=chain[-1] if chain else None)
+            model=pool.model, reading=reading, prior=chain[-1] if chain else None)
         stage = "execute:" + point + ":" + execution.node + ":" + str(execution.occurrence)
         trigger_point, trigger_slot = execution.trigger if execution.trigger is not None else (point, "intention")
-        inputs = {intention.selection, intention.evaluated, point, perception.model, reading, origin, d,
-                  trigger_point} | ({args.draw} if args.draw else set()) | ({args.prior} if args.prior else set())
+        inputs = {intention.selection, intention.evaluated, point, pool.model, reading, origin, d,
+                  trigger_point} | ({args.draw} if args.draw else set()) | ({args.prior} if args.prior else set()) \
+            | (set() if pool.initial else set(pool.records))
         desc = _fb.Desc(
             work_id=_work_id(d, initial.slot, "execute_step", stage),
             process=_fb.BootSlot(declaration=d, slot=initial.value.process_slot),
@@ -407,15 +413,14 @@ def _after_result(state, intention, execution) -> None:
     if intention.replaced_by is not None:
         return
     report = receipt.envelope.event
-    perception = intention.boot.declaration.perception.value
-    found = _nodes(state, perception.model, intention.selected.choice.policy)
+    found = _nodes(state, intention.think.model, intention.selected.choice.policy)
     if found is None:
         intention.outcome, intention.reason = "stopped", "policy_unknown"
         return
     node = found[1][execution.node]
     kid = node["kernel"]
     if report.outcome == "no_effect":
-        k = kernel(state, perception.model, kid)
+        k = kernel(state, execution.args.model, kid)
         names = tuple(o["id"] for o in k["outcomes"])
     elif report.outcome == "observed":
         names = cell_outcomes(intention.boot, kid, report.value)
@@ -440,8 +445,7 @@ def advance(state) -> None:
         for intention in act.intentions:
             if "intention" in intention.points and intention.node is None and intention.outcome == "running" \
                     and intention.replaced_by is None and intention.applied and not intention.withheld:
-                perception = intention.boot.declaration.perception.value
-                found = _nodes(state, perception.model, intention.selected.choice.policy)
+                found = _nodes(state, intention.think.model, intention.selected.choice.policy)
                 if found is None:
                     intention.outcome, intention.reason = "stopped", "policy_unknown"
                 else:

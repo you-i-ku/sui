@@ -49,6 +49,8 @@ __all__ = [
     "Perception", "ExecutionDeclaration", "ExecutionArgs", "ExecuteStep", "StepExecutor", "FActor",
     "ExecutionResult", "ExecutionReport", "PolicyStatus", "IntentionStatus", "ExecutionStatus",
     "EvaluationStatus", "ThinkingMaterialStatus",
+    "BeliefCandidate", "CandidateAddition", "PoolMember", "PoolState", "BeliefPool", "CandidatePosterior",
+    "PoolBelief", "CandidateInputError", "CandidatePoolError",
     "start", "RunningSui", "StartInputError",
 ]
 
@@ -950,6 +952,98 @@ class AcquisitionReadResult:
     contracts: tuple[ContractRef, ...]
 
 
+# --- 候補の並びと、候補を足す口 (§6-10 K37) ---
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class BeliefCandidate:
+    """足す候補 1 つ (紙 F-b K37 決定 1)。id は並びの中の名前 (並びの中で一意)、model は保存済みの見立てのモデル
+    (`sui.f.model_source/1`、状態の一覧・事前・核) の Point、observation_model はその候補の取りに行きの観測の見込み、
+    correspondence は物語の対応 {pairs: [[観測モデルの状態, モデルの状態], ...]}。宣言で、正しいことの証明ではない
+    (読めない宣言は、その候補で観測を読む時に名指して止まる)。"""
+    id: str
+    model: Point
+    observation_model: AcquisitionObservationModel
+    correspondence: ImmutableJSON
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class CandidateAddition:
+    """`FThreadHost.add_candidate` の返値: 保存した候補の記録・新しい並びの記録 (Prediction / MODEL)・足した決定 (Decided)。"""
+    candidate: Point
+    pool: Point
+    decision: Point
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class PoolMember:
+    """並びの候補 1 つ。prior_weight は並びの起点での事前の重み (K37 決定 8)、law は予測の法則の識別 (知る対象に含める。
+    同じ宣言なら同じ法則 = 別名。候補の名前でも記録の Point でもない、K37 決定 1)。"""
+    id: str
+    model: Point
+    prior_weight: _Fraction
+    law: str
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class PoolState:
+    """同時の信念の 1 成分 (候補 × 候補の中の状態)。target は候補の中の元の知る対象、law はその候補の法則の識別。"""
+    candidate: str
+    state: str
+    target: str
+    law: str
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class BeliefPool:
+    """今効いている並び (K37 決定 1・3)。point は並びの記録 (最初の並びは起動の宣言)、model はその直和のモデル (最初の並び
+    は感じる側のモデル。F-a の読み口で読める model_source)、states は同時の信念の並びの順。"""
+    point: Point
+    model: Point
+    members: tuple[PoolMember, ...]
+    states: tuple[PoolState, ...]
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class CandidatePosterior:
+    """候補 1 つの事後の重みと、候補の中の条件つきの見立て (重み 0 の候補は conditional=None。作らない、K37 決定 5)。"""
+    candidate: str
+    weight: _Fraction
+    conditional: tuple[_Fraction, ...] | None
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class PoolBelief:
+    """境目の並びの見立て (K37 決定 3〜5)。adoption・result はその並びの最新の採用 A* と結果 R* (最初の並びでまだ採用が
+    無ければ None で、joint は宣言の事前・evidence_mass は 1)。joint は states の順の同時の信念。"""
+    pool: Point
+    adoption: Point | None
+    result: Point | None
+    joint: tuple[_Fraction, ...]
+    evidence_mass: _Fraction
+    candidates: tuple[CandidatePosterior, ...]
+
+
+class CandidateInputError(ValueError):
+    """候補を足す口の入力の誤り (α の範囲外・候補の形・知らない起動や境目・直和のモデルに表せない候補)。何も保存しない。"""
+
+    def __init__(self, *, reason: str, field: str) -> None:
+        super().__init__(f"{reason}: {field}")
+        self.reason = reason
+        self.field = field
+
+
+class CandidatePoolError(RuntimeError):
+    """並びやその見立てを解けない・読めない (K37 決定 3)。reason は理由の語、targets は名指しの Point、retryable は待てば
+    解けるか (足した並びの作り直しの保存待ち = True。比べられない足し・読めない記録・止まった系列 = False)。前の並びへ
+    黙って戻らない。"""
+
+    def __init__(self, *, reason: str, targets: tuple[Point, ...], retryable: bool) -> None:
+        super().__init__(f"{reason}: {', '.join(targets)}")
+        self.reason = reason
+        self.targets = tuple(targets)
+        self.retryable = retryable
+
+
 def read_acquisition_sequence(records: _Mapping[Point, Record], *, model: Point, run: Ref, route_epoch: str,
                               through_seq: int) -> AcquisitionReadResult:
     """取得の列を読む口 (§6-10 K26 (2)(c)・K26-a (イ))。records は読み手の範囲の Point → Record、model は保存した観測モデルの
@@ -1131,6 +1225,26 @@ class FThreadHost:
     def halted(self) -> Interruption | None:
         """止まったホストの理由。動いている時は None。"""
         return self._state.halted
+
+    def add_candidate(self, *, boot: Point, candidate: BeliefCandidate, alpha: _Fraction,
+                      boundary: frozenset[Point] | None = None) -> CandidateAddition:
+        """候補を 1 つ足す口 (紙 F-b K37 決定 2・8)。boot は起動の宣言の Point、alpha は新しい並びの起点での新しい候補の
+        事前確率 (0 < α < 1、呼ぶ者が明示して渡す。前からの候補の起点の重みは一律 (1−α) 倍)、boundary は前の並びを解く
+        因果の境目 (保存済みの点の集合。None は今の置き場の頭)。入力の誤りは何も保存せずに CandidateInputError、前の
+        並びを解けなければ CandidatePoolError。足したことは観測に数えず、見立ての作り直しは更新の計画が行う。"""
+        from . import _fb_pool
+        return _fb_pool.add(self._state, boot, candidate, alpha, boundary)
+
+    def belief_pool(self, *, boot: Point, boundary: frozenset[Point] | None = None) -> BeliefPool:
+        """境目で効いている並び (K37 決定 3)。仕事を進めず、記録を足さない。"""
+        from . import _fb_pool
+        return _fb_pool.belief_pool(self._state, boot, boundary)
+
+    def pool_belief(self, *, boot: Point, boundary: frozenset[Point] | None = None) -> PoolBelief:
+        """境目の並びの見立て (K37 決定 3〜5)。仕事を進めず、記録を足さない。解けない・読めない・止まった時は
+        CandidatePoolError (待てば解けるかは retryable)。"""
+        from . import _fb_pool
+        return _fb_pool.pool_belief(self._state, boot, boundary)
 
     def rebuild_window(self) -> FWindow:
         """同じプロセスの中で窓口を作り直して返す (M2)。H・P・C・E と動いている係はそのまま。

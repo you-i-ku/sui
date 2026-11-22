@@ -904,7 +904,9 @@ def test_public_export_names_are_exact():
         "FbInputError", "FbHostFault", "FHalted", "FWorkContext", "FWorkers", "FLauncher", "FWindow", "FThreadHost",
         "FSource", "SourceMeasurer", "FiniteUpdater", "CandidateGenerator", "EvaluationPreparer", "Evaluator", "UniformDraw", "WorkerBundle", "read_acquisition_sequence", "BeliefUpdateStatus",
         "start", "RunningSui", "StartInputError", "StepExecutor", "FActor", "ExecutionDeclaration", "FStatus",
-        "ExecutionArgs", "ExecuteStep", "ExecutionResult", "ExecutionReport", "PolicyStatus", "IntentionStatus", "ExecutionStatus"}
+        "ExecutionArgs", "ExecuteStep", "ExecutionResult", "ExecutionReport", "PolicyStatus", "IntentionStatus", "ExecutionStatus",
+        "BeliefCandidate", "CandidateAddition", "PoolMember", "PoolState", "BeliefPool",
+        "CandidatePosterior", "PoolBelief", "CandidateInputError", "CandidatePoolError"}
     missing = expected - set(fb.__all__)
     assert not missing, "public export names missing: " + ", ".join(sorted(missing))
     assert set(fb.__all__) == expected

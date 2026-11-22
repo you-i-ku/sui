@@ -115,6 +115,8 @@ class State:
         self.acting: dict = {}         # P.units: Boot の封筒の番号 → 引受けと一歩の計画 (_fb_act.ActPlan、K36)
         self.handed: dict = {}         # Boot の Point → 評価に渡した根の境界 (採用の系列の位置、戻さない。K36-c ③ (a))
         self.admitted: dict = {}       # Boot の Point → 入場させた評価の活動の数 (活動の識別の番号、K36-c-a ④ (c))
+        self.additions: list = []      # 候補を足した決定: (起動の宣言の Point, 足した決定の Point) の列 (K37。並びは記録から解く)
+        self.initial_pools: dict = {}  # 起動の宣言の Point → 最初の並び (_fb_pool.Pool、不変の値。K37)
 
 
 def mono_ns(clock) -> int:

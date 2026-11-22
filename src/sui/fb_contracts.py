@@ -132,3 +132,8 @@ ACQUISITION_GENERATION = _ContractRef("sui.fb.acquisition_generation", "1")     
 ONE_SEAT_PER_WORK = _ContractRef("sui.fb.one_seat_per_work", "1")
 # 読み方: 行った一歩の結果を、その節の核と行う一歩の宣言のセルで読む (K36 決定 5)
 EXECUTION_STEP_PROJECTION = _ContractRef("sui.fb.execution_step_projection", "1")
+
+# 候補の並びの本 (§6-10 K37)。見立ては起動の宣言が置いた候補の並びに対する 1 つの同時の信念。候補を足す口が残す記録
+BELIEF_CANDIDATE = _ContractRef("sui.fb.belief_candidate", "1")   # 足した候補の宣言 (Prediction / MODEL)
+BELIEF_POOL = _ContractRef("sui.fb.belief_pool", "1")             # 並びの記録 (Prediction / MODEL): 候補・最初の重み・直和のモデル
+CANDIDATE_ADDED = _ContractRef("sui.fb.candidate_added", "1")     # 足した決定 (Decided / MODEL): 候補・新しい並び・前の並び・境目

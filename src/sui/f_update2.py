@@ -561,53 +561,53 @@ def _update_desc(reader, point):
 
 def _series(reader, request):
     """採用の系列を前の採用 A* でさかのぼった更新要求の列 (古い順)。各項は (Q* の Point, Desc, その Q* を採用した A* の
-    本文 | None)。A* は同じ model のもので、A*.previous がその要求の prior と一致する (§19-3)。"""
+    本文 | None)。A* はその要求と同じ model・同じ読み手のもので、A*.previous がその要求の prior と一致する (§19-3)。
+    系列の中で model と読み手が替わってよいかは `_replay` が並びの記録で確かめる (紙 F-b K37 決定 4)。"""
     c = _c()
     out, point, adopted = [], request, None
-    first = _update_desc(reader, request)
-    model, origin = first["args"]["model"], first["reader"]
     while True:
         desc = _update_desc(reader, point)
-        if desc["args"]["model"] != model:
-            raise _Issue("rejected", "observation_binding_mismatch", "the adoption series changes its model",
-                         fields=("/args/prior",), evidence=(point,))
-        # 系列の読み手 (origin) は 1 つ: 各 Q* の reader・各 A* の origin が今回の要求の reader と同じ (K28 新しい決定 4)
-        if desc["reader"] != origin or adopted is not None and adopted["origin"] != origin:
-            raise _Issue("rejected", "observation_binding_mismatch", "the adoption series changes its origin",
-                         fields=("/reader",), evidence=(point,))
-        if adopted is not None and adopted["previous"] != desc["args"]["prior"]:
-            raise _Issue("rejected", "result_mismatch", "an adoption does not continue its request's prior",
-                         fields=("/args/prior",), evidence=(point,))
+        if adopted is not None:
+            if adopted["previous"] != desc["args"]["prior"]:
+                raise _Issue("rejected", "result_mismatch", "an adoption does not continue its request's prior",
+                             fields=("/args/prior",), evidence=(point,))
+            if adopted["model"] != desc["args"]["model"] or adopted["origin"] != desc["reader"]:
+                raise _Issue("rejected", "observation_binding_mismatch",
+                             "an adoption differs from its request's model or reader", fields=("/args/prior",),
+                             evidence=(point,))
         out.append((point, desc, adopted))
         prior = desc["args"]["prior"]
         if prior is None:
             return out[::-1]
         adopted = _content(reader, prior, c.BELIEF_ADOPTED)
-        if adopted["model"] != model:
-            raise _Issue("rejected", "observation_binding_mismatch", "the previous adoption is of another model",
-                         fields=("/args/prior",), evidence=(prior,))
         point = adopted["request"]
 
 
 def _replay(reader, request) -> _State:
     """モデルの最初の joint から、採用の系列の全部の観測を一次事実から順に条件づけ直す (P1: 保存した結果の値から
-    続きを計算しない)。前の採用が指す保存した結果 R* は、作り直した値と全比較する (§19-8)。"""
-    from .f import _Fraction, _decode
+    続きを計算しない)。前の採用が指す保存した結果 R* は、作り直した値と全比較する (§19-8)。
+
+    候補を足した後 (紙 F-b K37 決定 4): 系列の中で model が替わるのは、新しい model がその要求の入力にある並びの記録の
+    直和のモデルで、前の model をその並びの来歴に持つ時だけ (前の並びへ戻らない)。替わった所で数値は新しい並びの事前から
+    作り直し、その要求は前の区間で読んだ原記録を全部、同じ順で先頭に読み直す (来歴は前の採用を指したまま、数値の根と
+    分ける)。読み手はその並びの読み手 (knowledge_origin) に替わる。"""
     c = _c()
     series = _series(reader, request)
-    model = series[-1][1]["args"]["model"]
-    try:
-        content = reader.record(model).body.content.as_json()
-    except KeyError:
-        raise _Issue("rejected", "unresolved_reference", f"{model} is outside the reader") from None
-    document = content.get("document") if hasattr(content, "items") else None
-    if not hasattr(document, "items") or "initial" not in document:
-        raise _Issue("rejected", "reference_kind", f"{model} is not a model with an initial state",
-                     fields=("/args/model",), evidence=(model,))
-    state = _State(_decode(document["initial"], tuple[_Fraction, ...]), document.get("states", ()))
+    pools = _Pools(reader, series[-1][1])
+    state, model, origin, applied = None, None, None, []
     for point, desc, adopted in series:
+        if desc["args"]["model"] != model:
+            if model is not None:
+                _check_change(reader, pools, model, applied, desc, point)
+            model, origin, applied = desc["args"]["model"], desc["reader"], []
+            state = _initial(reader, model)
+        elif desc["reader"] != origin:
+            raise _Issue("rejected", "observation_binding_mismatch", "the adoption series changes its origin",
+                         fields=("/reader",), evidence=(point,))
         for use in desc["args"]["observations"]:
-            _apply(reader, state, model, use["binding"], use["reading"], desc)
+            _apply(reader, state, model, use["binding"], use["reading"], desc, pools)
+            if use["binding"] not in applied:
+                applied.append(use["binding"])
         if adopted is not None:
             saved = _content(reader, adopted["result"], c.UPDATE_RESULT)
             if saved["request"] != point or saved["result"] != _encode_result(state) \
@@ -617,9 +617,327 @@ def _replay(reader, request) -> _State:
     return state
 
 
-def _apply(reader, state, model, binding, reading, desc) -> None:
+def _initial(reader, model) -> _State:
+    from .f import _Fraction, _decode
+    document = _model_document(reader, model, evidence=(model,))
+    if "initial" not in document:
+        raise _Issue("rejected", "reference_kind", f"{model} is not a model with an initial state",
+                     fields=("/args/model",), evidence=(model,))
+    return _State(_decode(document["initial"], tuple[_Fraction, ...]), document.get("states", ()))
+
+
+def _model_document(reader, model, *, evidence):
+    """モデルの宣言の document (JSON)。読めなければ不適合。"""
+    try:
+        content = reader.record(model).body.content.as_json()
+    except KeyError:
+        raise _Issue("rejected", "unresolved_reference", f"{model} is outside the reader", evidence=evidence) from None
+    document = content.get("document") if hasattr(content, "items") else None
+    if not hasattr(document, "items"):
+        raise _Issue("rejected", "reference_kind", f"{model} is not a model", fields=("/args/model",),
+                     evidence=evidence)
+    return _json(document)
+
+
+def _check_change(reader, pools, previous, applied, desc, point) -> None:
+    """系列の model の替わり目 (紙 F-b K37 決定 2・4): 新しい model が並びの直和のモデルで、前の model をその来歴に持ち、
+    その要求が前の区間の原記録を全部同じ順で先頭に読み直し、読み手がその並びのモデルの読み手であること。"""
+    c = _c()
+    model = desc["args"]["model"]
+    pool = pools.get(model)
+    if pool is None or previous not in pool["lineage"]:
+        raise _Issue("rejected", "observation_binding_mismatch", "the adoption series changes its model",
+                     fields=("/args/prior",), evidence=(point,))
+    listed = list(dict.fromkeys(use["binding"] for use in desc["args"]["observations"]))
+    if listed[:len(applied)] != applied:
+        raise _Issue("rejected", "observation_binding_mismatch",
+                     "the new pool does not re-read the series from its origin", fields=("/args/observations",),
+                     evidence=(point, pool["point"]))
+    if _content(reader, desc["reader"], _knowledge_origin()).get("model") != model:
+        raise _Issue("rejected", "observation_binding_mismatch", "the reader is not of the pool model",
+                     fields=("/reader",), evidence=(point, desc["reader"]))
+
+
+def _knowledge_origin():
+    from .f_contracts import KNOWLEDGE_ORIGIN
+    return KNOWLEDGE_ORIGIN
+
+
+# --- 候補の並び (紙 F-b K37 決定 1・3・5・6・8) ---
+
+def candidate_law(document, observation, pairs) -> str:
+    """候補の予測の法則の識別 (知る対象に含める、K37 決定 1)。宣言 (モデルの document・観測モデル・物語の対応) の正準な
+    要約で、同じ宣言なら同じ法則 (別名)。一般の法則の同値は判定しない。"""
+    from .f import _digest
+    return _digest({"domain": "sui.fb.candidate_law/1", "document": _json(document),
+                    "observation_model": _json(_enc(observation)), "pairs": _json(pairs)})
+
+
+def direct_sum(members) -> dict:
+    """候補の並びの直和のモデルの document (K37 決定 1・3)。members は {id, document, weight, law} の列 (並びの順)。
+    隠れた状態 = 「候補の番号:候補の中の状態」、知る対象 = 「法則の識別/元の知る対象」(同じ法則の別名は同じ知る対象)、
+    事前 = 候補の重み × 候補の中の事前。核は全部の候補が宣言している核だけで、outcome は id ごとに各候補のかたまりを
+    対角に並べる (その outcome の無い候補は 0 のかたまり。候補の間の移り変わりは構造の 0)。操作と方策は全部の候補が同じに
+    宣言しているものだけ (共通部分)。表せない時は ValueError (理由の語)。"""
+    from fractions import Fraction
+    from .f import _Fraction, _decode, _dumps
+    docs = [_json(m["document"]) for m in members]
+    first = docs[0]
+    for doc in docs[1:]:
+        if any(_dumps(doc.get(k)) != _dumps(first.get(k))
+               for k in ("scheme", "contract", "units", "certificate_capabilities")):
+            raise ValueError("model_scheme")
+    states, targets, initial, offsets = [], [], [], []
+    for m, doc in zip(members, docs):
+        offsets.append(len(states))
+        states += [{"id": m["id"] + ":" + s["id"], "target": m["law"] + "/" + s["target"]} for s in doc["states"]]
+        targets += [m["law"] + "/" + t for t in doc["targets"]]
+        initial += [m["weight"] * q for q in _decode(doc["initial"], tuple[_Fraction, ...])]
+    if len({s["id"] for s in states}) != len(states):
+        raise ValueError("state_names")
+    n = len(states)
+    kernels = []
+    for kernel in first["kernels"]:
+        found = [next((k for k in doc["kernels"] if k["id"] == kernel["id"]), None) for doc in docs]
+        if None in found:
+            continue
+        outcomes = {}
+        for offset, k in zip(offsets, found):
+            for o in k["outcomes"]:
+                attrs = {key: value for key, value in o.items() if key not in ("id", "matrix")}
+                if o["id"] not in outcomes:
+                    outcomes[o["id"]] = (attrs, [[Fraction(0)] * n for _ in range(n)])
+                elif _dumps(outcomes[o["id"]][0]) != _dumps(attrs):
+                    raise ValueError("outcome_attributes")
+                matrix = outcomes[o["id"]][1]
+                for i, row in enumerate(o["matrix"]):
+                    for j, x in enumerate(row):
+                        matrix[offset + i][offset + j] = Fraction(*x) if isinstance(x, list) else Fraction(x)
+        kernels.append({"id": kernel["id"], "outcomes": [
+            {"id": oid, **attrs, "matrix": _enc(tuple(tuple(row) for row in matrix))}
+            for oid, (attrs, matrix) in outcomes.items()]})
+
+    def common(key):
+        return [item for item in first[key] if all(any(_dumps(x) == _dumps(item) for x in doc[key]) for doc in docs[1:])]
+
+    def ref(value):
+        try:
+            return value["args"]["id"]
+        except (KeyError, TypeError):
+            return None
+    operations, policies = common("operations"), common("policies")
+    kids = {k["id"] for k in kernels}
+    while True:   # 欠けた核を使う方策・欠けた方策や核を使う操作を、閉じるまで外す
+        oids = {o["id"] for o in operations}
+        kept = [p for p in policies if all(node.get("kernel") in kids if node.get("kind") == "execute"
+                                           else set(node.get("operations", ())) <= oids for node in p["nodes"])]
+        pids = {p["id"] for p in kept}
+        used = [o for o in operations if ref(o.get("policy")) in pids and ref(o.get("prediction")) in kids]
+        if len(kept) == len(policies) and len(used) == len(operations):
+            break
+        policies, operations = kept, used
+    if not kernels or not operations or not policies:
+        raise ValueError("no_common_operation")
+    return {"scheme": first["scheme"], "contract": first["contract"], "units": first["units"],
+            "targets": list(dict.fromkeys(targets)), "states": states, "initial": _enc(tuple(initial)),
+            "kernels": kernels, "operations": operations, "policies": policies,
+            "certificate_capabilities": first["certificate_capabilities"]}
+
+
+class _Pools:
+    """系列の頭の要求の入力にある並びの記録を、要る所 (取りに行き・行った一歩を読む所と、model の替わり目) で初めて
+    読む (区間の札の系列は並びを読まない)。get(model) はその model を直和のモデルに持つ並び、無ければ None。"""
+
+    def __init__(self, reader, desc):
+        self._reader, self._desc, self._found = reader, desc, None
+
+    def get(self, model):
+        if self._found is None:
+            self._found = _pools(self._reader, self._desc)
+        return self._found.get(model)
+
+
+def _pools(reader, desc) -> dict:
+    """要求の入力にある並びの記録 (`sui.fb.belief_pool/1`) を、その直和のモデルの Point ごとに読む (K37 決定 1・3)。同じ
+    model の並びが 2 つあれば読めない。記録した候補から法則と直和のモデルを作り直し、保存した直和のモデルと全比較する
+    (派生物を信じない)。"""
+    from .f import FInputError, _Fraction, _decode, _dumps
+    from .fb import AcquisitionObservationModel
+    c = _c()
+    out = {}
+    for p in sorted(desc["input_points"]):
+        try:
+            record = reader.record(p)
+        except KeyError:
+            continue   # 読めない入力は、それを使う所で名指す
+        if record.body.contract != c.BELIEF_POOL:
+            continue
+        content = _json(record.body.content.as_json())
+        if content.get("model") in out:
+            raise _Issue("rejected", "shape", "two pools of one model", evidence=(out[content["model"]]["point"], p))
+        members, offset = [], 0
+        for value in content.get("members", ()):
+            ev = (p, value.get("model"))
+            document = _model_document(reader, value.get("model"), evidence=ev)
+            try:
+                observation = _decode(value["observation_model"], AcquisitionObservationModel)
+                weight = _decode(value["prior_weight"], _Fraction)
+                pairs = value["correspondence"]["pairs"]
+            except (FInputError, KeyError, TypeError, ValueError):
+                raise _Issue("rejected", "shape", "a pool member is unreadable", evidence=ev) from None
+            if value.get("law") != candidate_law(document, observation, pairs):
+                raise _Issue("rejected", "result_mismatch", "a pool member's law differs from its declaration",
+                             evidence=ev)
+            members.append({"id": value["id"], "model": value["model"], "document": document,
+                            "observation": observation, "pairs": pairs, "weight": weight, "law": value["law"],
+                            "offset": offset, "size": len(document["states"])})
+            offset += len(document["states"])
+        try:
+            expected = direct_sum(members) if members else None
+        except ValueError:
+            expected = None
+        if expected is None or _dumps(expected) != _dumps(_model_document(reader, content["model"], evidence=(p,))):
+            raise _Issue("rejected", "result_mismatch", "the pool model differs from the direct sum of its candidates",
+                         evidence=(p, content.get("model")))
+        out[content["model"]] = {"point": p, "model": content["model"], "route": content.get("route"),
+                                 "lineage": tuple(content["lineage"]), "members": members}
+    return out
+
+
+def _diag(blocks):
+    """候補ごとのかたまりを対角に並べた行列 (並びの状態の順)。"""
+    from fractions import Fraction
+    n = sum(len(b) for b in blocks)
+    out, offset = [[Fraction(0)] * n for _ in range(n)], 0
+    for b in blocks:
+        for i, row in enumerate(b):
+            for j, x in enumerate(row):
+                out[offset + i][offset + j] = x
+        offset += len(b)
+    return out
+
+
+def member_reading(member, *, route, evidence_model, evidence_pairs):
+    """候補 1 つの受け身の観測の読み方 (K28 新しい決定 3・9、K37 決定 6): 観測モデルの宣言がその並びの口 route のもの
+    (同じ起動の口の宣言の位置、`fb.AcquisitionObservationModel.route_slot`) で、読み口と同じ形の検査・取りに行き方の制御の
+    表と重みに合い、物語の対応 (1 対 1・知る対象を横切らない) が読めることを確かめ、(制御, 観測モデルの状態の番号 →
+    候補のモデルの状態の番号) を返す。member は {document, observation, pairs}。読めなければ不適合 (名指しは evidence)。
+    家の人の事前の判定と入口 U が同じこの関数を使う。"""
+    from . import _fb_read
+    c = _c()
+    declaration = member["observation"]
+    if declaration.route_slot != route:
+        raise _Issue("rejected", "missing_contract", "the observation model is of another route",
+                     fields=("/observation_model",), evidence=evidence_model)
+    try:
+        if declaration.projection != c.ACQUISITION_RESULT_PROJECTION or declaration.time_projection != _value_only() \
+                or declaration.control_rule.contract != c.ACQUISITION_CONTROL_TABLE \
+                or declaration.independence.contract != c.STATE_INDEPENDENT_CONTROL_SELECTION:
+            raise _fb_read._Unreadable("missing_declaration")
+        _fb_read._check_model(declaration)
+        _fb_read._time_projection(declaration)
+    except _fb_read._Unreadable as exc:
+        raise _Issue("rejected", _UNREADABLE[exc.reason], "the observation model is unreadable: " + exc.reason,
+                     fields=("/observation_model",), evidence=evidence_model) from None
+    from fractions import Fraction
+    u_id = c.ACQUISITION_REPEAT_WHEN_DONE.name + "/" + c.ACQUISITION_REPEAT_WHEN_DONE.version
+    symbols = sorted(set(_fb_read._SYMBOLS.values()))
+    if [u.id for u in declaration.controls] != [u_id] \
+            or _json(declaration.control_rule.args) != {"first": [u_id], "after": {s: [u_id] for s in symbols}} \
+            or _weights(declaration.independence.args) != ((Fraction(1),),) * len(declaration.states):
+        raise _Issue("rejected", "missing_contract", "acquisition repeat or control declaration",
+                     fields=("/observation_model",), evidence=evidence_model)
+    control, = declaration.controls
+    states = member["document"]["states"]
+    ids, targets = [s["id"] for s in states], [s["target"] for s in states]
+    pairs = _json(member["pairs"])
+    if not isinstance(pairs, list) or any(not isinstance(pair, list) or len(pair) != 2 for pair in pairs) \
+            or len(pairs) != len(ids) or sorted(a for a, _m in pairs) != sorted(declaration.states) \
+            or sorted(m for _a, m in pairs) != sorted(ids):
+        raise _Issue("rejected", "shape", "the correspondence is not one to one", fields=("/pairs",),
+                     evidence=evidence_pairs)
+    phi = [ids.index(dict(pairs)[a]) for a in declaration.states]   # 観測モデルの状態の番号 → 見立ての状態の番号
+    n = len(ids)
+    for o in control.kernel.outcomes:
+        for i in range(n):
+            for j in range(n):
+                if o.matrix[i][j] and targets[phi[i]] != targets[phi[j]]:
+                    raise _Issue("rejected", "shape", "the kernel crosses a target", fields=("/pairs",),
+                                 evidence=evidence_pairs)
+    return control, phi
+
+
+def passive_block(control, phi, symbol, *, sampling, evidence):
+    """受け身の取りに行き 1 回の、候補 1 つのかたまりの行列 (候補のモデルの状態の順、正規化する前のセルの和)。sampling は
+    測る契約 (K26-d (ク) の照らし。None は照らさない = 順の判定だけに使う時)。セルの無い観測は質量 0 のかたまり。"""
+    from fractions import Fraction
+    from . import _fb_read
+    outcomes = {o.id: o for o in control.kernel.outcomes}
+    if sampling is not None:
+        # K26-d (ク): セルの観測値と、そのセルの outcome の evidence (kind・測る契約・射影した観測値) が一致する
+        for cell in control.cells:
+            for name in cell.outcomes:
+                emission = outcomes[name].evidence
+                if emission is None or emission.kind != "measurement" or emission.measurement_contract != sampling \
+                        or cell.observation.kind != "measurement" \
+                        or _json(emission.value) != _json(cell.observation.value):
+                    raise _Issue("rejected", "missing_contract", "outcome evidence differs from its observation cell",
+                                 fields=("/observation_model",), evidence=evidence)
+    cell = next((x for x in control.cells if _fb_read._symbol(x.observation) == symbol), None)
+    members = set(cell.outcomes) if cell is not None else set()   # セルが無い観測は、モデルが出さない観測 (質量 0)
+    n = len(phi)
+    m = [[Fraction(0)] * n for _ in range(n)]
+    for o in outcomes.values():
+        if o.id in members:
+            for i in range(n):
+                for j in range(n):
+                    m[phi[i]][phi[j]] += o.matrix[i][j]
+    return m
+
+
+_LEGAL = {"taken": {"result": "taken", "source_called": True}, "empty": {"result": "empty", "source_called": True},
+          "unavailable_called": {"result": "unavailable", "source_called": True}}
+
+
+def step_kernel(document, kid, cells, *, evidence):
+    """行った一歩の節の核 kid を、候補 1 つのモデルから読む (K36 決定 5、K37 決定 6)。段 4 で行える観測の一歩 (outcome の
+    行列がどれも対角・所要 0・観測が呼んだ 3 つの組で、宣言のセルがその核の outcome をちょうど覆い、観測値が一致する) で
+    なければ不適合。(核の JSON, outcome の id → 行列) を返す。"""
+    from fractions import Fraction
+    try:
+        kernel, = [k for k in document["kernels"] if k["id"] == kid]
+        n = len(document["states"])
+    except (KeyError, TypeError, ValueError):
+        raise _Issue("rejected", "missing_contract", "executed step declaration", evidence=evidence) from None
+
+    def matrix(o):
+        return [[Fraction(*x) if isinstance(x, list) else Fraction(x) for x in row] for row in o["matrix"]]
+    outcomes = {o["id"]: o for o in kernel["outcomes"]}
+    if any(o["elapsed_ns"] != 0 or o["evidence"] is None or _json(o["evidence"]["value"]) not in _LEGAL.values()
+           or any(matrix(o)[i][j] for i in range(n) for j in range(n) if i != j) for o in outcomes.values()) \
+            or sorted(x for cell in cells for x in cell["outcomes"]) != sorted(outcomes) \
+            or any(_json(outcomes[x]["evidence"]["value"]) != _json(cell["observation"]["value"])
+                   for cell in cells for x in cell["outcomes"]):
+        raise _Issue("rejected", "missing_contract", "the step is not a state-preserving observation step",
+                     evidence=evidence)
+    return kernel, {name: matrix(o) for name, o in outcomes.items()}
+
+
+def cell_sum(matrices, names, n):
+    """セルの outcome の行列の和。"""
+    from fractions import Fraction
+    m = [[Fraction(0)] * n for _ in range(n)]
+    for name in names:
+        for i, row in enumerate(matrices[name]):
+            for j, x in enumerate(row):
+                m[i][j] += x
+    return m
+
+
+def _apply(reader, state, model, binding, reading, desc, pools) -> None:
     """観測 1 つ (結びつき B と読み方) を、一次事実から読んで条件づける (§19-1)。読み方の契約で、区間の札の道と
-    取りに行きの道 (K28) に分ける。同じ系列 (前の採用をさかのぼった全部) に 2 つの種類を混ぜない (K28 新しい決定 7)。"""
+    取りに行きの道 (K28) に分ける。同じ系列 (前の採用をさかのぼった全部) に 2 つの種類を混ぜない (K28 新しい決定 7)。
+    取りに行き・行った一歩は、model が候補の並びの直和のモデルならその並びで読む (K37、`_Pools`)。"""
     from . import _f_count as count
     from .f import CoverageClaim, FInputError, _Fraction, _decode
     c = _c()
@@ -632,7 +950,7 @@ def _apply(reader, state, model, binding, reading, desc) -> None:
             raise _Issue("rejected", "missing_contract", "executed steps and interval claims in one series",
                          evidence=(binding, reading))
         state.kind = "acquisition"   # 取りに行きと行った一歩は同じ「届いた / 届かない」の読み方の系列 (K36 決定 5)
-        _apply_execution(reader, state, model, binding, reading, plan, desc)
+        _apply_execution(reader, state, model, binding, reading, plan, desc, pools)
         return
     b = _content(reader, binding, c.SEGMENT_BINDING)
     kind = "acquisition" if projection["contract"] == _enc(c.ACQUISITION_SEQUENCE_PROJECTION) else "claim"
@@ -641,7 +959,7 @@ def _apply(reader, state, model, binding, reading, desc) -> None:
                      evidence=(binding, reading))
     state.kind = kind
     if kind == "acquisition":
-        _apply_acquisition(reader, state, model, binding, reading, b, plan, desc)
+        _apply_acquisition(reader, state, model, binding, reading, b, plan, desc, pools)
         return
     if projection["contract"] != _enc(c.FINITE_SEGMENT_PROJECTION) or b["reading_contract"] != projection["contract"]:
         raise _Issue("rejected", "missing_contract", "projection", evidence=(reading, binding))
@@ -717,12 +1035,15 @@ def _json(value):
     return value
 
 
-def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc) -> None:
+def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc, pools) -> None:
     """取りに行き 1 回 (家の人が acquire で残した Frame の B) を、1 回分の核で今の joint に掛ける (紙 F-b K28 新しい
     決定 1〜10)。宣言を解き (読み方・生成・物語の対応・取りに行き方・K26-d (ク))、K26 の読み口で 0〜i の接頭部を
     読んで確かめ、i 番目のセルの行列の和 Mᵢ を対応で見立ての状態へ並べ替えて、qᵢ = Mᵢ qᵢ₋₁ / zᵢ・質量 × zᵢ。
     K26 の L (初期の状態ごとの尤度) を今の joint に掛けない。同じ MID の同じ意味は据え置き、違う意味は食い違い。
-    新しい MID は前の適用の続きの番号だけ (並べ替えない・飛ばさない)。zᵢ = 0 は model_falsified。"""
+    新しい MID は前の適用の続きの番号だけ (並べ替えない・飛ばさない)。zᵢ = 0 は model_falsified。
+
+    候補の並び (K37 決定 1・6): 読み方は並びを名指し ({pool, observation_model, time_projection})、Mᵢ は各候補の観測モデル
+    と物語の対応で作ったかたまりを対角に並べたもの。どの候補の宣言が読めなくても、その候補を名指して止まる。"""
     from fractions import Fraction
     from . import _fb_read
     from .contracts import ContractRef
@@ -733,10 +1054,17 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc) ->
     projection = plan["projection"]
     pargs = projection["args"]
     if b["reading_contract"] != projection["contract"] or not hasattr(pargs, "keys") \
-            or set(pargs.keys()) != {"observation_model", "correspondence", "time_projection"} \
+            or set(pargs.keys()) not in ({"observation_model", "correspondence", "time_projection"},
+                                         {"observation_model", "pool", "time_projection"}) \
             or _json(pargs["time_projection"]) != {"contract": _enc(_value_only()), "args": {}}:
         raise _Issue("rejected", "missing_contract", "acquisition projection", fields=("/projection",),
                      evidence=(reading, binding))
+    pool = None
+    if "pool" in pargs:   # 並びの読み方: 名指した並びが、この model を直和のモデルに持つ並びであること
+        pool = pools.get(model)
+        if pool is None or pargs["pool"] != pool["point"]:
+            raise _Issue("rejected", "observation_binding_mismatch", "the reading names another pool",
+                         fields=("/projection",), evidence=(reading, pargs["pool"]))
     if _json(plan["generation"]) != {"contract": _enc(c.ACQUISITION_GENERATION), "args": {}}:
         raise _Issue("rejected", "missing_contract", "acquisition generation", fields=("/generation",),
                      evidence=(reading,))
@@ -763,12 +1091,13 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc) ->
             or not isinstance(applied.effective_from, ClockReading) or applied.effective_from.run != mid.origin:
         raise _Issue("rejected", "observation_binding_mismatch", "acquisition generation",
                      evidence=(binding, b["route"], b["segment"]))
-    # 物語の対応の記録 (state_correspondence/1)
-    point = pargs["correspondence"]
-    corr = _content(reader, point, c.STATE_CORRESPONDENCE)
-    if not hasattr(corr, "keys") or set(corr.keys()) != {"model", "observation_model", "pairs"} \
-            or corr["model"] != model or corr["observation_model"] != pargs["observation_model"]:
-        raise _Issue("rejected", "observation_binding_mismatch", "state correspondence", evidence=(point, reading))
+    if pool is None:
+        # 物語の対応の記録 (state_correspondence/1)
+        point = pargs["correspondence"]
+        corr = _content(reader, point, c.STATE_CORRESPONDENCE)
+        if not hasattr(corr, "keys") or set(corr.keys()) != {"model", "observation_model", "pairs"} \
+                or corr["model"] != model or corr["observation_model"] != pargs["observation_model"]:
+            raise _Issue("rejected", "observation_binding_mismatch", "state correspondence", evidence=(point, reading))
     # K26 の読み口で 0〜i を読む。読む範囲は、その要求 Q* が申告した入力 (と観測モデル) の一次記録だけ。B が指す Frame が
     # その中に無ければ読まない (同じ MID の別の記録で計算しない。中にあれば、同じ MID の中身の違う記録は K26 の食い違い)
     if b["report"] not in desc["input_points"]:
@@ -789,60 +1118,43 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc) ->
     observation = read.observations[mid.sample_seq]
     if observation.measurement_id != mid:
         raise _Issue("rejected", "measurement_conflict", "the read sequence differs at this MID", evidence=(binding,))
-    # 取りに行き方の照らし (決定 9): 起動の宣言の route の repeat と測る要求の repeat、u の id、制御の表、重み
+    # 取りに行き方の照らし (決定 9): 起動の宣言の route の repeat と測る要求の repeat
     routes = [r for r in _content(reader, boot, c.BOOT_DECLARATION)["routes"] if r["slot"] == declaration.route_slot]
     repeat = _json(routes[0]["declaration"]["value"]["repeat"]) if len(routes) == 1 else None
-    u_id = c.ACQUISITION_REPEAT_WHEN_DONE.name + "/" + c.ACQUISITION_REPEAT_WHEN_DONE.version
-    symbols = sorted(set(_fb_read._SYMBOLS.values()))
     if repeat != {"contract": _enc(c.ACQUISITION_REPEAT_WHEN_DONE), "args": {}} \
-            or _json(k["args"]["repeat"]) != repeat \
-            or [u.id for u in declaration.controls] != [u_id] \
-            or _json(declaration.control_rule.args) != {"first": [u_id], "after": {s: [u_id] for s in symbols}} \
-            or _weights(declaration.independence.args) != ((Fraction(1),),) * len(declaration.states):
+            or _json(k["args"]["repeat"]) != repeat:
         raise _Issue("rejected", "missing_contract", "acquisition repeat or control declaration",
                      fields=("/observation_model",), evidence=(pargs["observation_model"],))
-    control, = declaration.controls
-    outcomes = {o.id: o for o in control.kernel.outcomes}
-    # K26-d (ク): セルの観測値と、そのセルの outcome の evidence (kind・測る契約・射影した観測値) が一致する
-    for cell in control.cells:
-        for name in cell.outcomes:
-            emission = outcomes[name].evidence
-            if emission is None or emission.kind != "measurement" or emission.measurement_contract != sampling \
-                    or cell.observation.kind != "measurement" \
-                    or _json(emission.value) != _json(cell.observation.value):
-                raise _Issue("rejected", "missing_contract", "outcome evidence differs from its observation cell",
-                             fields=("/observation_model",), evidence=(pargs["observation_model"],))
-    # 物語の対応 (決定 3): 最初は 1 対 1 だけ (恒等も明示)。target を横切らない
-    ids = [s["id"] for s in state.states]
-    targets = [s["target"] for s in state.states]
-    pairs = _json(corr["pairs"])
-    if not isinstance(pairs, list) or any(not isinstance(pair, list) or len(pair) != 2 for pair in pairs) \
-            or len(pairs) != len(ids) or sorted(a for a, _m in pairs) != sorted(declaration.states) \
-            or sorted(m for _a, m in pairs) != sorted(ids):
-        raise _Issue("rejected", "shape", "the correspondence is not one to one", fields=("/pairs",), evidence=(point,))
-    phi = [ids.index(dict(pairs)[a]) for a in declaration.states]   # 観測モデルの状態の番号 → 見立ての状態の番号
-    n = len(ids)
-    for o in outcomes.values():
-        for i in range(n):
-            for j in range(n):
-                if o.matrix[i][j] and targets[phi[i]] != targets[phi[j]]:
-                    raise _Issue("rejected", "shape", "the kernel crosses a target", fields=("/pairs",),
-                                 evidence=(point,))
     symbol = _fb_read._SYMBOLS[(observation.result, observation.source_called)]
-    cell = next((x for x in control.cells if _fb_read._symbol(x.observation) == symbol), None)
-    members = set(cell.outcomes) if cell is not None else set()   # セルが無い観測は、モデルが出さない観測 (質量 0)
-    m = [[Fraction(0)] * n for _ in range(n)]
-    for o in outcomes.values():
-        if o.id in members:
-            for i in range(n):
-                for j in range(n):
-                    m[phi[i]][phi[j]] += o.matrix[i][j]
+    if pool is None:
+        members = [{"document": _model_document(reader, model, evidence=(model,)), "observation": declaration,
+                    "pairs": corr["pairs"]}]
+        evidence = [((pargs["observation_model"],), (point,))]
+    else:
+        members = pool["members"]
+        evidence = [((m["model"], pool["point"]),) * 2 for m in members]
+    # 並びの口 = 取りに行きの列を読んだ口の宣言の位置 (読み口が route_epoch と照らした、`_fb_read._route`)
+    route = declaration.route_slot if pool is None else pool["route"]
+    if route != declaration.route_slot:
+        raise _Issue("rejected", "observation_binding_mismatch", "the pool reads another route",
+                     fields=("/projection",), evidence=(reading, pool["point"]))
+    blocks = []
+    for member, (ev_model, ev_pairs) in zip(members, evidence):
+        control, phi = member_reading(member, route=route, evidence_model=ev_model, evidence_pairs=ev_pairs)
+        blocks.append(passive_block(control, phi, symbol, sampling=sampling, evidence=ev_model))
+    m = _diag(blocks)
+    n = len(m)
     # 意味 = 読み方の版と、宣言した観測モデルの値の全部 (状態・制御・核・セルの分け方・制御の表・重み) と、物語の対応の
     # 正準な組と、この回のセル (決定 6: 核・セル・対応・読み方の版のどれかが違えば別の読み方)。欄を選んで足さず、宣言の値を
-    # まるごと入れる (この回の行列がたまたま同じでも、宣言が違えば同じ意味にしない。レビュー K28-R1・R1-remains)
+    # まるごと入れる (この回の行列がたまたま同じでも、宣言が違えば同じ意味にしない。レビュー K28-R1・R1-remains)。
+    # 並びでは、各候補の観測モデルと対応の組の列 (K37)
     meaning = {"projection": projection["contract"],
                "observation_model": _json(records[pargs["observation_model"]].body.content.as_json()["value"]),
-               "pairs": sorted(pairs), "cell": symbol}
+               "cell": symbol}
+    if pool is None:
+        meaning["pairs"] = sorted(_json(corr["pairs"]))
+    else:
+        meaning["candidates"] = [[_json(_enc(x["observation"])), sorted(_json(x["pairs"]))] for x in members]
     key = _dumps(_enc(mid))
     known = state.seen.get(key)
     if known is not None:
@@ -896,17 +1208,20 @@ def _check_order(state, kind, start, end, matrix, overlap, binding) -> None:
                          "overlapping observations whose order is unknown", evidence=(binding,))
 
 
-def _apply_execution(reader, state, model, binding, reading, plan, desc) -> None:
+def _apply_execution(reader, state, model, binding, reading, plan, desc, pools) -> None:
     """行った一歩 1 つ (家の人が残した結果のメモ) を、その節の核のうち観測のセルの outcome の和で今の joint に掛ける
     (紙 F-b K36 決定 5)。宣言を解き (読み方・結果のメモ・行う一歩の宣言・モデルの核)、段 4 で行える観測の一歩 (outcome の
     行列がどれも対角・所要 0・観測が呼んだ 3 つの組で、宣言のセルと一致) かを確かめ、セルの行列の和 M で
-    q = M q / z・質量 × z。同じ一歩 (同じ E) の同じ意味は据え置き、違う意味は食い違い。z = 0 は model_falsified。"""
+    q = M q / z・質量 × z。同じ一歩 (同じ E) の同じ意味は据え置き、違う意味は食い違い。z = 0 は model_falsified。
+
+    候補の並び (K37 決定 6): E は元の u と原結果のまま (E.model は並びの来歴のモデルでもよい)。各候補のかたまりは、その
+    候補が宣言したその操作の核で読み、対角に並べる。核・セルの outcome が無い候補、読めない宣言 (観測モデル・物語の
+    対応) の候補は、名指して止まる (0 の尤度や単位の核で埋めない)。"""
     from fractions import Fraction
     from .f import _dumps
     c = _c()
     pargs = plan["projection"]["args"]
-    if not hasattr(pargs, "keys") or set(pargs.keys()) != {"execution_declaration"} \
-            or _json(plan["generation"]) != {"contract": _enc(c.EXECUTE_STEP), "args": {}}:
+    if not hasattr(pargs, "keys") or set(pargs.keys()) != {"execution_declaration"}             or _json(plan["generation"]) != {"contract": _enc(c.EXECUTE_STEP), "args": {}}:
         raise _Issue("rejected", "missing_contract", "execution projection", fields=("/projection",),
                      evidence=(reading,))
     if binding not in desc["input_points"]:
@@ -915,43 +1230,40 @@ def _apply_execution(reader, state, model, binding, reading, plan, desc) -> None
     report = _content(reader, binding, c.EXECUTION_RESULT)
     E = report.get("execution") if hasattr(report, "get") else None
     value = _json(report.get("value")) if hasattr(report, "get") else None
-    legal = {"taken": {"result": "taken", "source_called": True}, "empty": {"result": "empty", "source_called": True},
-             "unavailable_called": {"result": "unavailable", "source_called": True}}
-    if report.get("outcome") != "observed" or value not in legal.values() or not hasattr(E, "get") \
-            or E.get("model") != model or E.get("reading") != pargs["execution_declaration"]:
+    pool = pools.get(model)
+    models = (model, *(pool["lineage"] if pool is not None else ()))
+    if report.get("outcome") != "observed" or value not in _LEGAL.values() or not hasattr(E, "get")             or E.get("model") not in models or E.get("reading") != pargs["execution_declaration"]:
         raise _Issue("rejected", "observation_binding_mismatch", "executed step result", evidence=(binding,))
     declared = _content(reader, pargs["execution_declaration"], c.EXECUTION_DECLARATION)
     kid = E["u"]
     try:
-        document = reader.record(model).body.content.as_json()["document"]
-        kernel, = [k for k in document["kernels"] if k["id"] == kid]
         cells = _json(declared["value"]["cells"])[kid]
         overlap = (declared["value"]["source_overlap"], declared["value"]["actor_overlap"])
         entered, finished = report["entered"]["value"]["reading"]["time_ns"], report["finished"]["value"]["reading"]["time_ns"]
     except (KeyError, TypeError, ValueError):
         raise _Issue("rejected", "missing_contract", "executed step declaration", evidence=(binding,)) from None
-    outcomes = {o["id"]: o for o in kernel["outcomes"]}
-    n = len(state.joint)
-
-    def matrix(o):
-        return [[Fraction(*x) if isinstance(x, list) else Fraction(x) for x in row] for row in o["matrix"]]
+    if pool is None:
+        members = [(_model_document(reader, model, evidence=(model,)), (binding,))]
+    else:
+        members = []
+        for member in pool["members"]:
+            ev = (binding, member["model"], pool["point"])
+            member_reading(member, route=pool["route"], evidence_model=ev, evidence_pairs=ev)   # 読めない候補は止まる
+            members.append((member["document"], ev))
     # 段 4 で行える観測の一歩だけ (状態を変えない・所要 0・観測のセルが宣言と一致、決定 5)
-    if any(o["elapsed_ns"] != 0 or o["evidence"] is None or _json(o["evidence"]["value"]) not in legal.values()
-           or any(matrix(o)[i][j] for i in range(n) for j in range(n) if i != j) for o in outcomes.values()) \
-            or sorted(x for cell in cells for x in cell["outcomes"]) != sorted(outcomes) \
-            or any(_json(outcomes[x]["evidence"]["value"]) != _json(cell["observation"]["value"])
-                   for cell in cells for x in cell["outcomes"]):
-        raise _Issue("rejected", "missing_contract", "the step is not a state-preserving observation step",
-                     evidence=(binding,))
+    kernels = [step_kernel(document, kid, cells, evidence=ev) for document, ev in members]
     found = [cell for cell in cells if _json(cell["observation"]["value"]) == value]
     if len(found) != 1:
         raise _Issue("rejected", "missing_contract", "no observation cell reads this result", evidence=(binding,))
-    m = [[Fraction(0)] * n for _ in range(n)]
-    for name in found[0]["outcomes"]:
-        for i, row in enumerate(matrix(outcomes[name])):
-            for j, x in enumerate(row):
-                m[i][j] += x
-    meaning = {"projection": _enc(c.EXECUTION_STEP_PROJECTION), "kernel": _json(kernel), "cells": cells, "value": value}
+    m = _diag([cell_sum(matrices, found[0]["outcomes"], len(document["states"]))
+               for (document, _ev), (_kernel, matrices) in zip(members, kernels)])
+    n = len(m)
+    if pool is None:
+        meaning = {"projection": _enc(c.EXECUTION_STEP_PROJECTION), "kernel": _json(kernels[0][0]), "cells": cells,
+                   "value": value}
+    else:
+        meaning = {"projection": _enc(c.EXECUTION_STEP_PROJECTION), "kernels": [_json(k) for k, _m in kernels],
+                   "cells": cells, "value": value}
     key = _dumps({"execution": _json(E)})
     known = state.seen.get(key)
     if known is not None:
