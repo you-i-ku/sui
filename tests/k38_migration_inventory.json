@@ -1,0 +1,1470 @@
+{
+  "issue": "K38",
+  "request": 110,
+  "date": "2026-11-23",
+  "base_master": "2c54115",
+  "scope": {
+    "directory": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/work38/tests",
+    "read": "test_fb*.pyのvalue_only・joint/evidence_mass・pool_belief/PoolBelief/CandidatePosteriorの一致行と周辺の足場。全既存試験の実行や実装本文の読解ではない。 共有のassert_update・belief1_chain・assert_answerの呼び出しも名前で検索。間接依存を全件実行して確かめた一覧ではない。",
+    "excluded_frozen_models": [
+      "test_fb_scenes.py",
+      "test_fb_mutants.py",
+      "test_fb_machine.py",
+      "test_fb_mutants_claude.py"
+    ]
+  },
+  "policy": {
+    "spec_evidence": "F-b v1.87 K38決定7 (5240行)",
+    "mathematics": "既存の有限法則の有理数の答えは変えない。時刻を読むPoisson法則への置換ではない。",
+    "actual": "test_fb_skeleton.pyの公開名一覧だけにK38の14名を追加。ほかの既存ファイルは変更していない。",
+    "new_bridge": "test_fb_time_belief.pyはCE1の8経路をFiniteCountLawへ宣言し、新しい正本・照会・評価を通す。",
+    "limit": "FiniteCountLawの8経路の定規は、任意の状態遷移型の旧モデルすべてを既に新しい口へ移したという意味ではない。"
+  },
+  "proposals_not_executed": [
+    {
+      "file": "tests/test_fb_acquisition_loop.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_acquisition_loop.py",
+          "line": 38,
+          "owner": "sequence_answer",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "return wire({\"joint\": (a / mass, b / mass), \"evidence_mass\": mass})"
+        },
+        {
+          "file": "test_fb_acquisition_loop.py",
+          "line": 350,
+          "owner": "test_eight_updates_preserve_one_adoption_chain_and_ce1_conjunction",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "\"joint\": [[512, 513], [1, 513]], \"evidence_mass\": [513, 524288]}"
+        },
+        {
+          "file": "test_fb_acquisition_loop.py",
+          "line": 378,
+          "owner": "test_row5_two_waiting_reports_are_each_used_once_in_one_adoption_chain",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "\"joint\": [[32, 33], [1, 33]], \"evidence_mass\": [33, 2048]}"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "明示のvalue_onlyは旧有限法則の契約としてそのまま。Poissonの新しい場面はTimedAcquisitionModelの別宣言へ。共有の古い定数を一括置換しない。",
+      "hits": [
+        {
+          "file": "test_fb_belief.py",
+          "line": 49,
+          "owner": "<module>",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "{\"joint\": [[1, 4], [3, 4]], \"evidence_mass\": [1, 2]},"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 50,
+          "owner": "<module>",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "{\"joint\": [[1, 10], [9, 10]], \"evidence_mass\": [5, 16]},"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 51,
+          "owner": "<module>",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "{\"joint\": [[3, 4], [1, 4]], \"evidence_mass\": [3, 32]},"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 311,
+          "owner": "test_belief1_ruler_independent_terminal_path_enumeration",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert wire(joint) == answer[\"joint\"] and wire(mass) == answer[\"evidence_mass\"]"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 314,
+          "owner": "test_belief1_ruler_independent_terminal_path_enumeration",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert EXPECTED[1][\"joint\"] != [[9, 10], [1, 10]]"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 344,
+          "owner": "test_belief1_production_TET_adopts_in_order_and_matches_enumeration_and_K26",
+          "kinds": [
+            "explicit_value_only"
+          ],
+          "text": "\"contract\": wire(contract(\"sui.f.value_only\")), \"args\": {}}"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 369,
+          "owner": "test_belief1_production_TET_adopts_in_order_and_matches_enumeration_and_K26",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert sum(read.likelihood, Q(0)) / 2 == Q(*answer[\"evidence_mass\"])"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 395,
+          "owner": "test_belief1_explicit_correspondence_reorders_state_coordinates",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "answer = {**original, \"joint\": list(reversed(original[\"joint\"])) if swap else original[\"joint\"]}"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 417,
+          "owner": "test_belief1_equal_likelihood_is_not_automatically_a_numerical_noop",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "belief1_chain(rig, ({\"joint\": wire(joint), \"evidence_mass\": wire(mass)},))"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 428,
+          "owner": "test_belief1_distinct_equal_result_MIDs_are_new_evidence_and_time_alone_is_not",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "answers.append({\"joint\": wire(joint), \"evidence_mass\": wire(mass)})"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 627,
+          "owner": "cut",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "answers = (EXPECTED[0], {\"joint\": wire(joint), \"evidence_mass\": wire(mass)}) if with_prior else (EXPECTED[0],)"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1048,
+          "owner": "test_belief1_U_same_MID_under_different_declared_meaning_is_conflict",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert plain(control.result) == ({\"joint\": [[3, 4], [1, 4]], \"evidence_mass\": [1, 2]}"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1049,
+          "owner": "test_belief1_U_same_MID_under_different_declared_meaning_is_conflict",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "if change == \"correspondence\" else {\"joint\": [[2, 3], [1, 3]], \"evidence_mass\": [3, 8]})"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1066,
+          "owner": "test_belief1_U_requires_exact_time_projection_call_shape",
+          "kinds": [
+            "explicit_value_only"
+          ],
+          "text": "\"contract\": wire(contract(\"sui.f.value_only\")), \"args\": {}}"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1070,
+          "owner": "test_belief1_U_requires_exact_time_projection_call_shape",
+          "kinds": [
+            "explicit_value_only"
+          ],
+          "text": "value[\"projection\"][\"args\"][\"time_projection\"] = (wire(contract(\"sui.f.value_only\"))"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1071,
+          "owner": "test_belief1_U_requires_exact_time_projection_call_shape",
+          "kinds": [
+            "explicit_value_only"
+          ],
+          "text": "if defect == \"bare-contract-ref\" else {\"contract\": wire(contract(\"sui.f.value_only\")), \"args\": {\"extra\": True}})"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1461,
+          "owner": "test_native_sample_numbers_are_distinct_and_forged_collision_is_rejected",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert_update(rig, work, second, {\"joint\":[[1,2],[1,2]], \"evidence_mass\":[3,16]}, first.cid)"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1566,
+          "owner": "test_belief1_U_binding_frame_must_be_in_declared_inputs_even_with_same_MID_substitute",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "expected = {\"joint\": [[1, 10], [9, 10]], \"evidence_mass\": [5, 8]}"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1615,
+          "owner": "test_belief1_U_symmetric_kernel_still_conflicts_on_changed_correspondence_replay",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "expected = {\"joint\": [[1, 2], [1, 2]], \"evidence_mass\": [1, 2]}"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1775,
+          "owner": "declaration",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "expected = {\"joint\": [[1, 2], [1, 2]], \"evidence_mass\": [3, 10]}"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1896,
+          "owner": "install",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "expected = {\"joint\": [[1, 2], [1, 2]], \"evidence_mass\": [1, 2]}"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_bundle.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_bundle.py",
+          "line": 487,
+          "owner": "test_bundle1_native_measurement_update_and_three_selections_use_the_main_loop_bundle",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "expected = ({\"joint\": [[4, 5], [1, 5]], \"evidence_mass\": [5, 32]},"
+        },
+        {
+          "file": "test_fb_bundle.py",
+          "line": 488,
+          "owner": "test_bundle1_native_measurement_update_and_three_selections_use_the_main_loop_bundle",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "{\"joint\": [[8, 9], [1, 9]], \"evidence_mass\": [9, 128]})"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_candidates.py",
+          "line": 520,
+          "owner": "test_cand1_main_loop_uses_native_candidates_and_native_generator_registration",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "expected = ({\"joint\": [[4, 5], [1, 5]], \"evidence_mass\": [5, 32]},"
+        },
+        {
+          "file": "test_fb_candidates.py",
+          "line": 521,
+          "owner": "test_cand1_main_loop_uses_native_candidates_and_native_generator_registration",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "{\"joint\": [[8, 9], [1, 9]], \"evidence_mass\": [9, 128]})"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_claim_math.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_claim_math.py",
+          "line": 103,
+          "owner": "test_rowU_model_zero_law_still_adopts_a_normal_claim_outside_the_forced_interval",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert plain(result.result) == {\"joint\": [[2, 3], [1, 3]], \"evidence_mass\": [3, 8]}"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_cycle.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "明示のvalue_onlyは旧有限法則の契約としてそのまま。Poissonの新しい場面はTimedAcquisitionModelの別宣言へ。共有の古い定数を一括置換しない。",
+      "hits": [
+        {
+          "file": "test_fb_cycle.py",
+          "line": 193,
+          "owner": "passive_declaration",
+          "kinds": [
+            "explicit_value_only"
+          ],
+          "text": "projection=c.ACQUISITION_RESULT_PROJECTION, time_projection=contract(\"sui.f.value_only\"))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 747,
+          "owner": "CycleRig.assert_answer",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert self.answer() == {\"joint\": wire(joint), \"evidence_mass\": wire(mass)}"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1576,
+          "owner": "test_cycle1_later_observation_checks_overlap_with_an_already_adopted_step",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert wire(direct.result) == {\"joint\": wire(expected_joint), \"evidence_mass\": wire(expected_mass)}"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 2903,
+          "owner": "test_cycle1_thinking_root_and_latest_follow_the_decided_adoption_chain",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert r.answer(index) == {\"joint\": wire(joint), \"evidence_mass\": wire(mass)}"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_draw.py",
+          "line": 548,
+          "owner": "test_draw1_main_loop_uses_all_six_native_workers_and_preserves_the_adoption",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "belief1_chain(rig, ({\"joint\": [[4, 5], [1, 5]], \"evidence_mass\": [5, 32]},))"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_evaluator.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_evaluator.py",
+          "line": 609,
+          "owner": "test_eval1_main_loop_native_measure_update_candidates_prepare_evaluate_and_three_choices",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "expected = ({\"joint\": [[4, 5], [1, 5]], \"evidence_mass\": [5, 32]},"
+        },
+        {
+          "file": "test_fb_evaluator.py",
+          "line": 610,
+          "owner": "test_eval1_main_loop_native_measure_update_candidates_prepare_evaluate_and_three_choices",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "{\"joint\": [[8, 9], [1, 9]], \"evidence_mass\": [9, 128]})"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_exact.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_exact.py",
+          "line": 907,
+          "owner": "test_exact1_main_loop_all_six_native_workers_keep_fixed_prefix_and_adoption",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "belief1_chain(rig, ({\"joint\": [[4, 5], [1, 5]], \"evidence_mass\": [5, 32]},))"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_loop.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_loop.py",
+          "line": 37,
+          "owner": "<module>",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "FIRST = {\"joint\": [[4, 5], [1, 5]], \"evidence_mass\": [5, 32]}"
+        },
+        {
+          "file": "test_fb_loop.py",
+          "line": 38,
+          "owner": "<module>",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "SECOND = {\"joint\": [[8, 9], [1, 9]], \"evidence_mass\": [9, 128]}"
+        },
+        {
+          "file": "test_fb_loop.py",
+          "line": 39,
+          "owner": "<module>",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "DOUBLE = {\"joint\": [[16, 17], [1, 17]], \"evidence_mass\": [17, 512]}"
+        },
+        {
+          "file": "test_fb_loop.py",
+          "line": 525,
+          "owner": "row5_report_for_work",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "ROW3_ONE_POINT = {\"joint\": [[2, 3], [1, 3]], \"evidence_mass\": [3, 8]}"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_pool.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "新しい口へ並びの照会を移す時は、candidate/state/massのBeliefQuantityで同じ有理数のexactを検査する。正本をjointの有理数タプルだけに固定する期待は追加しない。",
+      "hits": [
+        {
+          "file": "test_fb_pool.py",
+          "line": 21,
+          "owner": "<module>",
+          "kinds": [
+            "pool_belief_view"
+          ],
+          "text": "PoolBelief(pool, adoption, result, joint, evidence_mass, candidates)"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 22,
+          "owner": "<module>",
+          "kinds": [
+            "pool_belief_view"
+          ],
+          "text": "CandidatePosterior(candidate, weight, conditional)"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 26,
+          "owner": "<module>",
+          "kinds": [
+            "pool_belief_view"
+          ],
+          "text": "FThreadHost.pool_belief(*, boot, boundary=None)"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 78,
+          "owner": "<module>",
+          "kinds": [
+            "rational_belief_or_mass",
+            "pool_belief_view"
+          ],
+          "text": "\"PoolBelief\": {\"pool\", \"adoption\", \"result\", \"joint\", \"evidence_mass\", \"candidates\"},"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 79,
+          "owner": "<module>",
+          "kinds": [
+            "pool_belief_view"
+          ],
+          "text": "\"CandidatePosterior\": {\"candidate\", \"weight\", \"conditional\"},"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 234,
+          "owner": "PoolRig.belief",
+          "kinds": [
+            "pool_belief_view"
+          ],
+          "text": "return self.host.pool_belief(boot=self.boot(), boundary=boundary)"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 284,
+          "owner": "PoolRig.ready",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "if answer.joint is not None:"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 293,
+          "owner": "PoolRig.assert_joint",
+          "kinds": [
+            "pool_belief_view"
+          ],
+          "text": "assert isinstance(pool, fb.BeliefPool) and isinstance(actual, fb.PoolBelief)"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 294,
+          "owner": "PoolRig.assert_joint",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert actual.pool == pool.point and actual.evidence_mass == mass"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 312,
+          "owner": "PoolRig.assert_joint",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert actual.joint is None"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 314,
+          "owner": "PoolRig.assert_joint",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert actual.joint is not None"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 315,
+          "owner": "PoolRig.assert_joint",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert dict(zip(keys, actual.joint, strict=True)) == expected"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 321,
+          "owner": "PoolRig.assert_joint",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert result[\"result\"] == {\"joint\": wire(actual.joint), \"evidence_mass\": wire(mass)}"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 528,
+          "owner": "test_pool1_singleton_CE1_is_the_existing_two_observation_answer",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert actual.evidence_mass == Q(9, 128)"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 529,
+          "owner": "test_pool1_singleton_CE1_is_the_existing_two_observation_answer",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert actual.joint == (Q(8, 9), Q(1, 9))"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 591,
+          "owner": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert actual.evidence_mass == Q(25, 384)"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 594,
+          "owner": "test_pool1_replay_from_origin_preserves_old_conditional_and_reweights_all_candidates",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert actual.evidence_mass == Q(353, 4320)"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 657,
+          "owner": "test_pool1_zero_evidence_is_distinct_from_a_missing_reading_and_has_no_conditional",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert zero.conditional is None and actual.joint is not None"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 673,
+          "owner": "test_pool1_new_zero_evidence_component_has_no_conditional_and_does_not_falsify_whole",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert actual.evidence_mass > 0"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 862,
+          "owner": "test_pool1_initial_pool_identity_and_cached_getters_do_not_advance_the_host",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert prior.adoption is None and prior.evidence_mass == 1"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 928,
+          "owner": "test_pool1_pool_boundary_replaces_origin_and_reader_then_keeps_them_within_pool",
+          "kinds": [
+            "explicit_value_only"
+          ],
+          "text": "assert args[\"time_projection\"] == {\"contract\": wire(contract(\"sui.f.value_only\")), \"args\": {}}"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 998,
+          "owner": "test_pool1_two_additions_without_intermediate_replay_use_the_actual_work_reader",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert actual.evidence_mass == Q(353, 4320)"
+        },
+        {
+          "file": "test_fb_pool.py",
+          "line": 1179,
+          "owner": "test_pool1_U_pool_boundary_requires_the_previous_model_in_its_ancestry",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert wire(normal.result) == {\"joint\": wire(expected_joint), \"evidence_mass\": wire(mass)}"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_preparer.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_preparer.py",
+          "line": 643,
+          "owner": "test_prep1_main_loop_native_source_update_candidate_preparation_and_three_selections",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "expected = ({\"joint\": [[4, 5], [1, 5]], \"evidence_mass\": [5, 32]},"
+        },
+        {
+          "file": "test_fb_preparer.py",
+          "line": 644,
+          "owner": "test_prep1_main_loop_native_source_update_candidate_preparation_and_three_selections",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "{\"joint\": [[8, 9], [1, 9]], \"evidence_mass\": [9, 128]})"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_read.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "明示のvalue_onlyは旧有限法則の契約としてそのまま。Poissonの新しい場面はTimedAcquisitionModelの別宣言へ。共有の古い定数を一括置換しない。",
+      "hits": [
+        {
+          "file": "test_fb_read.py",
+          "line": 44,
+          "owner": "<module>",
+          "kinds": [
+            "explicit_value_only"
+          ],
+          "text": "TIME = contract(\"sui.f.value_only\")"
+        },
+        {
+          "file": "test_fb_read.py",
+          "line": 617,
+          "owner": "test_read1_value_only_rejects_a_declared_within_cell_time_difference",
+          "kinds": [
+            "explicit_value_only"
+          ],
+          "text": "def test_read1_value_only_rejects_a_declared_within_cell_time_difference(make_read1):"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_skeleton.py",
+      "disposition": "exact_export_set_changed; old_finite_result_fixture_retained",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_skeleton.py",
+          "line": 670,
+          "owner": "issued_kwargs",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "return dict(request=point(\"Q\"), result={\"joint\": [\"8/9\", \"1/9\"], \"evidence_mass\": \"9/128\"},"
+        },
+        {
+          "file": "test_fb_skeleton.py",
+          "line": 909,
+          "owner": "test_public_export_names_are_exact",
+          "kinds": [
+            "pool_belief_view"
+          ],
+          "text": "\"CandidatePosterior\", \"PoolBelief\", \"CandidateInputError\", \"CandidatePoolError\","
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_targets.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "FiniteUpdateResult1など既存の有限型の署名・紙の独立計算はそのまま。新しい正本の型をその型へ押し込まない。",
+      "hits": [
+        {
+          "file": "test_fb_targets.py",
+          "line": 793,
+          "owner": "test_v23_named_types_fields_union_payloads_and_literals_are_addressable",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert {f[\"name\"] for f in data.V23_TYPE_BY_NAME[\"FiniteUpdateResult1\"][\"fields\"]} == {\"joint\", \"evidence_mass\"}"
+        },
+        {
+          "file": "test_fb_targets.py",
+          "line": 797,
+          "owner": "test_v23_named_types_fields_union_payloads_and_literals_are_addressable",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "\"joint\": \"tuple[_Fraction, ...]\", \"evidence_mass\": \"_Fraction\"}"
+        },
+        {
+          "file": "test_fb_targets.py",
+          "line": 856,
+          "owner": "test_v23_ce1_recomputes_all_three_paper_results_from_the_eight_row_law",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert joint == tuple(map(Fraction, expected[\"joint\"])) and mass == Fraction(expected[\"evidence_mass\"])"
+        },
+        {
+          "file": "test_fb_targets.py",
+          "line": 860,
+          "owner": "test_v23_ce1_recomputes_all_three_paper_results_from_the_eight_row_law",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "for number in example[\"expected\"][variant][\"joint\"] + (example[\"expected\"][variant][\"evidence_mass\"],):"
+        },
+        {
+          "file": "test_fb_targets.py",
+          "line": 895,
+          "owner": "test_v23_uv_numbers_are_only_reverse_arithmetic_not_a_replayed_unspecified_law",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "joint = tuple(map(Fraction,ex[key][\"joint\"]))"
+        },
+        {
+          "file": "test_fb_targets.py",
+          "line": 897,
+          "owner": "test_v23_uv_numbers_are_only_reverse_arithmetic_not_a_replayed_unspecified_law",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "w = tuple(p*Fraction(ex[key][\"evidence_mass\"]) for p in joint)"
+        },
+        {
+          "file": "test_fb_targets.py",
+          "line": 1023,
+          "owner": "test_revision6_uv_recomputes_from_the_declared_prior_and_joint_table_and_stops_at_shape",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "tuple(map(Fraction, ex[key][\"joint\"])), Fraction(ex[key][\"evidence_mass\"]))"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_update_entry.py",
+      "disposition": "inventory_only; unchanged_this_request",
+      "meaning": "旧い有限の法則の数値期待は維持する。Poissonとして同じ記号を読み替えない。",
+      "migration": "同じ有限法則のq・質量・G・方策確率はそのまま。新しい口へ移す場合だけ、保存したjointへの型固定から根に結びつくexact照会へ、数学の期待値を変えずに移す。",
+      "hits": [
+        {
+          "file": "test_fb_update_entry.py",
+          "line": 20,
+          "owner": "<module>",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "FIRST = {\"joint\": [[4, 5], [1, 5]], \"evidence_mass\": [5, 32]}"
+        },
+        {
+          "file": "test_fb_update_entry.py",
+          "line": 21,
+          "owner": "<module>",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "SECOND = {\"joint\": [[8, 9], [1, 9]], \"evidence_mass\": [9, 128]}"
+        },
+        {
+          "file": "test_fb_update_entry.py",
+          "line": 22,
+          "owner": "<module>",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "DOUBLE = {\"joint\": [[16, 17], [1, 17]], \"evidence_mass\": [17, 512]}"
+        },
+        {
+          "file": "test_fb_update_entry.py",
+          "line": 185,
+          "owner": "test_initial_belief_is_read_from_the_model_record",
+          "kinds": [
+            "rational_belief_or_mass"
+          ],
+          "text": "assert plain(issued.result) == {\"joint\": [[4, 7], [3, 7]], \"evidence_mass\": [7, 64]}"
+        }
+      ]
+    }
+  ],
+  "changed_legacy_file": {
+    "path": "tests/test_fb_skeleton.py",
+    "line": 901,
+    "test": "test_public_export_names_are_exact",
+    "change": "新しい公開名14個を期待集合へ追加。既存の公開名を削除しない。"
+  },
+  "verification": {
+    "unchanged_files": "not_run: 依頼で書いた・直したファイルだけを回す制限。新しいファイルの対照から使ったネイティブ有限経路は6ケース成功。",
+    "new_K38_bridge": "not_run_beyond_missing_API_guard"
+  },
+  "open_CG": [],
+  "shared_finite_oracle_dependencies": [
+    {
+      "file": "tests/test_fb_acquisition_keep.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_acquisition_keep.py",
+          "line": 106,
+          "owner": "assert_loop",
+          "text": "assert_update(self, self.update_ports[adopted.value[\"request\"]].work, adopted, expected, previous)"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_acquisition_loop.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_acquisition_loop.py",
+          "line": 51,
+          "owner": "test_rowI_late_conflict_identical_redelivery_keeps_the_adoption_chain",
+          "text": "assert_update(rig, first, head, FIRST)"
+        },
+        {
+          "file": "test_fb_acquisition_loop.py",
+          "line": 71,
+          "owner": "test_rowI_late_conflict_identical_redelivery_keeps_the_adoption_chain",
+          "text": "assert_update(rig, second, adopted, SECOND, head.cid)"
+        },
+        {
+          "file": "test_fb_acquisition_loop.py",
+          "line": 174,
+          "owner": "finish_update",
+          "text": "assert_update(rig, work, adopted, expected, previous)"
+        },
+        {
+          "file": "test_fb_acquisition_loop.py",
+          "line": 189,
+          "owner": "test_update_not_started_retries_once_and_continues_ce1",
+          "text": "assert_update(rig, first, a1, FIRST)"
+        },
+        {
+          "file": "test_fb_acquisition_loop.py",
+          "line": 194,
+          "owner": "test_update_not_started_retries_once_and_continues_ce1",
+          "text": "assert_update(rig, second, a2, SECOND, a1.cid)"
+        },
+        {
+          "file": "test_fb_acquisition_loop.py",
+          "line": 332,
+          "owner": "receive",
+          "text": "assert_update(rig, first_work, a1, FIRST)"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_acquisition_pending.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_acquisition_pending.py",
+          "line": 222,
+          "owner": "admitted",
+          "text": "assert_update(rig, work, adopted, sequence_answer((T,E,T)[:i+1]), None if not i else (h,a)[i-1].cid)"
+        },
+        {
+          "file": "test_fb_acquisition_pending.py",
+          "line": 282,
+          "owner": "test_row5_pending_order_follows_received_time_and_envelope_not_report_sort_keys",
+          "text": "assert_update(rig, work, adopted, sequence_answer(symbols[:i+1]), previous)"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_acquisition_store.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_acquisition_store.py",
+          "line": 165,
+          "owner": "loss",
+          "text": "r1 = assert_update(rig, w1, a1, FIRST)"
+        },
+        {
+          "file": "test_fb_acquisition_store.py",
+          "line": 170,
+          "owner": "loss",
+          "text": "assert_update(rig, w2, a2, SECOND, a1.cid)"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_belief.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_belief.py",
+          "line": 291,
+          "owner": "belief1_chain",
+          "text": "def belief1_chain(rig, expected=EXPECTED):"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 330,
+          "owner": "test_belief1_production_TET_adopts_in_order_and_matches_enumeration_and_K26",
+          "text": "assert_update(rig, work, adopted, answer, previous)"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 370,
+          "owner": "test_belief1_production_TET_adopts_in_order_and_matches_enumeration_and_K26",
+          "text": "belief1_chain(rig)"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 382,
+          "owner": "test_belief1_observation_cell_sums_all_compatible_outcome_matrices",
+          "text": "belief1_chain(rig)"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 398,
+          "owner": "test_belief1_explicit_correspondence_reorders_state_coordinates",
+          "text": "belief1_chain(rig, answers)"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 417,
+          "owner": "test_belief1_equal_likelihood_is_not_automatically_a_numerical_noop",
+          "text": "belief1_chain(rig, ({\"joint\": wire(joint), \"evidence_mass\": wire(mass)},))"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 429,
+          "owner": "test_belief1_distinct_equal_result_MIDs_are_new_evidence_and_time_alone_is_not",
+          "text": "belief1_chain(rig, answers)"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 575,
+          "owner": "test_belief1_stopped_late_terminal_adopts_then_unblocks_next_number",
+          "text": "belief1_chain(rig, EXPECTED[:2])"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 628,
+          "owner": "cut",
+          "text": "belief1_chain(rig, answers)"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 994,
+          "owner": "mutate",
+          "text": "belief1_chain(rig, EXPECTED[:1])"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1168,
+          "owner": "test_belief1_continuation_reads_the_adopted_result_and_new_joint",
+          "text": "result = assert_update(rig, work, adopted, expected, previous); previous = adopted.cid"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1183,
+          "owner": "test_belief1_continuation_reads_the_adopted_result_and_new_joint",
+          "text": "belief1_chain(rig, EXPECTED[:2])"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1207,
+          "owner": "capacity",
+          "text": "result = assert_update(rig, work, adopted, EXPECTED[0])"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1267,
+          "owner": "lose_ack",
+          "text": "rig.update(); rig.update(); belief1_chain(rig)"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1461,
+          "owner": "test_native_sample_numbers_are_distinct_and_forged_collision_is_rejected",
+          "text": "assert_update(rig, work, second, {\"joint\":[[1,2],[1,2]], \"evidence_mass\":[3,16]}, first.cid)"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1568,
+          "owner": "test_belief1_U_binding_frame_must_be_in_declared_inputs_even_with_same_MID_substitute",
+          "text": "belief1_chain(rig, (expected,))"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1616,
+          "owner": "test_belief1_U_symmetric_kernel_still_conflicts_on_changed_correspondence_replay",
+          "text": "belief1_chain(rig, (expected,))"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1776,
+          "owner": "declaration",
+          "text": "belief1_chain(rig, (expected,))"
+        },
+        {
+          "file": "test_fb_belief.py",
+          "line": 1897,
+          "owner": "install",
+          "text": "belief1_chain(rig, (expected,))"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_bundle.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_bundle.py",
+          "line": 494,
+          "owner": "test_bundle1_native_measurement_update_and_three_selections_use_the_main_loop_bundle",
+          "text": "belief1_chain(rig, expected)"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_candidates.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_candidates.py",
+          "line": 526,
+          "owner": "test_cand1_main_loop_uses_native_candidates_and_native_generator_registration",
+          "text": "belief1_chain(rig, expected)"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_cycle.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_cycle.py",
+          "line": 744,
+          "owner": "assert_answer",
+          "text": "def assert_answer(self, matrices, *, prior=None):"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 903,
+          "owner": "test_cycle1_perception_only_updates_with_its_own_origin_process_and_allocation",
+          "text": "r.assert_answer((P,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 916,
+          "owner": "test_cycle1_entry_round_trip_updates_probability_and_reaches_next_actor",
+          "text": "r.finish_step(0, symbol); r.adopt(1); r.assert_answer((matrix,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 934,
+          "owner": "test_cycle1_wait_completes_without_actor_and_passive_sensing_continues",
+          "text": "r.sense(0, T, begin=True); r.adopt(1); r.assert_answer((P,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 994,
+          "owner": "test_cycle1_exception_is_one_observation_including_state_independent_half_mass",
+          "text": "r.finish_step(0, U); r.adopt(1); r.assert_answer((exception_matrix,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1029,
+          "owner": "test_cycle1_passive_receipt_save_and_update_continue_in_each_phase",
+          "text": "r.sense(0, T, begin=True); r.adopt(1); r.assert_answer((P,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1049,
+          "owner": "test_cycle1_causal_intervals_match_independent_state_path_enumeration",
+          "text": "r.adopt(2); r.assert_answer((N, P) if order == \"passive_before\" else (P, N))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1068,
+          "owner": "test_cycle1_overlap_uses_world_declaration_and_summed_observation_cell",
+          "text": "r.adopt(2); r.assert_answer((passive, actor_t))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1081,
+          "owner": "test_cycle1_payload_bytes_are_preserved_but_do_not_change_the_update",
+          "text": "r.adopt(1); r.assert_answer((P,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1112,
+          "owner": "test_cycle1_window_rebuild_does_not_repeat_an_already_started_step",
+          "text": "r.adopt(1); r.assert_answer((P,)); assert len(r.actor.calls) == 1"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1151,
+          "owner": "test_cycle1_replacement_after_entry_keeps_old_E_and_does_not_advance_new_policy",
+          "text": "r.finish_step(0, T); r.adopt(2); r.assert_answer((P, P))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1226,
+          "owner": "hold",
+          "text": "r.adopt(2); r.assert_answer((P, P))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1238,
+          "owner": "test_cycle1_identical_frame_redelivery_does_not_double_adopt_but_new_measurement_does",
+          "text": "r.sense(1, T); r.adopt(2); r.assert_answer((P, P))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1250,
+          "owner": "test_cycle1_two_empty_steps_are_distinct_even_without_passive_cursor_progress",
+          "text": "r.assert_answer((EMPTY, EMPTY))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1312,
+          "owner": "bits",
+          "text": "r.finish_step(0, E); r.adopt(2); r.assert_answer((P, EMPTY))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1319,
+          "owner": "test_cycle1_delivery_grouping_preserves_posterior_probability_and_next_E",
+          "text": "r.sense(1, E); r.adopt(2); r.assert_answer((P, EMPTY))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1341,
+          "owner": "test_cycle1_native_need_registry_and_birth_path_do_not_depend_on_test_need",
+          "text": "r.finish_step(0, T); r.adopt(1); r.assert_answer((P,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1447,
+          "owner": "test_cycle1_initial_activity_reads_all_pre_candidate_adoptions_as_one_latest_root",
+          "text": "r.sense(1, T); r.adopt(2); r.assert_answer((P, P))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1509,
+          "owner": "test_cycle1_equal_endpoints_are_overlap_not_receipt_order",
+          "text": "r.adopt(2); r.assert_answer((N, P))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1543,
+          "owner": "test_cycle1_pending_observation_checks_every_possible_cell_then_actual_cell",
+          "text": "r.adopt(1); r.assert_answer((known,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1555,
+          "owner": "test_cycle1_pending_observation_checks_every_possible_cell_then_actual_cell",
+          "text": "r.adopt(2); r.assert_answer((known, HALF))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1577,
+          "owner": "test_cycle1_later_observation_checks_overlap_with_an_already_adopted_step",
+          "text": "r.adopt(2); r.assert_answer((P, N))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1615,
+          "owner": "test_cycle1_nonobservational_steps_do_not_block_an_overlapping_passive_observation",
+          "text": "r.complete_last_passive(T); r.adopt(1); r.assert_answer((N,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1716,
+          "owner": "test_cycle1_clock_source_missing_before_perform_is_named_unperformed_not_an_observation",
+          "text": "r.finish_step(0, T); r.adopt(1); r.assert_answer((P,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1735,
+          "owner": "test_cycle1_passive_adopted_through_ignores_a_preceding_execution_adoption",
+          "text": "r.assert_answer((P, P))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1783,
+          "owner": "test_cycle1_decide_observation_order_before_adopting_any_already_delivered_reply",
+          "text": "r.adopt(2); r.assert_answer((N, P))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1867,
+          "owner": "test_cycle1_replaced_two_step_policy_does_not_request_second_step_but_keeps_first_observation",
+          "text": "r.assert_answer((P, P) if replace_intention else (P,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1880,
+          "owner": "test_cycle1_replaced_two_step_policy_does_not_request_second_step_but_keeps_first_observation",
+          "text": "r.finish_step(1, E); r.adopt(2); r.assert_answer((P, EMPTY))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1907,
+          "owner": "test_cycle1_ambiguous_next_node_in_one_observation_cell_is_named_not_guessed",
+          "text": "_, first = r.enter_step(); r.finish_step(0, T); r.adopt(1); r.assert_answer((HALF,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 1949,
+          "owner": "test_cycle1_clash_after_entered_first_step_prevents_second_request_without_losing_result",
+          "text": "r.finish_step(1, E); r.adopt(2); r.assert_answer((P, EMPTY))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 2149,
+          "owner": "keep_step_pending",
+          "text": "r.finish_step(0, T); r.adopt(1); r.assert_answer((P,))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 2202,
+          "owner": "test_cycle1_busy_activity_batches_adoptions_and_admits_only_the_latest_unused_root",
+          "text": "r.sense(1, T); r.adopt(2); r.assert_answer((P, P))"
+        },
+        {
+          "file": "test_fb_cycle.py",
+          "line": 3075,
+          "owner": "test_cycle1_before_write_adoption_never_becomes_a_root_until_saved",
+          "text": "r.assert_answer((P,))"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_draw.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_draw.py",
+          "line": 548,
+          "owner": "test_draw1_main_loop_uses_all_six_native_workers_and_preserves_the_adoption",
+          "text": "belief1_chain(rig, ({\"joint\": [[4, 5], [1, 5]], \"evidence_mass\": [5, 32]},))"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_evaluator.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_evaluator.py",
+          "line": 615,
+          "owner": "test_eval1_main_loop_native_measure_update_candidates_prepare_evaluate_and_three_choices",
+          "text": "belief1_chain(rig, expected)"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_exact.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_exact.py",
+          "line": 907,
+          "owner": "test_exact1_main_loop_all_six_native_workers_keep_fixed_prefix_and_adoption",
+          "text": "belief1_chain(rig, ({\"joint\": [[4, 5], [1, 5]], \"evidence_mass\": [5, 32]},))"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_loop.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_loop.py",
+          "line": 222,
+          "owner": "assert_update",
+          "text": "def assert_update(rig, work, adopted, expected, previous=None):"
+        },
+        {
+          "file": "test_fb_loop.py",
+          "line": 292,
+          "owner": "test_two_acquisition_updates_from_public_boot_read_actual_records",
+          "text": "assert_update(rig, work, adopted, answer, previous)"
+        },
+        {
+          "file": "test_fb_loop.py",
+          "line": 367,
+          "owner": "test_continuation_uses_adopted_joint_in_math_input_and_information",
+          "text": "result = assert_update(rig, work, adopted, expected, previous)"
+        },
+        {
+          "file": "test_fb_loop.py",
+          "line": 432,
+          "owner": "test_continuation_preserves_adopted_state_order_in_asymmetric_information",
+          "text": "result = assert_update(rig, work, adopted, FIRST)"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_pool.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_pool.py",
+          "line": 476,
+          "owner": "test_pool1_existing_native_boot_workers_and_raw_history_control",
+          "text": "r.assert_answer((component.taken, component.empty, component.taken))"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_port_life.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_port_life.py",
+          "line": 352,
+          "owner": "admitted",
+          "text": "assert_update(rig, work, adopted, FIRST)"
+        },
+        {
+          "file": "test_fb_port_life.py",
+          "line": 383,
+          "owner": "test_portlife1_late_native_update_terminal_post_still_adopts_once",
+          "text": "assert_update(rig, work, rig.facts(c.BELIEF_ADOPTED)[0], FIRST)"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_preparer.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_preparer.py",
+          "line": 649,
+          "owner": "test_prep1_main_loop_native_source_update_candidate_preparation_and_three_selections",
+          "text": "belief1_chain(rig, expected)"
+        }
+      ]
+    },
+    {
+      "file": "tests/test_fb_updater.py",
+      "status": "unchanged_this_request",
+      "migration": "共有の有限定規の数値は維持。新しい口を使う足場へ移す時も、q・質量の意味をPoissonの時刻読みへ一括変更しない。",
+      "hits": [
+        {
+          "file": "test_fb_updater.py",
+          "line": 238,
+          "owner": "test_updater1_ce1_two_updates_and_continuation_use_the_production_worker",
+          "text": "result = assert_update(rig, work, adopted, expected, previous)"
+        }
+      ]
+    }
+  ]
+}

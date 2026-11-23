@@ -22,10 +22,11 @@ _SLOT_VALUE = {
     ("BootDeclaration", "initial"): _fb.InitialProcess,
     ("ExecutionDeclaration", "allocation"): _fb.Allocation,
     ("BootDeclaration", "perception"): _fb.Perception,            # §6-10 K36 新しい決定 2
-    ("BootDeclaration", "execution"): _fb.ExecutionDeclaration,   # §6-10 K36 決定 3・5
+    ("BootDeclaration", "execution"): _fb.ExecutionDeclaration | _fb.TimedExecutionDeclaration,   # K36 決定 3・5、K38
+    ("TimedExecutionDeclaration", "allocation"): _fb.Allocation,
     ("BootDeclaration", "environment"): _fb.Environment,
     ("Perception", "allocation"): _fb.Allocation,
-    ("BootDeclaration", "observation_models"): _fb.AcquisitionObservationModel,   # §6-10 K26-a (ア)
+    ("BootDeclaration", "observation_models"): _fb.AcquisitionObservationModel | _fb.TimedAcquisitionModel,   # K26-a・K38
     ("BootstrapRoute", "allocation"): _fb.Allocation,
     ("InitialProcess", "allocation"): _fb.Allocation,
 }

@@ -98,8 +98,7 @@ def plan_boot(state, declaration, d) -> BootPlan:
     # 観測モデルは宣言の保存だけ (中身の検査は読み口の側。正しいことの証明にしない)。initial の有無に結び付けない
     route_slots = {r.slot for r in declaration.routes}
     for model_slot in declaration.observation_models:
-        if not (model_slot.contract == _c.ACQUISITION_OBSERVATION_MODEL
-                and isinstance(model_slot.value, _fb.AcquisitionObservationModel)):
+        if _OBSERVATION_MODELS.get(model_slot.contract) is not type(model_slot.value):
             plan.missing.append(f"observation_model:{model_slot.slot}:contract")
         elif model_slot.value.route_slot not in route_slots:
             plan.missing.append(f"observation_model:{model_slot.slot}:route")
@@ -133,8 +132,11 @@ def plan_boot(state, declaration, d) -> BootPlan:
     # 感じる側 (K36 新しい決定 2): モデル・読み手 (origin)・割当を自分で持つ。考える側が無くても見立ては直る
     sensing = False
     if execution is not None:
-        if execution.contract != _c.EXECUTION_DECLARATION or not isinstance(execution.value, _fb.ExecutionDeclaration):
+        if _EXECUTIONS.get(execution.contract) is not type(execution.value):
             plan.missing.append("execution:contract")
+        elif execution_reading_fault(declaration) is not None:
+            # 時刻を読む信念と一緒に通す一歩は、源の件数を読まず変えないと確かめられるものだけ (K38 決定 9)
+            plan.missing.append("execution:source_reading")
         elif not allocation_ok(execution.value.allocation):
             # 行う割当は宣言で明示する。省略・不正を追加の席で補わない (K36-c ①・K36-c-a ④ (a))
             plan.missing.append("execution:allocation")
@@ -252,6 +254,32 @@ def _record(state, body, kind, writer):
                    producer=PRODUCER, body=body, schema=3)
 
 
+# 起動の宣言の値の契約 → 値の型 (契約名を使う境界で照合する、R10)。時刻を読む版は K38
+_OBSERVATION_MODELS = {_c.ACQUISITION_OBSERVATION_MODEL: _fb.AcquisitionObservationModel,
+                       _c.TIMED_ACQUISITION_MODEL: _fb.TimedAcquisitionModel}
+_EXECUTIONS = {_c.EXECUTION_DECLARATION: _fb.ExecutionDeclaration,
+               _c.TIMED_EXECUTION_DECLARATION: _fb.TimedExecutionDeclaration}
+
+
+def execution_reading_fault(declaration):
+    """行う一歩の宣言と感じる側の読み方の組み合わせの不足 (K38 決定 9)。時刻を読む感じる側が一歩の結果も読むなら、宣言は
+    源の件数の読みつき (timed_execution_declaration) で、読みの全部が E_y(s) ⊗ I_N の形と確かめられること。返すのは
+    (理由の語, 欄)。合っていれば None。誕生の入口 `start` と起動の計画が同じこの判定を使う。"""
+    from ._fb_time import step_reading_fault
+    execution, perception = declaration.execution, declaration.perception
+    if execution is None:
+        return None
+    value = execution.value
+    timed_reading = perception is not None and perception.value.derivation.method.contract         == _c.SAVED_TIMED_ACQUISITION_UPDATE and "execution" in perception.value.derivation.method.args
+    if isinstance(value, _fb.TimedExecutionDeclaration):
+        # 行える一歩 (相手を宣言した核) と、読みを宣言した核の全部を、実行の前と同じ判定で照らす
+        for kid in sorted({*value.actors, *value.source_readings}):
+            if step_reading_fault(value, kid) is not None:
+                return "source_reading", "/declaration/execution/value/source_readings/" + kid
+        return None
+    return ("source_reading", "/declaration/execution/contract") if timed_reading else None
+
+
 def _model_step(model_slot):
     """観測モデルの記録 (§6-10 K26-a (ア)・K26-b (ア)): Boot の 1 項から独立した Prediction / MODEL を作る。出どころは
     bootstrap の札と BootSlot (Boot の Point と slot)、about・basis は Boot。親は Boot だけ (Prediction を因果の親にしない)。"""
@@ -264,8 +292,8 @@ def _model_step(model_slot):
         content = {"origin": "bootstrap", "declared_at": _encode(_fb.BootSlot(declaration=plan.d, slot=name)),
                    "value": _encode(model_slot.value)}
         body = _Prediction(target="acquisition_observation_model", about=(boot,), basis=(boot,),
-                           content=_Payload.json(content), contract=_c.ACQUISITION_OBSERVATION_MODEL)
-        return Slot(contract=_c.ACQUISITION_OBSERVATION_MODEL,
+                           content=_Payload.json(content), contract=model_slot.contract)
+        return Slot(contract=model_slot.contract,
                     record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
                     parents=_front(ledger, {plan.d}))
 
@@ -284,8 +312,8 @@ def _execution_step(execution_slot):
         content = {"origin": "bootstrap", "declared_at": _encode(_fb.BootSlot(declaration=plan.d, slot=name)),
                    "value": _encode(execution_slot.value)}
         body = _Prediction(target="execution_declaration", about=(boot,), basis=(boot,),
-                           content=_Payload.json(content), contract=_c.EXECUTION_DECLARATION)
-        return Slot(contract=_c.EXECUTION_DECLARATION, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
+                           content=_Payload.json(content), contract=execution_slot.contract)
+        return Slot(contract=execution_slot.contract, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
                     parents=_front(ledger, {plan.d}))
 
     return Step(name="execution", build=build)

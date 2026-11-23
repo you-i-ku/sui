@@ -82,6 +82,7 @@ class UpdatePlan:
     obligations: dict = _field(default_factory=dict)   # 原報告の Point → Obligation (見つけた順)
     chain: list = _field(default_factory=list)         # 保存を確認した採用 A* の Point (採用した順)。最後が系列の頭
     kind: str = "segment"        # δ の方法: segment (区間の札、saved_segment_update/1) / acquisition (取りに行き)
+    timed: bool = False          # 取りに行きを時刻込みで読む (saved_timed_acquisition_update/1、K38)
     # 系列の採用が止まった (理由の語, 観測の Point, 名指しの Point の列, その並びの model)。待っても解けない (K36 決定 12・13)。
     # 止まりはその並びの下でだけ効く (候補を足した後は新しい並びで導き直す、K37 決定 4)
     stopped: tuple | None = None
@@ -211,9 +212,9 @@ def _plan(state, boot):
     plan.initial = plan.current = initial_pool(state, boot)
     if method.contract == _c.SAVED_SEGMENT_UPDATE:
         reason = _check_args(boot, plan.args)
-    elif method.contract == _c.SAVED_ACQUISITION_UPDATE:
-        plan.kind = "acquisition"
-        reason = _check_acquisition_args(boot, plan.args)
+    elif method.contract in (_c.SAVED_ACQUISITION_UPDATE, _c.SAVED_TIMED_ACQUISITION_UPDATE):
+        plan.kind, plan.timed = "acquisition", method.contract == _c.SAVED_TIMED_ACQUISITION_UPDATE
+        reason = _check_acquisition_args(boot, plan.args, plan.timed)
     else:
         reason = "delta:method"
     if reason is not None:
@@ -225,7 +226,7 @@ def _plan(state, boot):
 
 # --- 取りに行きの δ: 物語の対応と読み方 (K28 (2)(a)〜(c)・K28-a (ア)) ---
 
-def _check_acquisition_args(boot, args):
+def _check_acquisition_args(boot, args, timed=False):
     """取りに行きの δ の args の形: {route, observation_model, correspondence: {pairs}}。対応の中身 (1 対 1・target) と
     宣言どうしの一致は U が検査する。ここは計画を置けるかだけ (口・観測モデル・取りに行き方を名指せるか)。"""
     if not hasattr(args, "items") or set(args) - {"execution"} != {"route", "observation_model", "correspondence"} \
@@ -244,7 +245,8 @@ def _check_acquisition_args(boot, args):
         return "delta:repeat"   # この本で読める取りに行き方は「済んだら次」だけ (K28 新しい決定 9)
     models = {m.slot: m.value for m in boot.declaration.observation_models}
     model = models.get(args["observation_model"])
-    if model is None or getattr(model, "route_slot", None) != args["route"]:
+    kind = _fb.TimedAcquisitionModel if timed else _fb.AcquisitionObservationModel
+    if not isinstance(model, kind) or model.route_slot != args["route"]:
         return "delta:observation_model"
     correspondence = args["correspondence"]
     if not hasattr(correspondence, "items") or set(correspondence) != {"pairs"} \
@@ -284,7 +286,8 @@ def _acquisition_reading_step(pool):
     def build(state, plan):
         from ._fb_core import Slot
         observation = plan.boot.points["observation_model:" + plan.args["observation_model"]]
-        time_projection = {"contract": _f._encode(_VALUE_ONLY), "args": {}}
+        time_projection = {"contract": _f._encode(_c.TIMED_ACQUISITION_PROJECTION if plan.timed else _VALUE_ONLY),
+                           "args": {}}
         ledger = state.ledger
         if pool.initial:
             correspondence = plan.points["correspondence"]
@@ -314,9 +317,16 @@ def _execution_reading_step(pool):
         declaration = plan.boot.points.get("execution")
         if declaration is None:
             return None
+        args = {"execution_declaration": declaration}
+        if plan.timed and pool.initial:
+            # 時刻を読む最初の並びの一歩は、取りに行きと同じ起動の観測モデルと物語の対応から法則を解く (K38-c ①)
+            correspondence = plan.points.get("correspondence")
+            if correspondence is None:
+                return None
+            args.update(observation_model=plan.boot.points["observation_model:" + plan.args["observation_model"]],
+                        correspondence=correspondence)
         content = {"model": pool.model,
-                   "projection": {"contract": _f._encode(_c.EXECUTION_STEP_PROJECTION),
-                                  "args": {"execution_declaration": declaration}},
+                   "projection": {"contract": _f._encode(_c.EXECUTION_STEP_PROJECTION), "args": args},
                    "generation": {"contract": _f._encode(_c.EXECUTE_STEP), "args": {}}}
         ledger = state.ledger
         body = _Prediction(target="observation_plan", about=(ledger.record(pool.model).id,),
@@ -1073,6 +1083,8 @@ def _observation_inputs(state, plan, pool, ob) -> set:
     if ob.kind == "execution":
         # 行った一歩の結果 (K36 決定 5): 結果のメモ・読み方・行う一歩の宣言の記録 (足した並びでは E のモデルも)
         out = {_reading_point(plan, pool, "execution"), ob.binding, ob.result.execution.reading}
+        if plan.timed and pool.initial:   # 一歩の読み方が名指す起動の観測モデルと物語の対応 (K38-c ①)
+            out |= {plan.boot.points["observation_model:" + plan.args["observation_model"]], plan.points["correspondence"]}
         return out if pool.initial else out | {ob.result.execution.model}
     # 取りに行きの列 (K28 (2)(e)): 観測モデル・物語の対応・読み方と、この回の Frame・B・取れた回の原文。0〜i - 1 の
     # Frame・B・原文は、前の採用の Q* が読んだ全部 (系列をさかのぼった閉包) に入っている
@@ -1116,7 +1128,8 @@ def _q_step(ob):
             process=_fb.BootSlot(declaration=d, slot=initial.process_slot),
             trigger=frozenset({_fb.Trigger(point=ob.report, slot="trigger")}),
             purpose="belief_update", stage_slot=stage, reader=origin,
-            method=_c.FINITE_UPDATE_COMPUTE, output_contract=_c.UPDATE_RESPONSE,
+            method=_c.TIMED_UPDATE_COMPUTE if plan.timed else _c.FINITE_UPDATE_COMPUTE,
+            output_contract=_c.UPDATE_RESPONSE,
             args=_fb.UpdateArgs(model=model, prior=prior, observations=tuple(observations)),
             input_points=inputs, numerical_view=_fixed_view(state, inputs),
             allocation=_fb.BootSlot(declaration=d, slot=initial.allocation.slot),
@@ -1148,9 +1161,15 @@ def _q_step(ob):
 def _read_stage(state, plan, ob) -> str:
     """表示用 (K28 新しい決定 8 ⑤): Q* の入力の 0〜seq を K26 の読み口で読んだ段。U の判定とは別に、読みの段の 0
     (model_zero) と更新の段の 0 (U の model_falsified) を分けて見せる。"""
-    from ._fb_read import read
+    from ._fb_read import read, read_timed, _Unreadable
     records = {p: state.ledger.record(p) for p in ob.desc.input_points}
     model = plan.boot.points["observation_model:" + plan.args["observation_model"]]
+    if plan.timed:
+        try:
+            read_timed(records, model=model, run=state.clock.run, route_epoch=_epoch(plan), through_seq=ob.seq)
+        except _Unreadable:
+            return "unreadable"
+        return "read"
     return read(records, model=model, run=state.clock.run, route_epoch=_epoch(plan), through_seq=ob.seq).kind
 
 
@@ -1166,6 +1185,9 @@ def _issued_result(outputs):
 
 def _result_shape(value) -> bool:
     """issued の返答の値が finite_update_result/1 の値として読めるか (形が合わなければ issued:shape)。"""
+    from . import _fb_time
+    if _fb_time.is_result(value):   # 時刻を読む信念の正本 (K38)。中身は入口 U の作り直しが採用の時に全比較する
+        return True
     try:
         _f._decode(value, _f.FiniteUpdateResult)
     except (_f.FInputError, KeyError, TypeError, ValueError):

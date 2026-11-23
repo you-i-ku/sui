@@ -338,6 +338,20 @@ def compute_finite_update(
     前の採用の系列) と数学まで。evidence (実取得・実使用・監視の独立の観測) との照合と、能力の宣言の
     照合は ★ 1 周の後 (この版は evidence を読まない)。入口が自分で上げる入力の誤りは `UpdateEntranceError`
     (FInputError) で、係はその理由の語と欄だけを失敗の中身に残す (`_failure_content`、K28-a (ウ))。"""
+    return _compute(request, reader, registry, _c().FINITE_UPDATE_COMPUTE)
+
+
+def compute_timed_update(
+    request: Point, *, reader: FReader, registry: FRegistry,
+    evidence: TargetEvidence,
+) -> UpdateReturn:
+    """入口 U の時刻を読む版 `sui.fb.timed_update_compute/1` (紙 F-b K38)。同じ作り直し (`_replay`) で、取りに行きの列を
+    宣言した件数の法則・取得区間の測定核・経過時間込みで 1 つの共同の法則に条件づけ、採用する信念を「法則と原記録から
+    作り直せる正本」(`sui.fb.timed_update_result/1`) として発行する。旧い有限の系列は読まない (版を混ぜない)。"""
+    return _compute(request, reader, registry, _c().TIMED_UPDATE_COMPUTE)
+
+
+def _compute(request, reader, registry, method):
     c = _c()
     try:
         record = reader.record(request)
@@ -346,8 +360,7 @@ def compute_finite_update(
     if record.body.contract != c.WORK_REQUESTED:
         raise UpdateEntranceError("shape", "not a work request", "/request")
     desc = record.body.content.as_json().get("desc")
-    if not hasattr(desc, "items") or desc.get("purpose") != "belief_update" \
-            or desc.get("method") != _enc(c.FINITE_UPDATE_COMPUTE):
+    if not hasattr(desc, "items") or desc.get("purpose") != "belief_update" or desc.get("method") != _enc(method):
         raise UpdateEntranceError("shape", "not a belief update request", "/request/desc")
     try:
         state = _replay(reader, request)
@@ -362,9 +375,10 @@ def compute_finite_update(
     from ._f_world import registry_view_key
     from .f import _freeze, _handle
     view = desc["numerical_view"]
+    model, origin = desc["args"]["model"], desc["reader"]
     return _issue_handle(_handle(
-        IssuedUpdate, request=request, result=_freeze(_encode_result(state)),
-        application_digest=state.digest(desc["args"]["model"], desc["reader"]),
+        IssuedUpdate, request=request, result=_freeze(_encode_result(state, model, origin)),
+        application_digest=state.digest(model, origin),
         numerical_view=FixedViewValue(boundary=frozenset(view["boundary"]),
                                       reader_view_key=view["environment"]["reader_view_key"],
                                       registry_key=view["environment"]["registry_key"]),
@@ -402,9 +416,11 @@ def adopted_belief(compiler):
         desc = _update_desc(reader, head["request"])
     except _Issue as issue:
         raise FInputError(issue.code, issue.message, "/adoption") from None
-    if saved["request"] != head["request"] or saved["result"] != _encode_result(state) \
-            or saved["application_digest"] != state.digest(head["model"], desc["reader"]):
+    if not saved_matches(saved, head["request"], state, head["model"], desc["reader"]):
         raise FInputError("result_mismatch", "the adopted result differs from its recomputation", "/adoption/result")
+    if state.mode == "timed":   # 時刻を読む信念は、正本から作った厳密な確率の比をそのまま渡す (K38)
+        from . import _fb_time
+        return compiler.point(head["result"]).id, _fb_time.joint(state.timed)
     return compiler.point(head["result"]).id, state.joint
 
 
@@ -520,6 +536,11 @@ class _State:
         self.seen = {}      # MeasurementId (か一歩の E) の正準 bytes → 意味 (同じ測定は 1 回だけ学ぶ)
         self.passive = []   # 適用した取りに行きの MeasurementId の値 (順に。番号の続きを確かめる)
         self.history = []   # 適用した観測の (種類, 始め, 終わり, 行列, 重なりの宣言) (順の確かめ、K36 決定 12)
+        # 取りに行きの系列の数の版 (K38): "finite" (有限の核を joint に掛ける) / "timed" (時刻を読む正本に積む)。混ぜない
+        self.mode = None
+        # 時刻を読む正本 (K38 決定 5): units (状態ごとの件数の法則と事前、最初の取りに行きで決まる)・entries (適用の順)
+        self.timed = {"units": None, "entries": [], "terminal_ns": None}
+        self.observations = []   # 適用した原記録の Point (取りに行きの Frame・一歩の結果のメモ、順に)
 
     def digest(self, model, origin) -> str:
         """application_digest (§19-1): モデル・origin・法則と、今の連言が表す行の集合 (連言を満たす正準 marks)。
@@ -527,6 +548,11 @@ class _State:
         (MID と意味) の列を別の名前空間で結ぶ (K28 (2)(f)。札の行の集合の意味とは分ける)。"""
         from .f import _digest
         from . import _f_count as count
+        if self.mode == "timed":
+            from . import _fb_time
+            return _digest({"domain": "sui.fb.timed_application/1", "model": model, "origin": origin,
+                            "applied": [list(pair) for pair in self.frames],
+                            "derivation": _json(_fb_time.encode_spec(self.timed))})
         if self.kind == "acquisition":
             return _digest({"domain": "sui.fb.acquisition_application/1", "model": model, "origin": origin,
                             "applied": [list(pair) for pair in self.frames]})
@@ -536,10 +562,25 @@ class _State:
                         "law": self.law_point, "rows": rows})
 
 
-def _encode_result(state):
-    """再計算した状態の finite_update_result/1 の値 {joint, evidence_mass}。"""
+def _encode_result(state, model, origin):
+    """再計算した状態の結果の値。有限の系列は finite_update_result/1 の {joint, evidence_mass}、時刻を読む系列は作り直せる
+    正本 (`sui.fb.timed_update_result/1`、K38 決定 5)。"""
     from .f import FiniteUpdateResult, _encode
+    if state.mode == "timed":
+        from . import _fb_time
+        return _fb_time.result(state.timed, state.digest(model, origin), state.observations)
     return _encode(FiniteUpdateResult(joint=state.joint, evidence_mass=state.mass))
+
+
+def saved_matches(saved, request, state, model, origin) -> bool:
+    """保存した結果 R* の本文が、その要求 request の作り直し state と同じか (§19-8・K38-b R5)。照合は正準 JSON の bytes
+    (Python の == は true と 1 を同じにする、K28-a (チ))。入口 U の系列の再生・考える側の採用の読み・時刻を読む信念の照会の
+    認証が、同じこの照合を使う。"""
+    from .f import _dumps
+    try:
+        return _dumps(saved["request"]) == _dumps(request)             and _dumps(saved["result"]) == _dumps(_encode_result(state, model, origin))             and _dumps(saved["application_digest"]) == _dumps(state.digest(model, origin))
+    except (KeyError, TypeError):
+        return False
 
 
 def _span(value):
@@ -554,7 +595,7 @@ def _update_desc(reader, point):
     c = _c()
     desc = _content(reader, point, c.WORK_REQUESTED).get("desc")
     if not hasattr(desc, "items") or desc.get("purpose") != "belief_update" \
-            or desc.get("method") != _enc(c.FINITE_UPDATE_COMPUTE):
+            or desc.get("method") not in (_enc(c.FINITE_UPDATE_COMPUTE), _enc(c.TIMED_UPDATE_COMPUTE)):
         raise _Issue("rejected", "reference_kind", f"{point} is not a belief update request", evidence=(point,))
     return desc
 
@@ -608,10 +649,14 @@ def _replay(reader, request) -> _State:
             _apply(reader, state, model, use["binding"], use["reading"], desc, pools)
             if use["binding"] not in applied:
                 applied.append(use["binding"])
+        # 要求の方法と、読んだ系列の数の版の一致 (K38): 時刻を読む入口の要求は時刻を読む系列だけ、有限の入口の要求は
+        # それ以外。系列の全部の要求で、入口 U・考える側の採用の読み・照会の認証が同じこの作り直しで確かめる
+        if (desc["method"] == _enc(c.TIMED_UPDATE_COMPUTE)) != (state.mode == "timed"):
+            raise _Issue("rejected", "missing_contract", "the update method does not read this series",
+                         fields=("/method",), evidence=(point,))
         if adopted is not None:
             saved = _content(reader, adopted["result"], c.UPDATE_RESULT)
-            if saved["request"] != point or saved["result"] != _encode_result(state) \
-                    or saved["application_digest"] != state.digest(model, desc["reader"]):
+            if not saved_matches(saved, point, state, model, desc["reader"]):
                 raise _Issue("rejected", "result_mismatch", "a saved result differs from its recomputation",
                              evidence=(adopted["result"],))
     return state
@@ -637,6 +682,29 @@ def _model_document(reader, model, *, evidence):
         raise _Issue("rejected", "reference_kind", f"{model} is not a model", fields=("/args/model",),
                      evidence=evidence)
     return _json(document)
+
+
+def _correspondence(reader, pargs, model, reading):
+    """読み方が名指す物語の対応の記録 (state_correspondence/1) が、この model とその読み方の観測モデルのものであること。"""
+    c = _c()
+    point = pargs["correspondence"]
+    corr = _content(reader, point, c.STATE_CORRESPONDENCE)
+    if not hasattr(corr, "keys") or set(corr.keys()) != {"model", "observation_model", "pairs"} \
+            or corr["model"] != model or corr["observation_model"] != pargs["observation_model"]:
+        raise _Issue("rejected", "observation_binding_mismatch", "state correspondence", evidence=(point, reading))
+    return corr
+
+
+def _initial_member(reader, model, declaration, boot, pairs):
+    """最初の並び (起動の宣言の 1 枚) の候補 (K37・K38-b R6): 名前は感じる側の宣言の位置で、`_fb_pool.initial_pool` が公開する
+    最初の候補の名前と同じ。足した並びの候補と同じ形で、計算と照会へ渡す。"""
+    c = _c()
+    try:
+        name = _content(reader, boot, c.BOOT_DECLARATION)["perception"]["slot"]
+    except (KeyError, TypeError):
+        raise _Issue("rejected", "shape", "the boot declaration names no perception", evidence=(boot,)) from None
+    return {"id": name, "document": _model_document(reader, model, evidence=(model,)), "observation": declaration,
+            "pairs": pairs}
 
 
 def _check_change(reader, pools, previous, applied, desc, point) -> None:
@@ -762,7 +830,7 @@ def _pools(reader, desc) -> dict:
     model の並びが 2 つあれば読めない。記録した候補から法則と直和のモデルを作り直し、保存した直和のモデルと全比較する
     (派生物を信じない)。"""
     from .f import FInputError, _Fraction, _decode, _dumps
-    from .fb import AcquisitionObservationModel
+    from .fb import AcquisitionObservationModel, TimedAcquisitionModel
     c = _c()
     out = {}
     for p in sorted(desc["input_points"]):
@@ -780,7 +848,7 @@ def _pools(reader, desc) -> dict:
             ev = (p, value.get("model"))
             document = _model_document(reader, value.get("model"), evidence=ev)
             try:
-                observation = _decode(value["observation_model"], AcquisitionObservationModel)
+                observation = _decode(value["observation_model"], AcquisitionObservationModel | TimedAcquisitionModel)
                 weight = _decode(value["prior_weight"], _Fraction)
                 pairs = value["correspondence"]["pairs"]
             except (FInputError, KeyError, TypeError, ValueError):
@@ -829,6 +897,9 @@ def member_reading(member, *, route, evidence_model, evidence_pairs):
     if declaration.route_slot != route:
         raise _Issue("rejected", "missing_contract", "the observation model is of another route",
                      fields=("/observation_model",), evidence=evidence_model)
+    from .fb import TimedAcquisitionModel
+    if isinstance(declaration, TimedAcquisitionModel):
+        return None, _timed_member(member, declaration, evidence_model=evidence_model, evidence_pairs=evidence_pairs)
     try:
         if declaration.projection != c.ACQUISITION_RESULT_PROJECTION or declaration.time_projection != _value_only() \
                 or declaration.control_rule.contract != c.ACQUISITION_CONTROL_TABLE \
@@ -867,11 +938,55 @@ def member_reading(member, *, route, evidence_model, evidence_pairs):
     return control, phi
 
 
+def _timed_member(member, declaration, *, evidence_model, evidence_pairs):
+    """時刻を読む観測モデル (K38) の候補 1 つの読み方: 取りに行き方の制御の表と重みは K26 と同じ形、件数の法則はこの本が
+    対応しているもの (固定の Poisson 源・有限の法則) で、時計の run が端点の予定と同じ、物語の対応が 1 対 1、法則の事前が
+    その候補のモデルの事前と同じ (事前を 2 か所に持たない)。観測モデルの状態の番号 → 候補のモデルの状態の番号 を返す。"""
+    from fractions import Fraction
+    from .f import _Fraction, _decode
+    from .fb import FiniteCountLaw, PoissonLaw
+    c = _c()
+    u_id = c.ACQUISITION_REPEAT_WHEN_DONE.name + "/" + c.ACQUISITION_REPEAT_WHEN_DONE.version
+    from . import _fb_read
+    symbols = sorted(set(_fb_read._SYMBOLS.values()))
+    law = declaration.law
+    if not isinstance(law, (PoissonLaw, FiniteCountLaw)):
+        raise _Issue("rejected", "missing_contract", "the count law is not supported by this book",
+                     fields=("/observation_model/law",), evidence=evidence_model)
+    if declaration.control_rule.contract != c.ACQUISITION_CONTROL_TABLE \
+            or declaration.control_independence.contract != c.STATE_INDEPENDENT_CONTROL_SELECTION \
+            or _json(declaration.control_rule.args) != {"first": [u_id], "after": {s: [u_id] for s in symbols}} \
+            or _weights(declaration.control_independence.args) != ((Fraction(1),),) * len(law.states):
+        raise _Issue("rejected", "missing_contract", "acquisition repeat or control declaration",
+                     fields=("/observation_model",), evidence=evidence_model)
+    if law.run != declaration.conditioning.run:
+        raise _Issue("rejected", "missing_contract", "the law and the schedule read different clocks",
+                     fields=("/observation_model/law/run",), evidence=evidence_model)
+    states = member["document"]["states"]
+    ids = [s["id"] for s in states]
+    pairs = _json(member["pairs"])
+    if not isinstance(pairs, list) or any(not isinstance(pair, list) or len(pair) != 2 for pair in pairs) \
+            or len(pairs) != len(ids) or sorted(a for a, _m in pairs) != sorted(law.states) \
+            or sorted(m for _a, m in pairs) != sorted(ids):
+        raise _Issue("rejected", "shape", "the correspondence is not one to one", fields=("/pairs",),
+                     evidence=evidence_pairs)
+    phi = [ids.index(dict(pairs)[a]) for a in law.states]
+    initial = _decode(member["document"]["initial"], tuple[_Fraction, ...])
+    if any(initial[phi[a]] != p for a, p in enumerate(law.prior)):
+        raise _Issue("rejected", "shape", "the law's prior differs from the model's prior",
+                     fields=("/observation_model/law/prior",), evidence=evidence_model)
+    return phi
+
+
 def passive_block(control, phi, symbol, *, sampling, evidence):
     """受け身の取りに行き 1 回の、候補 1 つのかたまりの行列 (候補のモデルの状態の順、正規化する前のセルの和)。sampling は
-    測る契約 (K26-d (ク) の照らし。None は照らさない = 順の判定だけに使う時)。セルの無い観測は質量 0 のかたまり。"""
+    測る契約 (K26-d (ク) の照らし。None は照らさない = 順の判定だけに使う時)。セルの無い観測は質量 0 のかたまり。
+    時刻を読む取りに行き (control=None、K38) は S を変えず源の件数だけに働く (状態ごとのかたまり)。S の上の行列ではないので、
+    順の判定 (状態を変えない一歩との交換) には単位で表す。数は時刻を読む正本で計算する。"""
     from fractions import Fraction
     from . import _fb_read
+    if control is None:
+        return [[Fraction(int(i == j)) for j in range(len(phi))] for i in range(len(phi))]
     outcomes = {o.id: o for o in control.kernel.outcomes}
     if sampling is not None:
         # K26-d (ク): セルの観測値と、そのセルの outcome の evidence (kind・測る契約・射影した観測値) が一致する
@@ -1056,9 +1171,12 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc, po
     if b["reading_contract"] != projection["contract"] or not hasattr(pargs, "keys") \
             or set(pargs.keys()) not in ({"observation_model", "correspondence", "time_projection"},
                                          {"observation_model", "pool", "time_projection"}) \
-            or _json(pargs["time_projection"]) != {"contract": _enc(_value_only()), "args": {}}:
+            or _json(pargs["time_projection"]) not in ({"contract": _enc(_value_only()), "args": {}},
+                                                      {"contract": _enc(c.TIMED_ACQUISITION_PROJECTION), "args": {}}):
         raise _Issue("rejected", "missing_contract", "acquisition projection", fields=("/projection",),
                      evidence=(reading, binding))
+    # 時間の射影が読み方の版を決める: value_only は有限の核 (K28)、timed_acquisition_projection は時刻を読む正本 (K38)
+    timed = _json(pargs["time_projection"])["contract"] == _enc(c.TIMED_ACQUISITION_PROJECTION)
     pool = None
     if "pool" in pargs:   # 並びの読み方: 名指した並びが、この model を直和のモデルに持つ並びであること
         pool = pools.get(model)
@@ -1092,12 +1210,8 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc, po
         raise _Issue("rejected", "observation_binding_mismatch", "acquisition generation",
                      evidence=(binding, b["route"], b["segment"]))
     if pool is None:
-        # 物語の対応の記録 (state_correspondence/1)
         point = pargs["correspondence"]
-        corr = _content(reader, point, c.STATE_CORRESPONDENCE)
-        if not hasattr(corr, "keys") or set(corr.keys()) != {"model", "observation_model", "pairs"} \
-                or corr["model"] != model or corr["observation_model"] != pargs["observation_model"]:
-            raise _Issue("rejected", "observation_binding_mismatch", "state correspondence", evidence=(point, reading))
+        corr = _correspondence(reader, pargs, model, reading)
     # K26 の読み口で 0〜i を読む。読む範囲は、その要求 Q* が申告した入力 (と観測モデル) の一次記録だけ。B が指す Frame が
     # その中に無ければ読まない (同じ MID の別の記録で計算しない。中にあれば、同じ MID の中身の違う記録は K26 の食い違い)
     if b["report"] not in desc["input_points"]:
@@ -1109,13 +1223,24 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc, po
             records[p] = reader.record(p)
         except KeyError:
             raise _Issue("rejected", "unresolved_reference", f"{p} is outside the reader", evidence=(p,)) from None
-    read = _fb_read.read(records, model=pargs["observation_model"], run=mid.origin, route_epoch=mid.route_epoch,
-                         through_seq=mid.sample_seq)
-    if read.kind == "unreadable":
-        raise _Issue("rejected", _UNREADABLE[read.reason], "the acquisition sequence is unreadable: " + read.reason,
+    reason = None
+    if timed:
+        try:
+            declaration, boot, observations = _fb_read.read_timed(
+                records, model=pargs["observation_model"], run=mid.origin, route_epoch=mid.route_epoch,
+                through_seq=mid.sample_seq)
+        except _fb_read._Unreadable as exc:
+            reason = exc.reason
+    else:
+        read = _fb_read.read(records, model=pargs["observation_model"], run=mid.origin, route_epoch=mid.route_epoch,
+                             through_seq=mid.sample_seq)
+        reason, observations = read.reason, read.observations
+        if read.kind != "unreadable":
+            declaration, boot = _fb_read._declaration(records, pargs["observation_model"], [], [])
+    if reason is not None:
+        raise _Issue("rejected", _UNREADABLE[reason], "the acquisition sequence is unreadable: " + reason,
                      fields=("/args/observations",), evidence=(binding,))
-    declaration, boot = _fb_read._declaration(records, pargs["observation_model"], [], [])
-    observation = read.observations[mid.sample_seq]
+    observation = observations[mid.sample_seq]
     if observation.measurement_id != mid:
         raise _Issue("rejected", "measurement_conflict", "the read sequence differs at this MID", evidence=(binding,))
     # 取りに行き方の照らし (決定 9): 起動の宣言の route の repeat と測る要求の repeat
@@ -1127,8 +1252,7 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc, po
                      fields=("/observation_model",), evidence=(pargs["observation_model"],))
     symbol = _fb_read._SYMBOLS[(observation.result, observation.source_called)]
     if pool is None:
-        members = [{"document": _model_document(reader, model, evidence=(model,)), "observation": declaration,
-                    "pairs": corr["pairs"]}]
+        members = [_initial_member(reader, model, declaration, boot, corr["pairs"])]
         evidence = [((pargs["observation_model"],), (point,))]
     else:
         members = pool["members"]
@@ -1139,9 +1263,14 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc, po
         raise _Issue("rejected", "observation_binding_mismatch", "the pool reads another route",
                      fields=("/projection",), evidence=(reading, pool["point"]))
     blocks = []
+    read_members = []   # 候補ごとに、読めた観測モデルの状態の番号 → 候補のモデルの状態の番号 (phi) を添える
     for member, (ev_model, ev_pairs) in zip(members, evidence):
         control, phi = member_reading(member, route=route, evidence_model=ev_model, evidence_pairs=ev_pairs)
+        if (control is None) != timed:   # 時刻を読む候補と有限の核の候補を 1 つの読み方に混ぜない (K38)
+            raise _Issue("rejected", "missing_contract", "a candidate reads time differently from the reading",
+                         fields=("/observation_model",), evidence=ev_model)
         blocks.append(passive_block(control, phi, symbol, sampling=sampling, evidence=ev_model))
+        read_members.append({**member, "phi": phi})
     m = _diag(blocks)
     n = len(m)
     # 意味 = 読み方の版と、宣言した観測モデルの値の全部 (状態・制御・核・セルの分け方・制御の表・重み) と、物語の対応の
@@ -1168,16 +1297,151 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc, po
                      "acquisitions must continue the applied prefix in order", evidence=(binding,))
     interval = frame.measurement_interval
     _check_order(state, "acquisition", interval.start_ns, interval.end_ns, m, None, binding)
-    z = sum((m[i][j] * state.joint[j] for i in range(n) for j in range(n)), Fraction(0))
-    if z == 0:
-        raise _Issue("rejected", "model_falsified", "the model gives this acquisition no mass on the current support",
-                     evidence=(binding,))
-    state.joint = tuple(sum((m[i][j] * state.joint[j] for j in range(n)), Fraction(0)) / z for i in range(n))
-    state.mass *= z
+    _mode(state, "timed" if timed else "finite", binding)
+    if timed:
+        _ensure_units(state, read_members, [e for e, _p in evidence], binding)
+        _timed_acquisition(state, members, mid, interval, observation.cursor, symbol, b["report"], binding)
+    else:
+        z = sum((m[i][j] * state.joint[j] for i in range(n) for j in range(n)), Fraction(0))
+        if z == 0:
+            raise _Issue("rejected", "model_falsified",
+                         "the model gives this acquisition no mass on the current support", evidence=(binding,))
+        state.joint = tuple(sum((m[i][j] * state.joint[j] for j in range(n)), Fraction(0)) / z for i in range(n))
+        state.mass *= z
     state.frames.append((_enc(mid), meaning))
     state.passive.append(_enc(mid))
     state.history.append(("acquisition", interval.start_ns, interval.end_ns, m, None))
     state.seen[key] = meaning
+
+
+def _mode(state, mode, binding) -> None:
+    """系列の数の版 (K38): 有限の核の系列と時刻を読む系列を混ぜない。"""
+    if state.mode not in (None, mode):
+        raise _Issue("rejected", "missing_contract", "finite and timed readings in one series", evidence=(binding,))
+    state.mode = mode
+
+
+def _timed_units(state, members, evidence):
+    """時刻を読む正本の units (K38 決定 1・5): 並びの状態ごとに、その候補の件数の法則のその状態の部分と、並びの事前
+    (候補の重み × 候補の中の事前) と、独立の故障の核。全部の候補が同じ測定核と端点の予定で読む (候補ごとに時間の
+    条件づけ方を変えて証拠の質量を比べない、決定 3)。"""
+    from . import _fb_time
+    from .fb import TimedAcquisitionModel
+    first = None
+    units = []
+    for member, ev in zip(members, evidence):
+        declaration = member["observation"]
+        if not isinstance(declaration, TimedAcquisitionModel):
+            raise _Issue("rejected", "missing_contract", "a candidate does not read time", evidence=ev)
+        basis = _json(_enc((declaration.decision_time, declaration.conditioning)))
+        if first is not None and basis != first:
+            raise _Issue("rejected", "missing_contract", "candidates read time under different conditioning",
+                         fields=("/observation_model/conditioning",), evidence=ev)
+        first = basis
+        if type(declaration.law) is not type(members[0]["observation"].law):
+            raise _Issue("rejected", "missing_contract", "candidates' count laws are of different kinds",
+                         fields=("/observation_model/law",), evidence=ev)
+        phi = member["phi"]
+        states = member["document"]["states"]
+        for a, name in enumerate(declaration.law.states):
+            j = member.get("offset", 0) + phi[a]
+            law = _fb_time.unit_law(declaration.law, name)
+            units.append({"index": j, "candidate": member.get("id"), "state": states[phi[a]]["id"],
+                          "prior": state.joint[j], "law": law,
+                          "failure": None if declaration.failure is None else declaration.failure.unavailable_probability,
+                          "disconnection": None if declaration.disconnection is None
+                          else declaration.disconnection.coefficient})
+    return sorted(units, key=lambda u: u["index"])
+
+
+def _ensure_units(state, members, evidence, binding) -> None:
+    """時刻を読む正本の units を決める (K38-c ①: 法則・起点・起点の件数の出どころは並びの候補の観測モデル = 起動の宣言の
+    1 か所。最初に読んだ観測が取りに行きでも一歩でも同じ所から解く)。既に決まっていれば、同じ解決になることを確かめる。"""
+    units = _timed_units(state, members, evidence)
+    if state.timed["units"] is None:
+        state.timed["units"] = units
+    elif state.timed["units"] != units:
+        raise _Issue("rejected", "result_mismatch", "the series resolves its count laws differently", evidence=(binding,))
+
+
+def _timed_step_members(reader, model, pargs, pool, reading, binding):
+    """時刻を読む系列の一歩を読む時の候補 (phi つき) と名指し (K38-c ①)。並びなら並びの記録の候補、最初の並びなら一歩の
+    読み方が名指す起動の観測モデルと物語の対応 (取りに行きの読み方と同じ記録)。"""
+    from . import _fb_read
+    c = _c()
+    if pool is not None:
+        evidence = [(binding, m["model"], pool["point"]) for m in pool["members"]]
+        return [{**m, "phi": member_reading(m, route=pool["route"], evidence_model=ev, evidence_pairs=ev)[1]}
+                for m, ev in zip(pool["members"], evidence)], evidence
+    if set(pargs.keys()) != {"execution_declaration", "observation_model", "correspondence"}:
+        raise _Issue("rejected", "missing_contract", "a timed step reading names its observation model",
+                     fields=("/projection",), evidence=(reading,))
+    corr = _correspondence(reader, pargs, model, reading)
+    point = pargs["observation_model"]
+    try:
+        records = {point: reader.record(point)}
+        declaration, boot = _fb_read._declaration(records, point, [], [], c.TIMED_ACQUISITION_MODEL)
+    except KeyError:
+        raise _Issue("rejected", "unresolved_reference", f"{point} is outside the reader", evidence=(point,)) from None
+    except _fb_read._Unreadable as exc:
+        raise _Issue("rejected", _UNREADABLE[exc.reason], "the observation model is unreadable: " + exc.reason,
+                     evidence=(point,)) from None
+    member = _initial_member(reader, model, declaration, boot, corr["pairs"])
+    ev = (point,)
+    phi = member_reading(member, route=declaration.route_slot, evidence_model=ev,
+                         evidence_pairs=(pargs["correspondence"],))[1]
+    return [{**member, "phi": phi}], [ev]
+
+
+def _timed_acquisition(state, members, mid, interval, cursor, symbol, point, binding) -> None:
+    """取りに行き 1 回を時刻を読む正本に積む (K38 決定 2〜4・8)。区間は宣言した端点の予定の i 番目と一致し、起点より後で、
+    前の取りに行きと重ならない時だけ。unavailable は独立の故障の核を宣言した時だけ読む (empty にしない)。積んだ後の
+    証拠の質量が形で 0 なら model_falsified (支えの条件から証明した 0、決定 6)。"""
+    seq = mid.sample_seq
+    for member in members:
+        declaration = member["observation"]
+        schedule, law = declaration.conditioning, declaration.law
+        if schedule.run != mid.origin or seq >= len(schedule.intervals) \
+                or schedule.intervals[seq] != (interval.start_ns, interval.end_ns):
+            raise _Issue("rejected", "missing_contract", "the acquisition interval is not the declared schedule",
+                         fields=("/observation_model/conditioning",), evidence=(binding,))
+        # 呼んだ後の故障とつながっていないことは別の核 (K38-c ②)。宣言の無い方は読まない
+        if symbol == "unavailable_called" and declaration.failure is None:
+            raise _Issue("rejected", "missing_contract", "unavailable needs a declared independent failure law",
+                         fields=("/observation_model/failure",), evidence=(binding,))
+        if symbol == "unavailable_missing" and declaration.disconnection is None:
+            raise _Issue("rejected", "missing_contract", "an unconnected source needs a declared disconnection law",
+                         fields=("/observation_model/disconnection",), evidence=(binding,))
+    _timed_window(members, _enc(mid.origin), interval.start_ns, binding)
+    timed = state.timed
+    entries = timed["entries"]
+    if any(e["kind"] == "acquisition" and e["after_ns"] > interval.start_ns for e in entries):
+        raise _Issue("rejected", "missing_contract", "overlapping acquisitions", evidence=(binding,))
+    entries.append({"kind": "acquisition", "before_ns": interval.start_ns, "after_ns": interval.end_ns,
+                    "cursor": cursor, "symbol": symbol, "point": point})
+    _timed_close(state, interval.end_ns, point, binding)
+
+
+def _timed_window(members, run, start_ns, binding) -> None:
+    """観測 (取りに行き・行った一歩) の時刻が、各候補の件数の法則の時計 (run) の上で起点より後にあること (K38 決定 1、
+    K38-c ① の t0 ≤ τ)。取りに行きと一歩が同じこの判定を使う。外れたら読まない (負の経過時間を確率にしない)。"""
+    for member in members:
+        law = member["observation"].law
+        if _enc(law.run) != run:
+            raise _Issue("rejected", "missing_contract", "an observation on another clock than the law's",
+                         fields=("/observation_model/law/run",), evidence=(binding,))
+        if start_ns < law.origin_ns:
+            raise _Issue("rejected", "missing_contract", "an observation before the law's origin",
+                         fields=("/observation_model/law/origin_ns",), evidence=(binding,))
+
+
+def _timed_close(state, end_ns, point, binding) -> None:
+    from . import _fb_time
+    timed = state.timed
+    timed["terminal_ns"] = end_ns if timed["terminal_ns"] is None else max(timed["terminal_ns"], end_ns)
+    state.observations.append(point)
+    if timed["units"] is not None and _fb_time.weights(timed)[1].zero:
+        raise _Issue("rejected", "model_falsified", "the law gives these acquisitions no mass", evidence=(binding,))
 
 
 _OVERLAP_DECLARED = ("state_preserving", "serializable")
@@ -1221,7 +1485,9 @@ def _apply_execution(reader, state, model, binding, reading, plan, desc, pools) 
     from .f import _dumps
     c = _c()
     pargs = plan["projection"]["args"]
-    if not hasattr(pargs, "keys") or set(pargs.keys()) != {"execution_declaration"}             or _json(plan["generation"]) != {"contract": _enc(c.EXECUTE_STEP), "args": {}}:
+    if not hasattr(pargs, "keys") or set(pargs.keys()) not in (
+            {"execution_declaration"}, {"execution_declaration", "observation_model", "correspondence"}) \
+            or _json(plan["generation"]) != {"contract": _enc(c.EXECUTE_STEP), "args": {}}:
         raise _Issue("rejected", "missing_contract", "execution projection", fields=("/projection",),
                      evidence=(reading,))
     if binding not in desc["input_points"]:
@@ -1234,8 +1500,28 @@ def _apply_execution(reader, state, model, binding, reading, plan, desc, pools) 
     models = (model, *(pool["lineage"] if pool is not None else ()))
     if report.get("outcome") != "observed" or value not in _LEGAL.values() or not hasattr(E, "get")             or E.get("model") not in models or E.get("reading") != pargs["execution_declaration"]:
         raise _Issue("rejected", "observation_binding_mismatch", "executed step result", evidence=(binding,))
-    declared = _content(reader, pargs["execution_declaration"], c.EXECUTION_DECLARATION)
+    try:
+        record = reader.record(pargs["execution_declaration"])
+    except KeyError:
+        raise _Issue("rejected", "unresolved_reference", "the execution declaration is outside the reader",
+                     evidence=(pargs["execution_declaration"],)) from None
+    timed = record.body.contract == c.TIMED_EXECUTION_DECLARATION   # 源の件数の読みつきの宣言 (K38 決定 9)
+    if not timed and record.body.contract != c.EXECUTION_DECLARATION:
+        raise _Issue("rejected", "reference_kind", "not an execution declaration", evidence=(pargs["execution_declaration"],))
+    declared = record.body.content.as_json()
     kid = E["u"]
+    if timed:
+        from . import _fb_time
+        from .f import FInputError, _decode
+        from .fb import SourceCountReading
+        try:
+            source = _decode(declared["value"]["source_readings"][kid], SourceCountReading)
+        except (FInputError, KeyError, TypeError, ValueError):
+            source = None
+        if source is None or not _fb_time.noninterfering(source):
+            raise _Issue("rejected", "missing_contract", "the step is not declared to leave the source count alone",
+                         fields=("/source_readings",), evidence=(binding, pargs["execution_declaration"]))
+        step_members = _timed_step_members(reader, model, pargs, pool, reading, binding)
     try:
         cells = _json(declared["value"]["cells"])[kid]
         overlap = (declared["value"]["source_overlap"], declared["value"]["actor_overlap"])
@@ -1271,12 +1557,22 @@ def _apply_execution(reader, state, model, binding, reading, plan, desc, pools) 
             raise _Issue("rejected", "measurement_conflict", "the same step read differently", evidence=(binding,))
         return
     _check_order(state, "execution", entered, finished, m, overlap, binding)
-    z = sum((m[i][j] * state.joint[j] for i in range(n) for j in range(n)), Fraction(0))
-    if z == 0:
-        raise _Issue("rejected", "model_falsified", "the model gives this step result no mass on the current support",
-                     evidence=(binding,))
-    state.joint = tuple(sum((m[i][j] * state.joint[j] for j in range(n)), Fraction(0)) / z for i in range(n))
-    state.mass *= z
+    _mode(state, "timed" if timed else "finite", binding)
+    if timed:
+        # E_y(s) ⊗ I_N: 状態ごとの因子 (値はモデルの核の 1 か所から) だけを正本に積む (源の件数と取得の測定に交換する、
+        # K38 決定 9・K38-c ③)。最初の取りに行きより前の一歩でも、法則は起動の宣言から解く (K38-c ①)
+        _ensure_units(state, *step_members, binding)
+        _timed_window(step_members[0], _json(report["entered"]["value"]["reading"]["run"]), entered, binding)
+        state.timed["entries"].append({"kind": "step", "start_ns": entered, "end_ns": finished,
+                                       "factors": [m[i][i] for i in range(n)], "point": binding})
+        _timed_close(state, finished, binding, binding)
+    else:
+        z = sum((m[i][j] * state.joint[j] for i in range(n) for j in range(n)), Fraction(0))
+        if z == 0:
+            raise _Issue("rejected", "model_falsified",
+                         "the model gives this step result no mass on the current support", evidence=(binding,))
+        state.joint = tuple(sum((m[i][j] * state.joint[j] for j in range(n)), Fraction(0)) / z for i in range(n))
+        state.mass *= z
     state.frames.append(({"execution": _json(E)}, meaning))
     state.history.append(("execution", entered, finished, m, overlap))
     state.seen[key] = meaning

@@ -1,0 +1,2446 @@
+{
+  "issue": "K38",
+  "request": 116,
+  "revision": 7,
+  "date": "2026-11-23",
+  "specification": {
+    "path": "C:/Users/you11/Desktop/iku/sui/specs/関所F_Fb_今の約束.md",
+    "version": "1.87",
+    "reading": "K38の行と本文v3は全文。先行決定の指定行・K37本文・CE1は該当部分を全文。紙全体の全文読了とはしていない。",
+    "read_ranges": [
+      [
+        "K38",
+        3574,
+        3574
+      ],
+      [
+        "K38本文v3",
+        5211,
+        5263
+      ],
+      [
+        "Z63/Z64/Z65と追記",
+        3828,
+        3830
+      ],
+      [
+        "K25",
+        3527,
+        3527
+      ],
+      [
+        "K26",
+        3530,
+        3530
+      ],
+      [
+        "K28",
+        3543,
+        3543
+      ],
+      [
+        "K36",
+        3566,
+        3566
+      ],
+      [
+        "K37",
+        3573,
+        3573
+      ],
+      [
+        "K37本文",
+        5156,
+        5209
+      ],
+      [
+        "CE1",
+        2904,
+        2938
+      ]
+    ],
+    "additional_readings": [
+      {
+        "version": "1.88",
+        "label": "K38-b 行",
+        "first_line": 3575,
+        "last_line": 3575,
+        "read": "全文"
+      },
+      {
+        "version": "1.88",
+        "label": "K36-c 行",
+        "first_line": 3569,
+        "last_line": 3569,
+        "read": "全文"
+      },
+      {
+        "version": "1.88",
+        "label": "K36-c-a 行",
+        "first_line": 3570,
+        "last_line": 3570,
+        "read": "全文"
+      },
+      {
+        "version": "1.88",
+        "label": "K36本文",
+        "first_line": 5018,
+        "last_line": 5156,
+        "read": "全文"
+      },
+      {
+        "version": "1.88",
+        "label": "K38決定1〜10",
+        "first_line": 5235,
+        "last_line": 5244,
+        "read": "該当部分"
+      },
+      {
+        "version": "1.89",
+        "label": "K38-c",
+        "first_line": 3576,
+        "last_line": 3576,
+        "read": "全文"
+      },
+      {
+        "version": "1.90",
+        "label": "K38-d",
+        "first_line": 3577,
+        "last_line": 3577,
+        "read": "全文。Pythonのread_textでCRLFを分けて確認。"
+      },
+      {
+        "version": "1.91",
+        "label": "K38-e",
+        "first_line": 3578,
+        "last_line": 3578,
+        "read": "全文"
+      },
+      {
+        "version": "1.91",
+        "label": "K38決定1〜10と定規",
+        "first_line": 5238,
+        "last_line": 5260,
+        "read": "該当部分"
+      },
+      {
+        "version": "1.91",
+        "label": "K38-c/K38-d",
+        "first_line": 3576,
+        "last_line": 3577,
+        "read": "全文"
+      },
+      {
+        "version": "1.91",
+        "request": 115,
+        "label": "K38行・K38-c/d/e・決定1〜10・試験の定規",
+        "read": "K38行3574とK38-c/d/e行3576〜3578は各行全文。本文5238〜5260は該当部分をPythonで再読。冒頭の版はv1.91。紙全体の全文ではない。",
+        "first_line": 5238,
+        "last_line": 5260
+      },
+      {
+        "version": "1.91",
+        "request": 116,
+        "label": "K38決定5・改変検出の定規・K28-b(チ)",
+        "first_line": 5242,
+        "last_line": 5259,
+        "read": "K38本文5242/5259の該当部分。K28-b:3545の(チ)は全文を読了。レビューの参照はK28-a(チ)と記しているが、この版の当該記述はK28-bの行。意味の食い違いは無し。Pythonで読取。"
+      }
+    ],
+    "reference_version": "1.91",
+    "reference_note": "対応表の現在のspec_lineは依頼114でv1.91の行へ更新。read_rangesとadditional_readingsは読了した各版の履歴。"
+  },
+  "independence": {
+    "production_source_bodies_read": false,
+    "source_modified": false,
+    "oracle": "Fractionの独立有理区間。expは正のTaylor和の尾、logはatanh級数の尾を幾何級数で囲む。独立定規の全区間が照会の区間に含まれるまで精度を上げる。浮動小数の近似一致や区間の重なりだけで合格にしない。",
+    "performance": "中間の数値区間だけを外向きに二進有理数へ丸め、分母の膨張を抑える。原記録の時刻や正本の式は丸めない。",
+    "request115_clock": "未接続の幅のある取得のため、public clockのnow/mono_nsを試験の入力として供給。実際に保存された区間の両端を独立に確認する。srcの待ちや試験専用の口は追加しない。"
+  },
+  "public_spelling": {
+    "authority": "依頼110の型名・口の名前を先に決めてよいという明示指示",
+    "declarations": [
+      "PoissonLaw",
+      "FiniteCountLaw",
+      "UniformAcquisitionTime",
+      "FixedAcquisitionSchedule",
+      "IndependentAcquisitionFailure",
+      "TimedAcquisitionModel",
+      "SourceCountReading",
+      "TimedExecutionDeclaration",
+      "TimedBeliefUpdater",
+      "IndependentSourceDisconnection"
+    ],
+    "values": [
+      "BeliefExpression",
+      "BeliefQuantity",
+      "BeliefValue",
+      "SelectionValues",
+      "TimeBeliefError"
+    ],
+    "host_methods": [
+      "belief_expression",
+      "query_belief",
+      "query_selection",
+      "verify_belief_value",
+      "same_belief"
+    ],
+    "contracts": [
+      "sui.fb.timed_acquisition_model/1",
+      "sui.fb.saved_timed_acquisition_update/1",
+      "sui.fb.timed_execution_declaration/1"
+    ],
+    "definition": {
+      "path": "tests/test_fb_time_belief.py",
+      "first_line": 10,
+      "last_line": 55
+    },
+    "precision": "RateBudget.toleranceは照会の絶対幅。exactは有理数の厳密枝。reasonの自由な文は固定しない。",
+    "request112": {
+      "source": "実装本文は読まず、inspect.signatureとdataclassの公開欄で確認した名前を採用。",
+      "names": {
+        "IndependentSourceDisconnection": "(*, coefficient: Fraction)",
+        "TimedAcquisitionModel.disconnection": "IndependentSourceDisconnection | None = None",
+        "SourceCountReading": "(*, independent_of_count: bool, count_shift: int)"
+      },
+      "removed_fields": [
+        "SourceCountReading.zero",
+        "SourceCountReading.positive"
+      ],
+      "constant": "count_shift=0 と independent_of_count=Trueで非干渉を宣言。行列値はモデルからのみ。"
+    },
+    "request113": {
+      "new_names": [],
+      "clarification": "IndependentSourceDisconnection.coefficientは1回の取得が未接続である確率c。IndependentAcquisitionFailure.unavailable_probabilityは接続して呼んだ後の故障の確率p。"
+    },
+    "request114": {
+      "new_names": [],
+      "used_public_U": "f_update2.compute_timed_update(request, *, reader, registry, evidence)",
+      "confirmation": "公開署名と、元の保存要求に対するIssuedUpdateの対照で確認。compute_finite_updateではなく時刻の更新用の公開入口を使う。"
+    }
+  },
+  "acceptance": [
+    {
+      "id": "A1",
+      "spec_line": 5220,
+      "property": "起動の原記録・時刻と共同法則",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_real_acquire_clock_and_source_footing_control",
+          "line": 549,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+          "line": 589,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_joint_likelihood_uses_elapsed_time_and_does_not_double_count_survival",
+          "line": 635,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_connected_taken_and_empty_scale_mass_by_connection_probability",
+          "line": 664,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_zero_disconnection_matches_an_omitted_declaration",
+          "line": 683,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_one_acquisition_outcomes_normalize_with_distinct_connection_and_failure_kernels",
+          "line": 701,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M05_uniform_taken_keeps_positive_mass_in_the_upper_count_cell",
+          "line": 1336,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M06_non_counting_interval_advances_counts_through_after",
+          "line": 1363,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "spec_line": 5220,
+      "property": "採用された正本と保証つき照会",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+          "line": 589,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_canonical_identity_is_record_based_not_interval_overlap",
+          "line": 791,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_numeric_certificate_tampering_is_rejected",
+          "line": 813,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_connected_taken_and_empty_scale_mass_by_connection_probability",
+          "line": 664,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_zero_disconnection_matches_an_omitted_declaration",
+          "line": 683,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_one_acquisition_outcomes_normalize_with_distinct_connection_and_failure_kernels",
+          "line": 701,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R1_tiny_positive_adoption_reaches_native_log_evaluation",
+          "line": 1135,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R4_same_step_under_another_time_law_has_another_root",
+          "line": 1228,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R5_saved_spec_tampering_with_unchanged_root_is_rejected",
+          "line": 1269,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R6_initial_public_candidate_name_works_for_weight_and_all_counts",
+          "line": 1303,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M05_uniform_taken_keeps_positive_mass_in_the_upper_count_cell",
+          "line": 1336,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M06_non_counting_interval_advances_counts_through_after",
+          "line": 1363,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M08_count_query_advances_from_last_acquisition_to_step_terminal",
+          "line": 1393,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M16_precision_refinement_limit_returns_incomplete_then_unbounded_succeeds",
+          "line": 1419,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M17_two_valid_different_roots_are_not_the_same_belief",
+          "line": 1438,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R5_finite_method_cannot_authenticate_a_timed_result_in_query_or_U",
+          "line": 1454,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "spec_line": 5220,
+      "property": "考える側・非干渉の一歩が使い次の取得へ進む",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_different_empty_times_change_actual_evaluation_values",
+          "line": 833,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_native_start_noninterfering_step_and_next_acquisition_use_the_belief",
+          "line": 858,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_step_before_first_acquisition_uses_the_boot_law_once",
+          "line": 904,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_disconnection_scales_an_existing_step_belief_without_replacing_it",
+          "line": 962,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_step_reading_has_no_matrix_values_and_uses_only_the_model_kernel",
+          "line": 983,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R1_tiny_positive_adoption_reaches_native_log_evaluation",
+          "line": 1135,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R2_missing_source_reading_stops_before_actor_call",
+          "line": 1172,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R3_step_before_origin_is_unreadable_not_negative_elapsed_probability",
+          "line": 1197,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M08_count_query_advances_from_last_acquisition_to_step_terminal",
+          "line": 1393,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "spec_line": 5220,
+      "property": "旧い有限の法則への厳密帰着",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_CE1_eight_path_law_uses_the_new_expression_and_query_entry",
+          "line": 822,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_legacy_CE1_evaluation_is_the_same_independent_value_control",
+          "line": 570,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "spec_line": 5220,
+      "property": "同一取得を二度学ばず別取得は残す",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_canonical_identity_is_record_based_not_interval_overlap",
+          "line": 791,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "spec_line": 5220,
+      "property": "構造0と小さい正",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_structural_zero_is_proved_from_support",
+          "line": 765,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_tiny_positive_likelihood_survives_coarse_bounds_and_tight_budget",
+          "line": 774,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M16_precision_refinement_limit_returns_incomplete_then_unbounded_succeeds",
+          "line": 1419,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "spec_line": 5220,
+      "property": "K37の追加後の再生",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_K37_addition_replays_timed_evidence_and_changes_actual_evaluation",
+          "line": 1009,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_unsupported_law_candidate_is_named_and_never_silently_dropped",
+          "line": 1025,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R7_finite_count_candidate_cannot_join_a_poisson_pool",
+          "line": 1316,
+          "execution": "passed_request116"
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D1",
+      "spec_line": 5238,
+      "property": "有理数の範囲・0の枝・正の換算単位・起点からの換算・対応外と不正の区別",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+          "line": 589,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_joint_likelihood_uses_elapsed_time_and_does_not_double_count_survival",
+          "line": 635,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_taken_is_availability_not_an_arrival_timestamp",
+          "line": 615,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_invalid_numeric_declarations_are_rejected",
+          "line": 1059,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_zero_prior_and_negative_integer_origin_are_valid",
+          "line": 1068,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_numbers_outside_the_declared_exact_format_are_not_model_falsification",
+          "line": 1079,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_structural_zero_is_proved_from_support",
+          "line": 765,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R3_step_before_origin_is_unreadable_not_negative_elapsed_probability",
+          "line": 1197,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "D2",
+      "spec_line": 5239,
+      "property": "taken/emptyのカーソル閾値・既存の件と新着・独立な故障",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_taken_is_availability_not_an_arrival_timestamp",
+          "line": 615,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_cursor_threshold_growth_rebuilds_counts_from_the_original_law",
+          "line": 623,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_unavailable_needs_an_independent_failure_law_and_is_not_empty",
+          "line": 646,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_independent_failure_between_empty_reads_does_not_reset_the_count_process",
+          "line": 655,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_unplugged_source_uses_its_own_kernel_and_advances_counts",
+          "line": 935,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_disconnection_scales_an_existing_step_belief_without_replacing_it",
+          "line": 962,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_connected_taken_and_empty_scale_mass_by_connection_probability",
+          "line": 664,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_zero_disconnection_matches_an_omitted_declaration",
+          "line": 683,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_one_acquisition_outcomes_normalize_with_distinct_connection_and_failure_kernels",
+          "line": 701,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "D3",
+      "spec_line": 5240,
+      "property": "一様の内部時刻・幅0・端点とrunの条件づけ・候補共通の測度",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+          "line": 589,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_time_conditioning_and_clock_binding_are_declared_not_silently_invented",
+          "line": 746,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_candidate_cannot_compare_mass_under_another_time_conditioning",
+          "line": 1038,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_connected_taken_and_empty_scale_mass_by_connection_probability",
+          "line": 664,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_zero_disconnection_matches_an_omitted_declaration",
+          "line": 683,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_one_acquisition_outcomes_normalize_with_distinct_connection_and_failure_kernels",
+          "line": 701,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "D4",
+      "spec_line": 5241,
+      "property": "正確な件数集約・閾値増加の再生・P(after-u)・空白のP・条件つき件数",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_uniform_empty_keeps_unobserved_arrivals_between_decision_and_after",
+          "line": 605,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_cursor_threshold_growth_rebuilds_counts_from_the_original_law",
+          "line": 623,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_joint_likelihood_uses_elapsed_time_and_does_not_double_count_survival",
+          "line": 635,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_structural_zero_is_proved_from_support",
+          "line": 765,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R3_step_before_origin_is_unreadable_not_negative_elapsed_probability",
+          "line": 1197,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R4_same_step_under_another_time_law_has_another_root",
+          "line": 1228,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R6_initial_public_candidate_name_works_for_weight_and_all_counts",
+          "line": 1303,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M05_uniform_taken_keeps_positive_mass_in_the_upper_count_cell",
+          "line": 1336,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M06_non_counting_interval_advances_counts_through_after",
+          "line": 1363,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M08_count_query_advances_from_last_acquisition_to_step_terminal",
+          "line": 1393,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "D5",
+      "spec_line": 5242,
+      "property": "再構成する正本・精度独立の根と導出・有理区間とlog・数値の証明",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+          "line": 589,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_canonical_identity_is_record_based_not_interval_overlap",
+          "line": 791,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_numeric_certificate_tampering_is_rejected",
+          "line": 813,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_different_empty_times_change_actual_evaluation_values",
+          "line": 833,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_native_start_noninterfering_step_and_next_acquisition_use_the_belief",
+          "line": 858,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_native_finite_information_and_probability_oracle_control",
+          "line": 526,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R1_tiny_positive_adoption_reaches_native_log_evaluation",
+          "line": 1135,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R4_same_step_under_another_time_law_has_another_root",
+          "line": 1228,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R5_saved_spec_tampering_with_unchanged_root_is_rejected",
+          "line": 1269,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M17_two_valid_different_roots_are_not_the_same_belief",
+          "line": 1438,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R5_finite_method_cannot_authenticate_a_timed_result_in_query_or_U",
+          "line": 1454,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "D6",
+      "spec_line": 5243,
+      "property": "支えによる構造0・小さい正を残す・保証不足を反証にしない",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_structural_zero_is_proved_from_support",
+          "line": 765,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_tiny_positive_likelihood_survives_coarse_bounds_and_tight_budget",
+          "line": 774,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_zero_prior_and_negative_integer_origin_are_valid",
+          "line": 1068,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R1_tiny_positive_adoption_reaches_native_log_evaluation",
+          "line": 1135,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M16_precision_refinement_limit_returns_incomplete_then_unbounded_succeeds",
+          "line": 1419,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "D7",
+      "spec_line": 5244,
+      "property": "CE1の8経路を新しい口へ通しq・質量・G・方策確率まで一致",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_CE1_eight_path_law_uses_the_new_expression_and_query_entry",
+          "line": 822,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_legacy_CE1_evaluation_is_the_same_independent_value_control",
+          "line": 570,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_exact_oracle_and_CE1_table_controls",
+          "line": 515,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "D8",
+      "spec_line": 5245,
+      "property": "共同尤度・prefix全体のLを現在のjointへ二重適用しない・経過時間",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_joint_likelihood_uses_elapsed_time_and_does_not_double_count_survival",
+          "line": 635,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_independent_failure_between_empty_reads_does_not_reset_the_count_process",
+          "line": 655,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_cursor_threshold_growth_rebuilds_counts_from_the_original_law",
+          "line": 623,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_native_start_noninterfering_step_and_next_acquisition_use_the_belief",
+          "line": 858,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_canonical_identity_is_record_based_not_interval_overlap",
+          "line": 791,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "D9",
+      "spec_line": 5246,
+      "property": "Sと源を変えずE_y(S) tensor I_Nの一歩だけを接続",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_native_start_noninterfering_step_and_next_acquisition_use_the_belief",
+          "line": 858,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_state_preserving_is_not_sufficient_for_source_noninterference",
+          "line": 882,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_different_empty_times_change_actual_evaluation_values",
+          "line": 833,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_step_before_first_acquisition_uses_the_boot_law_once",
+          "line": 904,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_disconnection_scales_an_existing_step_belief_without_replacing_it",
+          "line": 962,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_step_reading_has_no_matrix_values_and_uses_only_the_model_kernel",
+          "line": 983,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R2_missing_source_reading_stops_before_actor_call",
+          "line": 1172,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R3_step_before_origin_is_unreadable_not_negative_elapsed_probability",
+          "line": 1197,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R4_same_step_under_another_time_law_has_another_root",
+          "line": 1228,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "D10",
+      "spec_line": 5247,
+      "property": "K37追加後は新しい事前と全原記録で再生・実際の評価・対応外を黙って外さない",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_K37_addition_replays_timed_evidence_and_changes_actual_evaluation",
+          "line": 1009,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_unsupported_law_candidate_is_named_and_never_silently_dropped",
+          "line": 1025,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_candidate_cannot_compare_mass_under_another_time_conditioning",
+          "line": 1038,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R6_initial_public_candidate_name_works_for_weight_and_all_counts",
+          "line": 1303,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R7_finite_count_candidate_cannot_join_a_poisson_pool",
+          "line": 1316,
+          "execution": "passed_request116"
+        }
+      ]
+    }
+  ],
+  "rulers": [
+    {
+      "id": "R1",
+      "spec_line": 5254,
+      "property": "FIRST q=(4/5,1/5),Z=5/32 / SECOND q=(8/9,1/9),Z=9/128 / Gと方策確率",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_CE1_eight_path_law_uses_the_new_expression_and_query_entry",
+          "line": 822,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_exact_oracle_and_CE1_table_controls",
+          "line": 515,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_legacy_CE1_evaluation_is_the_same_independent_value_control",
+          "line": 570,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "R2",
+      "spec_line": 5255,
+      "property": "t=1/3の同じemptyでq・G・確率、u=15/32の実際のpeek/waitが分かれる",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_different_empty_times_change_actual_evaluation_values",
+          "line": 833,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_policy_boundary_changes_from_time_one_to_three_oracle_control",
+          "line": 539,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "R3",
+      "spec_line": 5256,
+      "property": "点1/(1+x)、一様[0,t]2/(3+x)、[t/2,t]の対照、幅の縮小",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+          "line": 589,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M05_uniform_taken_keeps_positive_mass_in_the_upper_count_cell",
+          "line": 1336,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "R4",
+      "spec_line": 5257,
+      "property": "起点で1件/新着、複数到着、連続取得のcursor",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_taken_is_availability_not_an_arrival_timestamp",
+          "line": 615,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_cursor_threshold_growth_rebuilds_counts_from_the_original_law",
+          "line": 623,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_joint_likelihood_uses_elapsed_time_and_does_not_double_count_survival",
+          "line": 635,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M06_non_counting_interval_advances_counts_through_after",
+          "line": 1363,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M08_count_query_advances_from_last_acquisition_to_step_terminal",
+          "line": 1393,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "R5",
+      "spec_line": 5258,
+      "property": "構造0、小さい正、分母保証不足を反証にしない",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_structural_zero_is_proved_from_support",
+          "line": 765,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_tiny_positive_likelihood_survives_coarse_bounds_and_tight_budget",
+          "line": 774,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M16_precision_refinement_limit_returns_incomplete_then_unbounded_succeeds",
+          "line": 1419,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "R6",
+      "spec_line": 5259,
+      "property": "再生、重複、別事実、精度独立、証明の改変",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_canonical_identity_is_record_based_not_interval_overlap",
+          "line": 791,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+          "line": 589,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_numeric_certificate_tampering_is_rejected",
+          "line": 813,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M17_two_valid_different_roots_are_not_the_same_belief",
+          "line": 1438,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R5_finite_method_cannot_authenticate_a_timed_result_in_query_or_U",
+          "line": 1454,
+          "execution": "passed_request116"
+        }
+      ]
+    },
+    {
+      "id": "R7",
+      "spec_line": 5260,
+      "property": "一歩と次の取得 / K37追加の重みと実際の評価",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_native_start_noninterfering_step_and_next_acquisition_use_the_belief",
+          "line": 858,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_state_preserving_is_not_sufficient_for_source_noninterference",
+          "line": 882,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_K37_addition_replays_timed_evidence_and_changes_actual_evaluation",
+          "line": 1009,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_unsupported_law_candidate_is_named_and_never_silently_dropped",
+          "line": 1025,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_step_before_first_acquisition_uses_the_boot_law_once",
+          "line": 904,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_disconnection_scales_an_existing_step_belief_without_replacing_it",
+          "line": 962,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_step_reading_has_no_matrix_values_and_uses_only_the_model_kernel",
+          "line": 983,
+          "execution": "passed_request116"
+        }
+      ]
+    }
+  ],
+  "important_discriminators": [
+    "同じ記録の再生は非自明なtaken尤度でqと質量を再検査する。Lを二度掛けると数値が変わる。",
+    "数値が同じ別の取得でも根と原記録が違い、前の数値証明はそのまま通らない。",
+    "CE1は原文8経路。Poissonの率だけで有限法則を偽装しない。",
+    "件数集約の内部形は読まず、N=2の確定、afterでN=0ではない確率、空白を持つ尤度から確かめる。",
+    "状態専用の一歩は次の受け身取得がreadで待つ間に本体のperformへ渡す。"
+  ],
+  "verification": {
+    "state": "passed",
+    "request": 116,
+    "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_time_belief.py -n 2 -q --tb=short --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests116 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests116/k38_results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests116/cache",
+    "result": "92 passed in 91.76s (0:01:31); exit 0",
+    "collected": 92,
+    "passed": 92,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "test_functions": 47,
+    "expanded_functions": 1,
+    "added_functions": 1,
+    "additional_cases": 4,
+    "seconds_xml": "91.525",
+    "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests116/k38_results.xml",
+    "prior_subset": "R5を先行実行して6 passed / 1 failed。Uの両入口に例外を必須としていた期待を訂正し、例外または通常のRejectedを拒否として受ける形に直してから全92ケースを実行。",
+    "observed_refusals": {
+      "boolean_numerator": "query / verify / same の3入口で拒否。",
+      "changed_method": "compute_timed_update: UpdateEntranceError(reason=shape, field=/request/desc)。compute_finite_update: Rejected(code=missing_contract, fields=/method)。照会: TimeBeliefError(kind=unavailable, reason=missing_contract)。自由な文は試験で固定していない。"
+    },
+    "limits": "ほかのfb系・F-a系・誤実装の表はnot_run。実装本文を読んでいない。",
+    "processes": "本回に起動したpytestと公開入口のプローブ、紙の読取はすべて終了。背景に残したコマンドは無い。"
+  },
+  "verification_limits": [
+    {
+      "property": "分母保証不足で必ずincompleteになる分岐",
+      "reason": "紙は正しい証明に成功する計算も許す。公開予算から全適合アルゴリズムで必ずこの分岐へ至る定規は決まらない。小さい正と小さいint予算で正しい証明かincompleteを許し、model_falsifiedを禁止。強制到達は検証していない。"
+    },
+    {
+      "property": "誤実装での識別力の実測",
+      "reason": "実装本文は読まず、誤実装の表は回していない。依頼116は独立の期待と対照を含む全92ケース成功。誤実装を実測で落とすことは未実施。"
+    }
+  ],
+  "out_of_scope": {
+    "spec_lines": [
+      5228,
+      5229,
+      5230,
+      5231,
+      5232,
+      5233
+    ],
+    "reason": "スイッチ、率の学習、状態依存の処理時間、源を消費/変更する一歩の共同モデル、一般の未知量の積分、長い履歴の性能は決めない。"
+  },
+  "open_CG": [],
+  "needs_user": [],
+  "verification_history": [
+    {
+      "request": 110,
+      "verification": {
+        "state": "partial",
+        "native_oracle_controls": "passed",
+        "K38_scenario_bodies": "not_run: 公開名・FThreadHostの新しい口が無くtime_api()で止まる。収集や不足の赤を場面本体の合格に数えない。",
+        "api_export_test": "tests/test_fb_skeleton.py:901へ14名を追加。現在は公開名不足で赤。",
+        "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests110/k38_results.xml",
+        "result": {
+          "collected": 51,
+          "passed": 6,
+          "failed": 45,
+          "errors": 0,
+          "skipped": 0,
+          "seconds_xml": "15.440",
+          "failure_reasons": {
+            "K38_public_shape_missing": 44,
+            "K38_export_names_missing": 1
+          }
+        },
+        "test_definitions": [
+          {
+            "name": "test_time1_exact_oracle_and_CE1_table_controls",
+            "line": 438
+          },
+          {
+            "name": "test_time1_native_finite_information_and_probability_oracle_control",
+            "line": 449
+          },
+          {
+            "name": "test_time1_policy_boundary_changes_from_time_one_to_three_oracle_control",
+            "line": 462
+          },
+          {
+            "name": "test_time1_real_acquire_clock_and_source_footing_control",
+            "line": 472
+          },
+          {
+            "name": "test_time1_legacy_CE1_evaluation_is_the_same_independent_value_control",
+            "line": 493
+          },
+          {
+            "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+            "line": 512
+          },
+          {
+            "name": "test_time1_uniform_empty_keeps_unobserved_arrivals_between_decision_and_after",
+            "line": 528
+          },
+          {
+            "name": "test_time1_taken_is_availability_not_an_arrival_timestamp",
+            "line": 538
+          },
+          {
+            "name": "test_time1_cursor_threshold_growth_rebuilds_counts_from_the_original_law",
+            "line": 546
+          },
+          {
+            "name": "test_time1_joint_likelihood_uses_elapsed_time_and_does_not_double_count_survival",
+            "line": 558
+          },
+          {
+            "name": "test_time1_unavailable_needs_an_independent_failure_law_and_is_not_empty",
+            "line": 569
+          },
+          {
+            "name": "test_time1_independent_failure_between_empty_reads_does_not_reset_the_count_process",
+            "line": 578
+          },
+          {
+            "name": "test_time1_time_conditioning_and_clock_binding_are_declared_not_silently_invented",
+            "line": 586
+          },
+          {
+            "name": "test_time1_structural_zero_is_proved_from_support",
+            "line": 605
+          },
+          {
+            "name": "test_time1_tiny_positive_likelihood_survives_coarse_bounds_and_tight_budget",
+            "line": 614
+          },
+          {
+            "name": "test_time1_canonical_identity_is_record_based_not_interval_overlap",
+            "line": 631
+          },
+          {
+            "name": "test_time1_numeric_certificate_tampering_is_rejected",
+            "line": 653
+          },
+          {
+            "name": "test_time1_CE1_eight_path_law_uses_the_new_expression_and_query_entry",
+            "line": 662
+          },
+          {
+            "name": "test_time1_different_empty_times_change_actual_evaluation_values",
+            "line": 673
+          },
+          {
+            "name": "test_time1_native_start_noninterfering_step_and_next_acquisition_use_the_belief",
+            "line": 694
+          },
+          {
+            "name": "test_time1_state_preserving_is_not_sufficient_for_source_noninterference",
+            "line": 712
+          },
+          {
+            "name": "test_time1_K37_addition_replays_timed_evidence_and_changes_actual_evaluation",
+            "line": 733
+          },
+          {
+            "name": "test_time1_unsupported_law_candidate_is_named_and_never_silently_dropped",
+            "line": 749
+          },
+          {
+            "name": "test_time1_candidate_cannot_compare_mass_under_another_time_conditioning",
+            "line": 762
+          },
+          {
+            "name": "test_time1_invalid_numeric_declarations_are_rejected",
+            "line": 783
+          },
+          {
+            "name": "test_time1_zero_prior_and_negative_integer_origin_are_valid",
+            "line": 792
+          },
+          {
+            "name": "test_time1_numbers_outside_the_declared_exact_format_are_not_model_falsification",
+            "line": 803
+          }
+        ]
+      }
+    },
+    {
+      "request": 111,
+      "verification": {
+        "state": "passed",
+        "scope": "tests/test_fb_time_belief.pyのみ。既存のほかのfb系・F-a系・公開名完全一致試験は今回は実行していない。",
+        "result": {
+          "collected": 50,
+          "passed": 50,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "seconds_xml": "48.364"
+        },
+        "exit_code": 0,
+        "workers": 2,
+        "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests111/k38_results.xml",
+        "test_definitions": [
+          {
+            "name": "test_time1_exact_oracle_and_CE1_table_controls",
+            "line": 438
+          },
+          {
+            "name": "test_time1_native_finite_information_and_probability_oracle_control",
+            "line": 449
+          },
+          {
+            "name": "test_time1_policy_boundary_changes_from_time_one_to_three_oracle_control",
+            "line": 462
+          },
+          {
+            "name": "test_time1_real_acquire_clock_and_source_footing_control",
+            "line": 472
+          },
+          {
+            "name": "test_time1_legacy_CE1_evaluation_is_the_same_independent_value_control",
+            "line": 493
+          },
+          {
+            "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+            "line": 512
+          },
+          {
+            "name": "test_time1_uniform_empty_keeps_unobserved_arrivals_between_decision_and_after",
+            "line": 528
+          },
+          {
+            "name": "test_time1_taken_is_availability_not_an_arrival_timestamp",
+            "line": 538
+          },
+          {
+            "name": "test_time1_cursor_threshold_growth_rebuilds_counts_from_the_original_law",
+            "line": 546
+          },
+          {
+            "name": "test_time1_joint_likelihood_uses_elapsed_time_and_does_not_double_count_survival",
+            "line": 558
+          },
+          {
+            "name": "test_time1_unavailable_needs_an_independent_failure_law_and_is_not_empty",
+            "line": 569
+          },
+          {
+            "name": "test_time1_independent_failure_between_empty_reads_does_not_reset_the_count_process",
+            "line": 578
+          },
+          {
+            "name": "test_time1_time_conditioning_and_clock_binding_are_declared_not_silently_invented",
+            "line": 586
+          },
+          {
+            "name": "test_time1_structural_zero_is_proved_from_support",
+            "line": 605
+          },
+          {
+            "name": "test_time1_tiny_positive_likelihood_survives_coarse_bounds_and_tight_budget",
+            "line": 614
+          },
+          {
+            "name": "test_time1_canonical_identity_is_record_based_not_interval_overlap",
+            "line": 631
+          },
+          {
+            "name": "test_time1_numeric_certificate_tampering_is_rejected",
+            "line": 653
+          },
+          {
+            "name": "test_time1_CE1_eight_path_law_uses_the_new_expression_and_query_entry",
+            "line": 662
+          },
+          {
+            "name": "test_time1_different_empty_times_change_actual_evaluation_values",
+            "line": 673
+          },
+          {
+            "name": "test_time1_native_start_noninterfering_step_and_next_acquisition_use_the_belief",
+            "line": 698
+          },
+          {
+            "name": "test_time1_state_preserving_is_not_sufficient_for_source_noninterference",
+            "line": 722
+          },
+          {
+            "name": "test_time1_K37_addition_replays_timed_evidence_and_changes_actual_evaluation",
+            "line": 743
+          },
+          {
+            "name": "test_time1_unsupported_law_candidate_is_named_and_never_silently_dropped",
+            "line": 759
+          },
+          {
+            "name": "test_time1_candidate_cannot_compare_mass_under_another_time_conditioning",
+            "line": 772
+          },
+          {
+            "name": "test_time1_invalid_numeric_declarations_are_rejected",
+            "line": 793
+          },
+          {
+            "name": "test_time1_zero_prior_and_negative_integer_origin_are_valid",
+            "line": 802
+          },
+          {
+            "name": "test_time1_numbers_outside_the_declared_exact_format_are_not_model_falsification",
+            "line": 813
+          }
+        ],
+        "K38_scenario_bodies": "50ケースすべて実行して成功。前回の公開API不足で止まる状態は履歴へ移した。",
+        "CG_scenarios": "not_run: 紙で未決の3点は試験を足さず、決定待ちとして分離。"
+      }
+    },
+    {
+      "request": 112,
+      "verification": {
+        "state": "passed",
+        "scope": "tests/test_fb_time_belief.py全58ケース。ほかのfb系・F-a系は未実行。",
+        "result": {
+          "collected": 58,
+          "passed": 58,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "seconds_xml": "52.665"
+        },
+        "exit_code": 0,
+        "workers": 2,
+        "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests112/k38_results.xml",
+        "test_definitions": [
+          {
+            "name": "test_time1_exact_oracle_and_CE1_table_controls",
+            "line": 469
+          },
+          {
+            "name": "test_time1_native_finite_information_and_probability_oracle_control",
+            "line": 480
+          },
+          {
+            "name": "test_time1_policy_boundary_changes_from_time_one_to_three_oracle_control",
+            "line": 493
+          },
+          {
+            "name": "test_time1_real_acquire_clock_and_source_footing_control",
+            "line": 503
+          },
+          {
+            "name": "test_time1_legacy_CE1_evaluation_is_the_same_independent_value_control",
+            "line": 524
+          },
+          {
+            "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+            "line": 543
+          },
+          {
+            "name": "test_time1_uniform_empty_keeps_unobserved_arrivals_between_decision_and_after",
+            "line": 559
+          },
+          {
+            "name": "test_time1_taken_is_availability_not_an_arrival_timestamp",
+            "line": 569
+          },
+          {
+            "name": "test_time1_cursor_threshold_growth_rebuilds_counts_from_the_original_law",
+            "line": 577
+          },
+          {
+            "name": "test_time1_joint_likelihood_uses_elapsed_time_and_does_not_double_count_survival",
+            "line": 589
+          },
+          {
+            "name": "test_time1_unavailable_needs_an_independent_failure_law_and_is_not_empty",
+            "line": 600
+          },
+          {
+            "name": "test_time1_independent_failure_between_empty_reads_does_not_reset_the_count_process",
+            "line": 609
+          },
+          {
+            "name": "test_time1_time_conditioning_and_clock_binding_are_declared_not_silently_invented",
+            "line": 617
+          },
+          {
+            "name": "test_time1_structural_zero_is_proved_from_support",
+            "line": 636
+          },
+          {
+            "name": "test_time1_tiny_positive_likelihood_survives_coarse_bounds_and_tight_budget",
+            "line": 645
+          },
+          {
+            "name": "test_time1_canonical_identity_is_record_based_not_interval_overlap",
+            "line": 662
+          },
+          {
+            "name": "test_time1_numeric_certificate_tampering_is_rejected",
+            "line": 684
+          },
+          {
+            "name": "test_time1_CE1_eight_path_law_uses_the_new_expression_and_query_entry",
+            "line": 693
+          },
+          {
+            "name": "test_time1_different_empty_times_change_actual_evaluation_values",
+            "line": 704
+          },
+          {
+            "name": "test_time1_native_start_noninterfering_step_and_next_acquisition_use_the_belief",
+            "line": 729
+          },
+          {
+            "name": "test_time1_state_preserving_is_not_sufficient_for_source_noninterference",
+            "line": 753
+          },
+          {
+            "name": "test_time1_step_before_first_acquisition_uses_the_boot_law_once",
+            "line": 775
+          },
+          {
+            "name": "test_time1_unplugged_source_uses_its_own_kernel_and_advances_counts",
+            "line": 806
+          },
+          {
+            "name": "test_time1_disconnection_scales_an_existing_step_belief_without_replacing_it",
+            "line": 833
+          },
+          {
+            "name": "test_time1_step_reading_has_no_matrix_values_and_uses_only_the_model_kernel",
+            "line": 854
+          },
+          {
+            "name": "test_time1_K37_addition_replays_timed_evidence_and_changes_actual_evaluation",
+            "line": 880
+          },
+          {
+            "name": "test_time1_unsupported_law_candidate_is_named_and_never_silently_dropped",
+            "line": 896
+          },
+          {
+            "name": "test_time1_candidate_cannot_compare_mass_under_another_time_conditioning",
+            "line": 909
+          },
+          {
+            "name": "test_time1_invalid_numeric_declarations_are_rejected",
+            "line": 930
+          },
+          {
+            "name": "test_time1_zero_prior_and_negative_integer_origin_are_valid",
+            "line": 939
+          },
+          {
+            "name": "test_time1_numbers_outside_the_declared_exact_format_are_not_model_falsification",
+            "line": 950
+          }
+        ],
+        "scenario_bodies": "既存50ケースと追加8ケースの全場面を実行して成功。",
+        "public_export_test": "test_fb_skeleton.py:901の期待集合にIndependentSourceDisconnectionを追加。今回はその試験はnot_run。公開の__all__にその名前が含まれることはメタデータで確認。",
+        "CG_scenarios": "K38-cで3件とも回答され、対応する分岐を実行済み。新しいCGは無い。"
+      }
+    },
+    {
+      "request": 113,
+      "verification": {
+        "state": "passed",
+        "scope": "tests/test_fb_time_belief.py全66ケースのみ。ほかのfb系・骨組み・F-a系はこの回ではnot_run。",
+        "result": {
+          "collected": 66,
+          "passed": 66,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "seconds_xml": "58.696"
+        },
+        "exit_code": 0,
+        "workers": 2,
+        "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests113/k38_results.xml",
+        "test_definitions": [
+          {
+            "name": "test_time1_exact_oracle_and_CE1_table_controls",
+            "line": 472
+          },
+          {
+            "name": "test_time1_native_finite_information_and_probability_oracle_control",
+            "line": 483
+          },
+          {
+            "name": "test_time1_policy_boundary_changes_from_time_one_to_three_oracle_control",
+            "line": 496
+          },
+          {
+            "name": "test_time1_real_acquire_clock_and_source_footing_control",
+            "line": 506
+          },
+          {
+            "name": "test_time1_legacy_CE1_evaluation_is_the_same_independent_value_control",
+            "line": 527
+          },
+          {
+            "name": "test_time1_empty_uses_the_declared_interval_not_after_and_precision_refines",
+            "line": 546
+          },
+          {
+            "name": "test_time1_uniform_empty_keeps_unobserved_arrivals_between_decision_and_after",
+            "line": 562
+          },
+          {
+            "name": "test_time1_taken_is_availability_not_an_arrival_timestamp",
+            "line": 572
+          },
+          {
+            "name": "test_time1_cursor_threshold_growth_rebuilds_counts_from_the_original_law",
+            "line": 580
+          },
+          {
+            "name": "test_time1_joint_likelihood_uses_elapsed_time_and_does_not_double_count_survival",
+            "line": 592
+          },
+          {
+            "name": "test_time1_unavailable_needs_an_independent_failure_law_and_is_not_empty",
+            "line": 603
+          },
+          {
+            "name": "test_time1_independent_failure_between_empty_reads_does_not_reset_the_count_process",
+            "line": 612
+          },
+          {
+            "name": "test_time1_connected_taken_and_empty_scale_mass_by_connection_probability",
+            "line": 621
+          },
+          {
+            "name": "test_time1_zero_disconnection_matches_an_omitted_declaration",
+            "line": 640
+          },
+          {
+            "name": "test_time1_one_acquisition_outcomes_normalize_with_distinct_connection_and_failure_kernels",
+            "line": 658
+          },
+          {
+            "name": "test_time1_time_conditioning_and_clock_binding_are_declared_not_silently_invented",
+            "line": 703
+          },
+          {
+            "name": "test_time1_structural_zero_is_proved_from_support",
+            "line": 722
+          },
+          {
+            "name": "test_time1_tiny_positive_likelihood_survives_coarse_bounds_and_tight_budget",
+            "line": 731
+          },
+          {
+            "name": "test_time1_canonical_identity_is_record_based_not_interval_overlap",
+            "line": 748
+          },
+          {
+            "name": "test_time1_numeric_certificate_tampering_is_rejected",
+            "line": 770
+          },
+          {
+            "name": "test_time1_CE1_eight_path_law_uses_the_new_expression_and_query_entry",
+            "line": 779
+          },
+          {
+            "name": "test_time1_different_empty_times_change_actual_evaluation_values",
+            "line": 790
+          },
+          {
+            "name": "test_time1_native_start_noninterfering_step_and_next_acquisition_use_the_belief",
+            "line": 815
+          },
+          {
+            "name": "test_time1_state_preserving_is_not_sufficient_for_source_noninterference",
+            "line": 839
+          },
+          {
+            "name": "test_time1_step_before_first_acquisition_uses_the_boot_law_once",
+            "line": 861
+          },
+          {
+            "name": "test_time1_unplugged_source_uses_its_own_kernel_and_advances_counts",
+            "line": 892
+          },
+          {
+            "name": "test_time1_disconnection_scales_an_existing_step_belief_without_replacing_it",
+            "line": 919
+          },
+          {
+            "name": "test_time1_step_reading_has_no_matrix_values_and_uses_only_the_model_kernel",
+            "line": 940
+          },
+          {
+            "name": "test_time1_K37_addition_replays_timed_evidence_and_changes_actual_evaluation",
+            "line": 966
+          },
+          {
+            "name": "test_time1_unsupported_law_candidate_is_named_and_never_silently_dropped",
+            "line": 982
+          },
+          {
+            "name": "test_time1_candidate_cannot_compare_mass_under_another_time_conditioning",
+            "line": 995
+          },
+          {
+            "name": "test_time1_invalid_numeric_declarations_are_rejected",
+            "line": 1016
+          },
+          {
+            "name": "test_time1_zero_prior_and_negative_integer_origin_are_valid",
+            "line": 1025
+          },
+          {
+            "name": "test_time1_numbers_outside_the_declared_exact_format_are_not_model_falsification",
+            "line": 1036
+          }
+        ],
+        "scenario_bodies": "既存58ケースと追加8ケースをすべて実行し成功。",
+        "CG_scenarios": "新しいCGは無い。K38-cの未接続3点は回答済みのまま。"
+      }
+    },
+    {
+      "state": "passed",
+      "request": 114,
+      "command": "../../../.venv/Scripts/python.exe -B -m pytest tests/test_fb_time_belief.py -n 2 -q --tb=short --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests114 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests114/k38_results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests114/cache",
+      "result": "78 passed in 66.77s (0:01:06); exit 0",
+      "collected": 78,
+      "passed": 78,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "additional_review_functions": 7,
+      "additional_review_cases": 12,
+      "test_functions": 41,
+      "seconds_xml": "66.584",
+      "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests114/k38_results.xml",
+      "R1_observed_native_outcome": "selected",
+      "R1_numbers": "本体の評価のG/q_starとquery_selectionのG/方策確率を、独立の有理区間の定規へ照合した。",
+      "earlier_review_only_run": "12 passed in 14.42s; exit 0",
+      "not_run": [
+        "ほかのfb系",
+        "F-a系",
+        "誤実装の表"
+      ],
+      "processes": "本回に起動したpytestと公開入口のプローブはすべて終了。背景に残したコマンドは無い。"
+    },
+    {
+      "state": "passed",
+      "request": 115,
+      "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_time_belief.py -n 2 -q --tb=short --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests115 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests115/k38_results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests115/cache",
+      "result": "88 passed in 69.80s (0:01:09); exit 0",
+      "collected": 88,
+      "passed": 88,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "test_functions": 46,
+      "additional_functions": 5,
+      "additional_cases": 10,
+      "seconds_xml": "69.627",
+      "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/bt_tests115/k38_results.xml",
+      "covered_items": [
+        "05",
+        "06",
+        "08",
+        "16",
+        "17"
+      ],
+      "earlier_subset_run": "最初の追加10ケースは9 passed / 1 failed。M08の同時刻の対照で、同じ指数式を割った独立区間が厳密1を囲み切れなかった。N(1)=0の支えからexact=1を使うよう直し、全88件を再実行した。",
+      "limits": "誤実装の表と、ほかのfb/F-a系はnot_run。5項目の誤変更をこちらで実際に適用して赤になることは未実測。",
+      "processes": "起動したpytest、公開APIのプローブ、紙の読取はすべて終了。背景に残したコマンドは無い。"
+    }
+  ],
+  "request111_corrections": [
+    {
+      "cases": [
+        "test_time1_different_empty_times_change_actual_evaluation_values[1]",
+        "test_time1_different_empty_times_change_actual_evaluation_values[3]"
+      ],
+      "path": "tests/test_fb_time_belief.py",
+      "line": 795,
+      "cause": "観測より前に保存した選択の一歩が開始処理中で、後の選択だけで開始対象が替わると期待していた。",
+      "spec_evidence": "F-b:3570 K36-c-a ③「この間に来た新しい S は候補として持ち、それだけを理由に開始の対象を差し替えない」",
+      "change": "先のthinkを外し、初回取得・採用の後に最初の候補生成と評価を完了する。根を固める時の採用を読むK36-c-a②に従う。",
+      "preserved": "t=1/3それぞれのqと質量、独立定規によるG/方策確率、同じu=15/32で実際のpeekとwaitが分かれること。数の期待式は変えていない。"
+    },
+    {
+      "cases": [
+        "test_time1_native_start_noninterfering_step_and_next_acquisition_use_the_belief"
+      ],
+      "path": "tests/test_fb_time_belief.py",
+      "line": 820,
+      "cause": "一歩の採用の時に入場した活動の根が、後の取得の採用で新しくなると期待していた。",
+      "spec_evidence": "F-b:3569 K36-c③「入場した評価は、その時に使える最新の採用を根にして o・j・文脈を固める」・④始めた評価は止めない",
+      "change": "一歩の採用の直後にその根のthinkを完了しG/確率も検査する。その後に2回目の源を解放し、最終の根のthinkを検査する。",
+      "preserved": "一歩後のE_T(S)*exp(-lambda_s)、次の一様取得後のE_T(S)*integral(exp(-lambda_s*u))、最終のG/確率、初回選択の固定根。数の期待式は変えていない。"
+    }
+  ],
+  "cg_branches": {
+    "D2": "K38-c②で回答。独立な未接続の核の有無と係数、q/Z/件数の定規を追加。",
+    "D9": "K38-c①③で回答。初回取得前の一歩と、行列値の唯一の出どころを追加。"
+  },
+  "k38c_branches": [
+    {
+      "id": "K38-c-1",
+      "spec_line": 3576,
+      "property": "最初のFrameより前の一歩も、起動宣言の法則・起点・N0から読む。二重適用しない。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_step_before_first_acquisition_uses_the_boot_law_once",
+          "line": 904,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_disconnection_scales_an_existing_step_belief_without_replacing_it",
+          "line": 962,
+          "execution": "passed_request116"
+        }
+      ],
+      "ruler": "tau=0/1, t=3, E_T=diag(1,1/2)。一歩だけq=(2/3,1/3),Z=3/4。初回empty後はW_A=(1/2)e^-3, W_B=(1/4)e^-6。窓口再構成でも一歩を二度掛けない。"
+    },
+    {
+      "id": "K38-c-2",
+      "spec_line": 3576,
+      "property": "source_called=Falseを独立な未接続の核で読み、宣言が無ければ理由つきで止める。qを保ちZをc倍し件数はafterへ進む。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_unplugged_source_uses_its_own_kernel_and_advances_counts",
+          "line": 935,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_disconnection_scales_an_existing_step_belief_without_replacing_it",
+          "line": 962,
+          "execution": "passed_request116"
+        },
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M06_non_counting_interval_advances_counts_through_after",
+          "line": 1363,
+          "execution": "passed_request116"
+        }
+      ],
+      "ruler": "c無し/1/1/3、呼出し後の故障p=1/4と区別。t=3のN=0は(1/2)e^-3+(1/2)e^-6。別の正例は一歩後q=(2/3,1/3),Z=3/4にc=1/3を掛けてZ=1/4、qはそのまま。",
+      "footing": "本当のsources={}をFThreadHostへ渡し、本体SourceMeasurerが本物のacquireを呼ぶ。停止はその1回の取得の後。源のreadを模造しない。before=after=t0+3の点で時計呼出しの回数には依存しない。"
+    },
+    {
+      "id": "K38-c-3",
+      "spec_line": 3576,
+      "property": "SourceCountReadingから行列値を除き、モデルのexecute核を唯一の値の出どころにする。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_step_reading_has_no_matrix_values_and_uses_only_the_model_kernel",
+          "line": 983,
+          "execution": "passed_request116"
+        }
+      ],
+      "ruler": "T=diag(1,1/2)ならq=(2/3,1/3),一歩の質量係数3/4。T=diag(1/4,3/4)ならq=(1/4,3/4),係数1/2。同じ行列値を持たない宣言を用い、削除したT=E=I/2の宣言ではq=(1/2,1/2)となる誤りを区別。",
+      "shape_test": "公開のdataclass欄と署名からzero/positiveが無いことを確認。旧い行列値の引数はsignature.bindで受け付けない。例外の自由な文は固定しない。"
+    }
+  ],
+  "CG_history": [
+    {
+      "request": 111,
+      "items": [
+        {
+          "id": "CG-K38-FIRST-STEP",
+          "title": "最初の取得より前に来た非干渉の一歩",
+          "status": "decision_requested; no_test_added",
+          "details": "tests/k38_cg111.json"
+        },
+        {
+          "id": "CG-K38-UNPLUGGED-SOURCE",
+          "title": "源が差されていない unavailable / source_called=False",
+          "status": "decision_requested; no_test_added",
+          "details": "tests/k38_cg111.json"
+        },
+        {
+          "id": "CG-K38-STEP-KERNEL-CONSISTENCY",
+          "title": "SourceCountReadingの行列値と選択したモデルの核",
+          "status": "decision_requested; no_test_added",
+          "details": "tests/k38_cg111.json"
+        }
+      ],
+      "answer": "紙F-b v1.89 K38-c:3576で3件とも回答。"
+    }
+  ],
+  "k38d_branches": [
+    {
+      "id": "K38-d-1",
+      "spec_line": 3577,
+      "property": "taken/emptyの接続・成功因子。(1-c)、故障の核があれば(1-c)(1-p)。同じ観測によるqはcなしと同じ。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_connected_taken_and_empty_scale_mass_by_connection_probability",
+          "line": 664,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 4,
+      "ruler": "lambda=(1,2)、事前=(1/2,1/2)、t=1。L_E=(e^-1,e^-2)、L_T=(1-e^-1,1-e^-2)。c=1/3、pなし/1/4の各T/E。cなしの対照と、cありの双方を独立なposteriorとZに照合。"
+    },
+    {
+      "id": "K38-d-2",
+      "spec_line": 3577,
+      "property": "c=0は省略時と同じ数値の答え。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_zero_disconnection_matches_an_omitted_declaration",
+          "line": 683,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 3,
+      "ruler": "p=1/4。taken、empty、呼出し後の故障の各結果について、c省略とc=0を同じ独立のqとZへ照合。",
+      "scope": "源を実際に呼んだ3種類の結果。記録・宣言が違うため正準な根の文字列の一致は求めない。"
+    },
+    {
+      "id": "K38-d-3",
+      "spec_line": 3577,
+      "property": "1回の取得の4種類の結果の確率の和が1。cとpを混ぜない。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_one_acquisition_outcomes_normalize_with_distinct_connection_and_failure_kernels",
+          "line": 701,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 1,
+      "ruler": "c=1/3、p=1/4。同じ起点・点時刻・事前・率の4つの単一取得の代替履歴。未接続c、呼出し後の故障(1-c)p、taken/emptyは(1-c)(1-p)と件数の核。",
+      "public_checks": "各履歴のqとZを独立定規へ照合し、Zの和の有理区間が1を含むことと幅<=4*toleranceを確認。さらにq_s*Z/prior_sから各状態の結果確率を囲み、その和も1を含むことを確認。経験頻度の統計ではない。"
+    }
+  ],
+  "request113_review_of_unplugged": {
+    "status": "K38-dと一致。既存の期待式・試験本体は変更していない。",
+    "tests": [
+      {
+        "path": "tests/test_fb_time_belief.py",
+        "name": "test_time1_unplugged_source_uses_its_own_kernel_and_advances_counts",
+        "line": 935,
+        "execution": "passed_request116"
+      },
+      {
+        "path": "tests/test_fb_time_belief.py",
+        "name": "test_time1_disconnection_scales_an_existing_step_belief_without_replacing_it",
+        "line": 962,
+        "execution": "passed_request116"
+      }
+    ],
+    "reason": "未接続の結果の核はcそのものなので、Z*cのまま。(1-c)や呼出し後の故障pは掛けない。c=1/3で初回事前Z=1ならZ=1/3。先行する一歩でZ=3/4ならZ=1/4。qとafterの件数分布の既存検査も維持。"
+  },
+  "workspace": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/work38c",
+  "review_source": {
+    "path": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/k38_review_report1.md",
+    "first_line": 1,
+    "last_line": 124,
+    "reading": "全文。場面と紙の根拠を使用。指摘は静的レビューの報告であり、実行結果やユーザー承認として扱わない。記載されたsrc本文・外部論文は開いていない。"
+  },
+  "review_branches": [
+    {
+      "id": "K38-R1",
+      "review_lines": [
+        59,
+        65
+      ],
+      "paper_lines": [
+        5242,
+        5243,
+        5258
+      ],
+      "property": "小さい正の採用を実際の準備・評価へ渡し、囲みが0へ触れることを入力不正や失敗にしない。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R1_tiny_positive_adoption_reaches_native_log_evaluation",
+          "line": 1135,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 1,
+      "ruler": "率=(2^-160,1)、経過1でtaken。p_A=(1-exp(-2^-160))/((1-exp(-2^-160))+(1-exp(-1)))。モデルの対角のT/E核から独立の情報量・G・方策確率を有理区間で囲む。",
+      "checks": "本体の係のWorkFinishedはWorkOutputsで、計算未完了ならNoDecision.outcome=incomplete。選択または進行の数値がある時はG/q*を独立定規へ照合。選択された場合はホストのquery_selectionでも確認。精度を上げるか未完了を許すがFInputErrorの実行失敗は許さない。"
+    },
+    {
+      "id": "K38-R2",
+      "review_lines": [
+        67,
+        73
+      ],
+      "paper_lines": [
+        5246
+      ],
+      "property": "実行する一歩のsource_readingsが欠けた時、外の相手を呼ぶ前に理由つきで止める。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R2_missing_source_reading_stops_before_actor_call",
+          "line": 1172,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 2,
+      "ruler": "空のmap / waitの項目だけありpeekが欠けるmap。ほかの有効な宣言を保つ。",
+      "checks": "起動拒否、起動の計画のmissing_contract、行う前のblocked/理由のいずれでも、actor.callsが空。既存の非干渉の正例は維持。"
+    },
+    {
+      "id": "K38-R3",
+      "review_lines": [
+        75,
+        81
+      ],
+      "paper_lines": [
+        3576,
+        5238
+      ],
+      "property": "t0より前の一歩を読まず、負の時間のPoisson確率を発行しない。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R3_step_before_origin_is_unreadable_not_negative_elapsed_probability",
+          "line": 1197,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 1,
+      "ruler": "t0=1000、tau=999、率=(1,2)、単位1、N0=0。正例は既存K38-cのtau=0/1の定規。",
+      "checks": "理由つきの拒否/保留を許し採用を禁止。読めるcount=0の照会が返る場合も0<=lower<=upper<=1。モデルの反証への誤分類は許さない。"
+    },
+    {
+      "id": "K38-R4",
+      "review_lines": [
+        83,
+        89
+      ],
+      "paper_lines": [
+        5241,
+        5242
+      ],
+      "property": "同じEを別の時刻法則で読む合法な2つの保存Q*は別の正準な根を持つ。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R4_same_step_under_another_time_law_has_another_root",
+          "line": 1228,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 3,
+      "ruler": "元の率=(1,2)、単位1、起点1000に対し、率=(3,4) / 単位1/2 / 起点999だけを変える。どれも同じ一歩の原記録・モデル・reader、終端1001。",
+      "checks": "対応と読み方を通常のledgerへ別の記録として保存し、input_pointsとnumerical_viewの境界は2要求で完全にそろえる。公開compute_timed_updateへ直接読み手で渡す。両方IssuedUpdate、同じentries/observations、異なるunits/root/application_digest。ホストへ注入しない。"
+    },
+    {
+      "id": "K38-R5",
+      "review_lines": [
+        91,
+        97
+      ],
+      "paper_lines": [
+        5242,
+        5259
+      ],
+      "property": "保存したR*のrootを保ち正本の率またはJSONの数値型を変えた別の記録を、正しい正本・証明・同じ信念として受けない。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R5_saved_spec_tampering_with_unchanged_root_is_rejected",
+          "line": 1269,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 6,
+      "ruler": "取得前の一歩だけの正しいR*を対照とし、root/application_digest/requestを据え置きunits[0].law.rateを[1,1]から[3,1]または[true,1]へ変える。元の記録を上書きしない。",
+      "checks": "query_belief / verify_belief_value / same_beliefをそれぞれ検査。対照の正本・証明は受け付ける。Pythonの==だけでJSON trueと数値1を同じにしない。別記録の保存後もbool型と異なるJSONを保持していることを確認。"
+    },
+    {
+      "id": "K38-R6",
+      "review_lines": [
+        99,
+        105
+      ],
+      "paper_lines": [
+        3573,
+        5247
+      ],
+      "property": "最初の並びの公開候補名で重みと件数を照会できる。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R6_initial_public_candidate_name_works_for_weight_and_all_counts",
+          "line": 1303,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 1,
+      "ruler": "初回emptyを採用した候補1つの並び。名前はbelief_pool().members[0].idから取り、名前の作り方は決めない。",
+      "checks": "候補の重みexact=1、候補を指定したN>=0はexact=1、empty後のN=0は1。候補を指定したSの照会と全体のq/Zも独立定規へ照合。"
+    },
+    {
+      "id": "K38-R7",
+      "review_lines": [
+        107,
+        113
+      ],
+      "paper_lines": [
+        5247
+      ],
+      "property": "Poissonの並びへ有限の法則の候補を加えて比較せず、対象を名指して不足を返す。",
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R7_finite_count_candidate_cannot_join_a_poisson_pool",
+          "line": 1316,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 1,
+      "ruler": "同じ2状態・起点・単一取得予定を持つ合法のFiniteCountLawを、正の重み1/3のlaterとして追加。未知のMethodCallではない。",
+      "checks": "TimeBeliefError/CandidatePoolErrorの対象にlater、または追加入口のCandidateInputErrorがそのcandidateを指す。理由を持ち、採用や黙った除外にはしない。既存の同種Poisson追加・単独の有限法則の正例は維持。"
+    }
+  ],
+  "mutation_source": {
+    "request": 115,
+    "read": "依頼文の05・06・08・16・17の紙による説明を使用。mut/k38_mut_run1_out.txtと実装の誤変更本文は読んでいない。こちらでは誤実装の表を回していない。"
+  },
+  "mutation_branches": [
+    {
+      "id": "M05",
+      "paper_lines": [
+        5240,
+        5241
+      ],
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M05_uniform_taken_keeps_positive_mass_in_the_upper_count_cell",
+          "line": 1336,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 4,
+      "property": "一様の判定時刻でtakenを得た後、上の件数セルC以上に残る質量を正しく保つ。",
+      "ruler": "率r、t=1、N0=0。N(1)=nを条件にしたtakenの確率はn/(n+1)。L=1-(1-exp(-r))/r、J_C=L-sum(n=1..C-1){exp(-r) r^n/n! * n/(n+1)}。C=2,3の全体と状態Aの結合質量をZで割った値を独立に照合。幅0のtakenを対照とし、その重みは1。",
+      "discrimination": "上のセルの確率は正で1未満。低い件数の確率だけ、全体の尤度だけの検査にしない。"
+    },
+    {
+      "id": "M06",
+      "paper_lines": [
+        3576,
+        3577,
+        5241
+      ],
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M06_non_counting_interval_advances_counts_through_after",
+          "line": 1363,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 2,
+      "property": "未接続・呼出し後の故障という件数を読まない取得でも、幅のある区間のafterまで件数を進める。",
+      "ruler": "[1,3]、率(1,2)、事前(1/2,1/2)、N0=0。c=1/3、p=1/4。qは事前、Zは未接続1/3・呼出し後故障1/6。P(N(3)=0)=sum(pi_s exp(-3 lambda_s))、P(N(3)=1)=sum(pi_s 3 lambda_s exp(-3 lambda_s))、C>=2と状態Aの結合量も照合。",
+      "footing": "実際のSourceMeasurer.acquireと家のFrameを使い、保存したbefore=1001/after=1003を検査。未接続はpublic clockの最初の取得中の読みに続いて時刻を進める。Clock.now/mono_nsを何回読むかは固定しない。源が無くてもFrameを偽造しない。"
+    },
+    {
+      "id": "M08",
+      "paper_lines": [
+        5241,
+        5246
+      ],
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M08_count_query_advances_from_last_acquisition_to_step_terminal",
+          "line": 1393,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 2,
+      "property": "最後の取得より後の非干渉の一歩が信念の終端になる時、その終端まで件数を進める。",
+      "ruler": "t=1のemptyの後、tau=3の一歩T。k=(1,1/2)、Z=sum(pi_s k_s exp(-lambda_s))、P(N(tau)=0|history)=sum(pi_s k_s exp(-lambda_s*tau))/Z。tau=1の対照ではN=0が厳密に1。",
+      "discrimination": "終端時刻・実際の相手の入場/戻り・取得1件と原記録2件を確認してから、0件と1件以上を照会。Sだけの非干渉の結果は件数を条件づけない。"
+    },
+    {
+      "id": "M16",
+      "paper_lines": [
+        5242,
+        5243,
+        5258
+      ],
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M16_precision_refinement_limit_returns_incomplete_then_unbounded_succeeds",
+          "line": 1419,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 1,
+      "property": "精度の回数上限を超えればincomplete。モデルの反証にせず、同じ正本を十分な予算で照会できる。",
+      "ruler": "率(1,2)、t=1のempty。q(A)=1/(1+exp(-1))、tolerance=2^-240、max_refinements=1。他の上限は両方None。依頼115が求めた精度の打ち切りの場面としてincompleteを必須にする。max_refinements=Noneの対照は幅と独立定規・証明検査を満たす。",
+      "boundary": "既存の分母保証不足の試験の「正しい証明またはincomplete」という期待は維持。これは通常の正の分母で、精度の回数上限だけを対象にした追加場面。例外の自由文や内部の初期精度・級数の項数は固定しない。"
+    },
+    {
+      "id": "M17",
+      "paper_lines": [
+        5242,
+        5259
+      ],
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_M17_two_valid_different_roots_are_not_the_same_belief",
+          "line": 1438,
+          "execution": "passed_request116"
+        }
+      ],
+      "cases": 1,
+      "property": "2つとも正しい保存済みの別の根なら同じ信念とは判定しない。",
+      "ruler": "t=1とt=3のemptyまでの2つの採用の正本。それぞれqとZを独立に照合し、自己との比較はtrue、別の根の比較は両方向ともfalse。",
+      "discrimination": "rootを書き換えた不正な入力を使わない。改変検査の先ではなく、合法な2つの信念の違う根の比較に届かせる。"
+    }
+  ],
+  "precision_limit_scene": {
+    "request": 115,
+    "tests": [
+      {
+        "path": "tests/test_fb_time_belief.py",
+        "name": "test_time1_M16_precision_refinement_limit_returns_incomplete_then_unbounded_succeeds",
+        "line": 1419,
+        "execution": "passed_request116"
+      }
+    ],
+    "reason": "精度目標2^-240に対してmax_refinements=1のみを制限しincompleteを確認。分母保証不足を全アルゴリズムで強制する場面とは分ける。",
+    "outcome": "limited=incomplete; unbounded=certified interval including the independent value"
+  },
+  "review2_source": {
+    "path": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1553/k38_review_report2.md",
+    "first_line": 1,
+    "last_line": 72,
+    "reading": "全文。場面と紙の根拠のみを試験に使用。記載されたsrcの実装本文は開いていない。静的レビューの指摘を自分の実行証拠として扱わない。外部資料の追加参照なし。"
+  },
+  "review2_branches": [
+    {
+      "id": "K38-R5-remains-1",
+      "review_lines": [
+        43,
+        51
+      ],
+      "paper_lines": [
+        3545,
+        5242,
+        5259
+      ],
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R5_saved_spec_tampering_with_unchanged_root_is_rejected",
+          "line": 1269,
+          "execution": "passed_request116"
+        }
+      ],
+      "additional_cases": 3,
+      "property": "正しい一歩だけのR*のlaw.rate=[1,1]を[true,1]へ変えた別の記録を、照会・証明検査・同じ信念の判定で拒否する。",
+      "fixed": [
+        "root",
+        "application_digest",
+        "request"
+      ],
+      "changed": "result.units[0].law.rate[0]のJSON数値1だけをboolのtrueへ変える。",
+      "controls": "元のrateがint/intであること、元の正本・数値証明を受け付けること、保存後もtrueが数値1へ変換されていないことを確認。元の記録は不変。失敗の自由文は固定しない。"
+    },
+    {
+      "id": "K38-R5-remains-2",
+      "review_lines": [
+        53,
+        61
+      ],
+      "paper_lines": [
+        5242
+      ],
+      "tests": [
+        {
+          "path": "tests/test_fb_time_belief.py",
+          "name": "test_time1_review_R5_finite_method_cannot_authenticate_a_timed_result_in_query_or_U",
+          "line": 1454,
+          "execution": "passed_request116"
+        }
+      ],
+      "additional_cases": 1,
+      "property": "時刻の要求のdesc.methodだけが有限の方法になったQ*へrequestを向けた保存R*を、照会側でもUでも受け付けない。",
+      "fixed": [
+        "元のQ*の観測・読み方・numerical_view・ほかのdesc欄",
+        "R*のresult全体(rootを含む)",
+        "application_digest"
+      ],
+      "changed": "Q*.desc.methodのみをFINITE_UPDATE_COMPUTEへ変更し、R*.requestのみをその別記録へ向ける。",
+      "controls": "元のQ*は公開compute_timed_updateがIssuedUpdateを返し、元の正本のq(A)=2/3が照会できる。別記録を追加した後にもこの対照を再確認。同じ不正Q*はcompute_timed_updateとcompute_finite_updateの双方が例外または通常のRejectedで拒否し、発行しない。",
+      "public_surface_note": "Uが断るという期待を、両方の入口がUpdateEntranceErrorを上げるという期待には強めない。通常のRejectedも理由を持つ拒否として検査する。"
+    }
+  ]
+}

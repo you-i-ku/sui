@@ -43,6 +43,12 @@ class Pool:
         return self.decision is None
 
 
+# 並びの候補の観測の見込みの型 (有限の核 K26 / 時刻を読む K38)。どちらで読むかは感じる側の δ が決める
+_OBSERVATION = _fb.AcquisitionObservationModel | _fb.TimedAcquisitionModel
+_KINDS = {_c.SAVED_ACQUISITION_UPDATE: _fb.AcquisitionObservationModel,
+          _c.SAVED_TIMED_ACQUISITION_UPDATE: _fb.TimedAcquisitionModel}
+
+
 def _read(state, point):
     """記録の本文 (JSON)。読めなければ並びを解けない (名指しつき、待っても解けない)。"""
     try:
@@ -124,7 +130,7 @@ def resolve(state, boot, boundary) -> Pool:
     for value in content["members"]:
         document = _read(state, value["model"])["document"]
         members.append({"id": value["id"], "model": value["model"], "document": document,
-                        "observation": _f._decode(value["observation_model"], _fb.AcquisitionObservationModel),
+                        "observation": _f._decode(value["observation_model"], _OBSERVATION),
                         "pairs": value["correspondence"]["pairs"],
                         "weight": _f._decode(value["prior_weight"], _f._Fraction), "law": value["law"],
                         "offset": offset, "size": len(document["states"])})
@@ -184,6 +190,10 @@ def pool_belief(state, boot, boundary):
         else:
             result = _read(state, head)["result"]
             value = _read(state, result)["result"]
+            from ._fb_time import is_result
+            if is_result(value):   # 時刻を読む信念は有理数の joint を持たない。正本の照会の口で読む (K38 決定 5)
+                raise _fb.TimeBeliefError(kind="unsupported", reason="a timed belief is read by belief_expression",
+                                          targets=(result,))
             joint = _f._decode(value["joint"], tuple[_f._Fraction, ...])
             mass = _f._decode(value["evidence_mass"], _f._Fraction)
         candidates = []
@@ -207,11 +217,12 @@ def _alpha(alpha) -> _Fraction:
     return alpha
 
 
-def _candidate(state, candidate):
-    """足す候補の形 (中身の読めるかは、その候補で観測を読む時に確かめる)。(モデルの document, 対応の pairs)。"""
+def _candidate(state, candidate, kind):
+    """足す候補の形 (中身の読めるかは、その候補で観測を読む時に確かめる)。(モデルの document, 対応の pairs)。観測の見込みは
+    感じる側の δ の読み方の型 kind (時刻を読む並びには時刻を読む見込みだけ、K38)。"""
     if not isinstance(candidate, _fb.BeliefCandidate) or not isinstance(candidate.id, str) or not candidate.id:
         raise _fb.CandidateInputError(reason="candidate", field="/candidate")
-    if not isinstance(candidate.observation_model, _fb.AcquisitionObservationModel):
+    if not isinstance(candidate.observation_model, kind):
         raise _fb.CandidateInputError(reason="candidate", field="/candidate/observation_model")
     correspondence = _u._json(candidate.correspondence)
     if not isinstance(correspondence, dict) or set(correspondence) != {"pairs"} \
@@ -242,9 +253,10 @@ def add(state, boot, candidate, alpha, boundary):
     alpha = _alpha(alpha)
     with state.lock:
         plan = _boot(state, boot)
-        if plan.declaration.perception.value.derivation.method.contract != _c.SAVED_ACQUISITION_UPDATE:
+        kind = _KINDS.get(plan.declaration.perception.value.derivation.method.contract)
+        if kind is None:
             raise _fb.CandidateInputError(reason="perception", field="/boot")   # 並びで読めるのは取りに行きの列だけ
-        document, pairs = _candidate(state, candidate)
+        document, pairs = _candidate(state, candidate, kind)
         seen_boundary = frozenset(state.ledger.heads() if boundary is None else boundary)
         _seen(state, seen_boundary)
         previous = resolve(state, plan, seen_boundary)

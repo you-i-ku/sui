@@ -26,7 +26,7 @@ from .f_update2 import IssuedUpdate, LaunchResult, TargetEvidence
 from .ids import Ref
 from .records import Record
 from .ledger import Ledger as _Ledger
-from .rate import RateBudget
+from .rate import RateBudget, RationalInterval
 from .runtime import Envelope
 
 __all__ = [
@@ -51,6 +51,9 @@ __all__ = [
     "EvaluationStatus", "ThinkingMaterialStatus",
     "BeliefCandidate", "CandidateAddition", "PoolMember", "PoolState", "BeliefPool", "CandidatePosterior",
     "PoolBelief", "CandidateInputError", "CandidatePoolError",
+    "PoissonLaw", "FiniteCountLaw", "UniformAcquisitionTime", "FixedAcquisitionSchedule",
+    "IndependentAcquisitionFailure", "IndependentSourceDisconnection", "TimedAcquisitionModel", "SourceCountReading", "TimedExecutionDeclaration",
+    "BeliefExpression", "BeliefQuantity", "BeliefValue", "SelectionValues", "TimedBeliefUpdater", "TimeBeliefError",
     "start", "RunningSui", "StartInputError",
 ]
 
@@ -1044,6 +1047,254 @@ class CandidatePoolError(RuntimeError):
         self.retryable = retryable
 
 
+# --- 時刻を読む最初の本 (§6-10 K38): 固定の Poisson 源・取得区間の測定核・作り直せる信念 ---
+
+class TimeBeliefError(ValueError):
+    """時刻を読む信念の宣言・照会が通らない (紙 F-b K38)。kind: invalid (不正な宣言: 負の率・和が 1 でない事前・0 の単位など) /
+    unsupported (この本が対応していない表し方・法則・一歩) / unavailable (まだ無い・読めない) / incomplete (予算の中で精度が
+    届かない。モデルの誤りではない) / model_falsified (支えの条件から質量 0 が証明された)。targets は名指し (宣言の位置・候補の
+    id・記録の Point)、field は欄の名前。"""
+
+    def __init__(self, *, kind: str, reason: str, targets: tuple[str, ...] = (), field: str | None = None) -> None:
+        super().__init__(f"{kind}: {reason}")
+        self.kind, self.reason, self.targets, self.field = kind, reason, tuple(targets), field
+
+
+def _exact(value, field, *, positive=False, integer=False) -> None:
+    """K38 決定 1 の受け付ける数: 有理数は Fraction、時刻・件数は int (bool 不可)。別の表し方は unsupported、範囲の外は invalid。"""
+    kind = int if integer else _Fraction
+    if type(value) is not kind:
+        raise TimeBeliefError(kind="unsupported", reason=f"{field} must be an exact {kind.__name__}", field=field)
+    if value < 0 or positive and value == 0:
+        raise TimeBeliefError(kind="invalid", reason=f"{field} must be {'positive' if positive else 'non-negative'}",
+                              field=field)
+
+
+def _distribution(states, prior, field) -> None:
+    if type(states) is not tuple or not states or any(type(s) is not str for s in states) or len(set(states)) != len(states):
+        raise TimeBeliefError(kind="invalid", reason="states must be distinct names", field="states")
+    if type(prior) is not tuple or len(prior) != len(states):
+        raise TimeBeliefError(kind="invalid", reason=f"{field} needs one weight per state", field=field)
+    for p in prior:
+        _exact(p, field)
+    if sum(prior) != 1:
+        raise TimeBeliefError(kind="invalid", reason=f"{field} must sum to 1", field=field)
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class PoissonLaw:
+    """固定の Poisson 源 (K38 決定 1): 静的な有限の状態 states・状態ごとの事前 prior・状態ごとの一定の到着率 rates (宣言した単位
+    あたり)・起点 origin_ns (run の時計の ns)・起点で源に既にある件数 initial_count・時間の単位 time_unit (ns あたりの換算の
+    係数、正)。経過時間は (ns − origin_ns) × time_unit で、段に丸めない。率は後で学べる量へ広げられる (この本では宣言の値)。"""
+    run: Ref
+    states: tuple[str, ...]
+    prior: tuple[_Fraction, ...]
+    rates: tuple[_Fraction, ...]
+    origin_ns: int
+    initial_count: int
+    time_unit: _Fraction
+
+    def __post_init__(self) -> None:
+        if type(self.rates) is not tuple:
+            raise TimeBeliefError(kind="invalid", reason="rates must be a tuple", field="rates")
+        for rate in self.rates:
+            _exact(rate, "rates")
+        _exact(self.time_unit, "time_unit", positive=True)
+        _exact(self.initial_count, "initial_count", integer=True)
+        if type(self.origin_ns) is not int:
+            raise TimeBeliefError(kind="invalid", reason="origin_ns must be an int of ns", field="origin_ns")
+        _distribution(self.states, self.prior, "prior")
+        if len(self.rates) != len(self.states):
+            raise TimeBeliefError(kind="invalid", reason="rates need one rate per state", field="rates")
+        if not isinstance(self.run, Ref):
+            raise TimeBeliefError(kind="invalid", reason="run must be a Ref", field="run")
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class FiniteCountLaw:
+    """旧い有限の法則の時刻つきの一例 (K38 決定 7): 決まった時刻 positions_ns に高々 1 件ずつ届く。paths は各時刻に届くか
+    (0/1) の組、weights_by_state は状態ごとの組の重み (和 1)。CE1 の 8 通りの表はこの形で新しい口を通る。"""
+    run: Ref
+    states: tuple[str, ...]
+    prior: tuple[_Fraction, ...]
+    origin_ns: int
+    initial_count: int
+    positions_ns: tuple[int, ...]
+    paths: tuple[tuple[int, ...], ...]
+    weights_by_state: tuple[tuple[_Fraction, ...], ...]
+
+    def __post_init__(self) -> None:
+        _exact(self.initial_count, "initial_count", integer=True)
+        if type(self.origin_ns) is not int:
+            raise TimeBeliefError(kind="invalid", reason="origin_ns must be an int of ns", field="origin_ns")
+        _distribution(self.states, self.prior, "prior")
+        if type(self.positions_ns) is not tuple or any(type(p) is not int for p in self.positions_ns) \
+                or list(self.positions_ns) != sorted(set(self.positions_ns)):
+            raise TimeBeliefError(kind="invalid", reason="positions must be increasing ns", field="positions_ns")
+        if type(self.paths) is not tuple or not self.paths or len(set(self.paths)) != len(self.paths) or any(
+                type(p) is not tuple or len(p) != len(self.positions_ns) or any(x not in (0, 1) or type(x) is not int
+                                                                              for x in p) for p in self.paths):
+            raise TimeBeliefError(kind="invalid", reason="paths must be distinct 0/1 rows", field="paths")
+        if type(self.weights_by_state) is not tuple or len(self.weights_by_state) != len(self.states):
+            raise TimeBeliefError(kind="invalid", reason="one weight row per state", field="weights_by_state")
+        for row in self.weights_by_state:
+            if type(row) is not tuple or len(row) != len(self.paths):
+                raise TimeBeliefError(kind="invalid", reason="one weight per path", field="weights_by_state")
+            for w in row:
+                _exact(w, "weights_by_state")
+            if sum(row) != 1:
+                raise TimeBeliefError(kind="invalid", reason="path weights must sum to 1", field="weights_by_state")
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class UniformAcquisitionTime:
+    """取得区間の測定核 (K38 決定 3): 源が判定した時刻 U は記録されないので、U を [before, after] の一様分布とする (幅 0 なら
+    点)。数学を閉じるための明示した測定モデルで、実機の内部時刻の事実ではない。"""
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class FixedAcquisitionSchedule:
+    """区間の端点を条件にして読む根拠 (K38 決定 3): 取得の区間 [before, after] (run の時計の ns) を前もって宣言した外から決まる
+    予定。i 番目の取得の実際の区間がこの i 番目と一致する時だけ、端点を条件にして読む。"""
+    run: Ref
+    intervals: tuple[tuple[int, int], ...]
+
+    def __post_init__(self) -> None:
+        previous = None
+        for item in self.intervals if type(self.intervals) is tuple else (None,):
+            if type(item) is not tuple or len(item) != 2 or any(type(x) is not int for x in item) or item[0] > item[1] \
+                    or previous is not None and previous > item[0]:
+                raise TimeBeliefError(kind="invalid", reason="intervals must be ordered [before, after] ns pairs",
+                                      field="intervals")
+            previous = item[1]
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class IndependentAcquisitionFailure:
+    """状態と件数に依らない故障・接続の核 (K38 決定 2): 取得が unavailable になる確率。宣言した時だけ unavailable を読む。"""
+    unavailable_probability: _Fraction
+
+    def __post_init__(self) -> None:
+        _exact(self.unavailable_probability, "unavailable_probability")
+        if self.unavailable_probability > 1:
+            raise TimeBeliefError(kind="invalid", reason="a probability is at most 1", field="unavailable_probability")
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class IndependentSourceDisconnection:
+    """状態と件数に依らない「つながっていない」の核 (K38-c ②・K38-d): coefficient c は 1 回の取得で源がつながっていない確率。
+    取得の結果は 1 つの正規化された表 (つながっていない c / 呼んだ後の故障 (1−c)·p / taken・empty (1−c)·(1−p)·件数の核)。
+    源が差されていない取得 (source_called = False) は宣言した時だけ読み、S の見立ては変えず、源の件数は after まで進める。
+    呼んだ後の故障 (IndependentAcquisitionFailure) の確率は流用しない。"""
+    coefficient: _Fraction
+
+    def __post_init__(self) -> None:
+        _exact(self.coefficient, "coefficient")
+        if self.coefficient > 1:
+            raise TimeBeliefError(kind="invalid", reason="the coefficient of a discrete observation is at most 1",
+                                  field="coefficient")
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class TimedAcquisitionModel:
+    """`sui.fb.timed_acquisition_model/1` の値 (起動の宣言の observation_models の項、K38 決定 1〜3)。route_slot は同じ起動の口、
+    law は件数の法則 (PoissonLaw / FiniteCountLaw。それ以外の法則の宣言は「この本では対応していない」で名指して止まる)、
+    decision_time は取得区間の測定核、conditioning は端点を条件にする根拠、failure は呼んだ後の独立の故障の核 (None は
+    呼んだ後の unavailable を読まない)、control_rule・control_independence は取りに行き方の制御の表と、選び方が状態に依存
+    しない根拠 (K26 と同じ)、disconnection は源が差されていない時の独立の核 (None は読まない、K38-c ②)。"""
+    route_slot: str
+    law: PoissonLaw | FiniteCountLaw | MethodCall
+    decision_time: UniformAcquisitionTime
+    conditioning: FixedAcquisitionSchedule
+    failure: IndependentAcquisitionFailure | None
+    control_rule: MethodCall
+    control_independence: MethodCall
+    disconnection: IndependentSourceDisconnection | None = None
+
+    def __post_init__(self) -> None:
+        if self.disconnection is not None and type(self.disconnection) is not IndependentSourceDisconnection:
+            raise TimeBeliefError(kind="invalid", reason="disconnection must be an independent disconnection law",
+                                  field="disconnection")
+        for name, kind in (("decision_time", UniformAcquisitionTime), ("conditioning", FixedAcquisitionSchedule)):
+            if type(getattr(self, name)) is not kind:
+                raise TimeBeliefError(kind="invalid", reason=f"{name} must be declared", field=name)
+        if self.failure is not None and type(self.failure) is not IndependentAcquisitionFailure:
+            raise TimeBeliefError(kind="invalid", reason="failure must be an independent failure law", field="failure")
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class SourceCountReading:
+    """一歩が源の件数とどう関わるかの宣言 (K38 決定 9・K38-c ③)。independent_of_count は「結果が S を条件に源の件数と
+    独立」の宣言、count_shift は一歩が件数を動かす量。行列の値は持たない (結果の確率の出どころはモデルの核の 1 か所)。
+    independent_of_count が真で count_shift = 0 の時だけ E_y(s) ⊗ I_N の形と宣言されている。"""
+    independent_of_count: bool
+    count_shift: int
+
+    def __post_init__(self) -> None:
+        if type(self.independent_of_count) is not bool:
+            raise TimeBeliefError(kind="invalid", reason="independent_of_count must be a bool",
+                                  field="independent_of_count")
+        if type(self.count_shift) is not int:
+            raise TimeBeliefError(kind="invalid", reason="count_shift must be an int", field="count_shift")
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class TimedExecutionDeclaration(ExecutionDeclaration):
+    """`sui.fb.timed_execution_declaration/1`: 行う一歩の宣言 (K36) に、核 id → 源の件数の読み (SourceCountReading) を足したもの。
+    時刻を読む信念と一緒に通す一歩は、この読みが E_y(s) ⊗ I_N の形と確かめられるものだけ (K38 決定 9)。"""
+    source_readings: _Mapping[str, SourceCountReading]
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class BeliefExpression:
+    """採用された時刻を読む信念の正本の名指し (K38 決定 5)。point は正本を保存した記録 (結果 R*)、root は法則・事前・測定核・
+    使った原記録と適用の順から決まる正準な根 (精度に依らない)、model・pool は並びのモデルと並びの記録、adoption・result は
+    採用 A* と結果 R*、observations は適用した原記録 (取得の Frame・一歩の結果のメモ) の Point の順、terminal_ns は信念の時刻。"""
+    point: Point
+    root: str
+    model: Point
+    pool: Point
+    adoption: Point | None
+    result: Point | None
+    observations: tuple[Point, ...]
+    terminal_ns: int
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class BeliefQuantity:
+    """照会する量 (K38 決定 5): state = P(S=state | h)、candidate = P(M=candidate | h)、mass = 証拠の質量 Z、count = P(N=count
+    [, S=state, M=candidate] | h) (信念の時刻の源の総件数。at_least なら N ≥ count)。"""
+    kind: _Literal["state", "candidate", "mass", "count"]
+    state: str | None = None
+    candidate: str | None = None
+    count: int | None = None
+    at_least: bool = False
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class BeliefValue:
+    """照会の答え (K38 決定 5・P10): 真の値を含む有理数の上下界。exact は正準な式が有理数の時のその値 (そうでなければ None)、
+    proof は使った精度の控え (検査は根から作り直して行い、控えを信じない)。"""
+    root: str
+    quantity: BeliefQuantity
+    lower: _Fraction
+    upper: _Fraction
+    exact: _Fraction | None
+    proof: ImmutableJSON
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class SelectionValues:
+    """選択が使った評価の値の保証つきの照会 (K38 決定 5): 候補ごとの情報量・G・方策の確率の有理数の上下界。belief_root は
+    その評価が使った信念の根。"""
+    belief_root: str
+    candidates: tuple[str, ...]
+    information: tuple[RationalInterval, ...]
+    G: tuple[RationalInterval, ...]
+    probabilities: tuple[RationalInterval, ...]
+    proof: ImmutableJSON
+
+
 def read_acquisition_sequence(records: _Mapping[Point, Record], *, model: Point, run: Ref, route_epoch: str,
                               through_seq: int) -> AcquisitionReadResult:
     """取得の列を読む口 (§6-10 K26 (2)(c)・K26-a (イ))。records は読み手の範囲の Point → Record、model は保存した観測モデルの
@@ -1246,6 +1497,32 @@ class FThreadHost:
         from . import _fb_pool
         return _fb_pool.pool_belief(self._state, boot, boundary)
 
+    def belief_expression(self, *, boot: Point, boundary: frozenset[Point] | None = None) -> BeliefExpression:
+        """境目の並びの最新の採用が持つ、時刻を読む信念の正本の名指し (紙 F-b K38 決定 5)。仕事を進めず、記録を足さない。
+        まだ採用が無い・系列が止まった・時刻を読む信念でない時は TimeBeliefError。"""
+        from . import _fb_time
+        return _fb_time.belief_expression(self._state, boot, boundary)
+
+    def query_belief(self, *, belief: BeliefExpression, quantity: BeliefQuantity, budget: RateBudget) -> BeliefValue:
+        """正本から作り直した量の、精度 budget.tolerance 以下の幅の有理数の上下界 (K38 決定 5・P10)。"""
+        from . import _fb_time
+        return _fb_time.query_belief(self._state, belief, quantity, budget)
+
+    def query_selection(self, *, selection: Point, budget: RateBudget) -> SelectionValues:
+        """選択が使った評価の値 (情報量・G・方策の確率) の保証つきの照会 (K38 決定 5)。"""
+        from . import _fb_time
+        return _fb_time.query_selection(self._state, selection, budget)
+
+    def verify_belief_value(self, *, belief: BeliefExpression, value: BeliefValue) -> bool:
+        """保存した数の答えを、根から作り直して確かめる (区間の重なりでなく、真の値を含むか)。"""
+        from . import _fb_time
+        return _fb_time.verify_belief_value(self._state, belief, value)
+
+    def same_belief(self, *, left: BeliefExpression, right: BeliefExpression) -> bool:
+        """2 つの名指しが同じ信念か (精度に依らない正準な根で決める)。"""
+        from . import _fb_time
+        return _fb_time.same_belief(self._state, left, right)
+
     def rebuild_window(self) -> FWindow:
         """同じプロセスの中で窓口を作り直して返す (M2)。H・P・C・E と動いている係はそのまま。
         Boot・Post・くじの消費・再入場・占有の解放をしない。新旧 2 つを同時に有効にしない。"""
@@ -1330,13 +1607,15 @@ class FiniteUpdater:
     `registry` は、組み立てる側がホストへ渡したものと同じ `FRegistry` を明示して渡す (係の中で作らない)。
     見立てを直す仕事以外を渡されたら TypeError (束ねるのは `WorkerBundle`)。読める報告の種類はこの係では増えない。"""
 
+    _entry = "compute_finite_update"   # 呼ぶ入口 U の版 (時刻を読む版は TimedBeliefUpdater)
+
     def __init__(self, *, registry: FRegistry) -> None:
         self._registry = registry
 
     def run(self, work: "FWork", ctx: FWorkContext) -> None:
         from . import f_update2 as _u
         if not isinstance(work, Compute) or work.desc.purpose != "belief_update":
-            raise TypeError("FiniteUpdater runs belief_update works only")
+            raise TypeError(type(self).__name__ + " runs belief_update works only")
         if not ctx.enter():
             return
 
@@ -1352,7 +1631,7 @@ class FiniteUpdater:
             reader = ctx.reader()
             if reader is None:
                 raise RuntimeError("this work port has no fixed reader")
-            returned = _u.compute_finite_update(work.request, reader=reader, registry=self._registry,
+            returned = getattr(_u, self._entry)(work.request, reader=reader, registry=self._registry,
                                                 evidence=ctx.evidence())
             outputs = _u.update_response(returned)
             issued = returned if isinstance(returned, IssuedUpdate) else None
@@ -1367,6 +1646,14 @@ class FiniteUpdater:
                 readings=(started, finished), basis=()))
         ctx.post(WorkFinished(work=work.desc.work_id, started=started, finished=finished, outcome=outcome),
                  issued=issued)
+
+
+class TimedBeliefUpdater(FiniteUpdater):
+    """`FWorkers` の「見立てを直す」仕事の、時刻を読む版の本体 (紙 F-b K38)。FiniteUpdater と同じ形で、入口 U の時刻を読む版
+    (`f_update2.compute_timed_update`) を呼ぶ。取りに行きの列を宣言した件数の法則・取得区間の測定核・経過時間込みで条件づけ、
+    作り直せる信念の正本を発行する。旧い有限の系列の要求は入口が断る (版を混ぜない)。"""
+
+    _entry = "compute_timed_update"
 
 
 class WorkerBundle:
@@ -1685,10 +1972,16 @@ def start(*, ledger: _Ledger, clock: _Clock, clock_declaration: ClockSource, boo
         for name in declaration.execution.value.actors.values():
             if name not in actors:
                 raise StartInputError(reason="actor_missing", field="/actors/" + name)
+    from ._fb_boot import execution_reading_fault
+    fault = execution_reading_fault(declaration)
+    if fault is not None:   # 源の件数を読む・変える一歩を、時刻を読む信念と一緒に通さない (K38 決定 9)
+        raise StartInputError(reason=fault[0], field=fault[1])
+    timed = declaration.perception.value.derivation.method.contract == _c.SAVED_TIMED_ACQUISITION_UPDATE
     registry = fb_registry_v1() if registry is None else registry
     measurer = SourceMeasurer()
     workers = WorkerBundle({
-        "measure_segment": measurer, "belief_update": FiniteUpdater(registry=registry),
+        "measure_segment": measurer,
+        "belief_update": (TimedBeliefUpdater if timed else FiniteUpdater)(registry=registry),
         "candidate_generation": CandidateGenerator(), "evaluation_prepare": EvaluationPreparer(registry=registry),
         "selection_draw": UniformDraw() if randbits is None else UniformDraw(randbits=randbits),
         "evaluation": Evaluator(), "execute_step": StepExecutor()})

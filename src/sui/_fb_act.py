@@ -155,6 +155,10 @@ def classify(state, boot, model, kid):
             return "unconnected", "cells_symbols"
     if kid not in decl.actors:
         return "unconnected", "actor_undeclared"
+    from ._fb_time import step_reading_fault
+    fault = step_reading_fault(decl, kid)   # 源の件数を読む・変えると確かめられない一歩は行わない (K38 決定 9)
+    if fault is not None:
+        return "unconnected", fault
     return "observe", ""
 
 

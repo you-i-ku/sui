@@ -137,3 +137,12 @@ EXECUTION_STEP_PROJECTION = _ContractRef("sui.fb.execution_step_projection", "1"
 BELIEF_CANDIDATE = _ContractRef("sui.fb.belief_candidate", "1")   # 足した候補の宣言 (Prediction / MODEL)
 BELIEF_POOL = _ContractRef("sui.fb.belief_pool", "1")             # 並びの記録 (Prediction / MODEL): 候補・最初の重み・直和のモデル
 CANDIDATE_ADDED = _ContractRef("sui.fb.candidate_added", "1")     # 足した決定 (Decided / MODEL): 候補・新しい並び・前の並び・境目
+
+# 時刻を読む最初の本 (§6-10 K38): 固定の Poisson 源・取得区間の測定核・作り直せる信念。宣言の 3 つは起動の宣言の中の値、
+# 残りは読み方の時間の射影・入口・結果の値の契約 (名前だけの仮定、紙は名前を試験の係に委ねた)
+TIMED_ACQUISITION_MODEL = _ContractRef("sui.fb.timed_acquisition_model", "1")            # 時刻を読む観測モデルの記録
+SAVED_TIMED_ACQUISITION_UPDATE = _ContractRef("sui.fb.saved_timed_acquisition_update", "1")  # δ: 時刻を読む取りに行き
+TIMED_EXECUTION_DECLARATION = _ContractRef("sui.fb.timed_execution_declaration", "1")    # 源の件数の読みつきの一歩の宣言
+TIMED_ACQUISITION_PROJECTION = _ContractRef("sui.fb.timed_acquisition_projection", "1")  # 読み方の時間の射影: 区間と件数で読む
+TIMED_UPDATE_COMPUTE = _ContractRef("sui.fb.timed_update_compute", "1")                  # 入口 U の時刻を読む版
+TIMED_UPDATE_RESULT = _ContractRef("sui.fb.timed_update_result", "1")                    # R* の値: 作り直せる信念の正本

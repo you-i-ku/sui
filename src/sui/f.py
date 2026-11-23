@@ -97,6 +97,11 @@ class FIncomplete(_FErrorMixin, _IntegrationIncomplete):
     """低水準の未完了。計算失敗だけから発散を主張しない。"""
 
 
+class _EnclosureShort(FIncomplete):
+    """今の精度の囲みでは端点を分けられなかった (式が不正なのではない)。精度を上げれば分かれうる。評価の精度を上げる
+    輪 (`_f_eval.evaluate_f`) と照会の輪が、この不足でだけ精度を上げて計算し直す (F-b K38 決定 5・6、P8・P10)。"""
+
+
 class FOutsideEvaluationType(_FErrorMixin, _OutsideEvaluationType):
     """宣言した評価型の外。高水準evaluate_fはNoDecisionにする。"""
 
@@ -3370,7 +3375,9 @@ def _validate_draw(draw):
 
 # Exact expressions and rational, outward elementary-series enclosures.
 def _r(value):
-    return ExactReal(op="rational", value=_Fraction(value))
+    # 有理数でない厳密な数 (F-b K38 の時刻を読む信念の確率、`_fb_time.Ratio`) は自分の厳密式へ写る
+    real = getattr(value, "exact_real", None)
+    return real() if real is not None else ExactReal(op="rational", value=_Fraction(value))
 
 
 def _add(*terms):
@@ -3478,8 +3485,10 @@ class _ExpressionWork:
                 if expr.op == "neg":
                     value = RationalInterval(-a.upper, -a.lower)
                 elif expr.op == "log":
-                    if a.lower <= 0:
+                    if a.upper <= 0:   # 囲み全体が 0 以下: 引数が正でないと示せた (入力の不正)
                         raise FInputError("shape", "log argument not proved positive")
+                    if a.lower <= 0:   # 正かもしれないが、今の精度では 0 から分けられない (計算の未完了)
+                        raise _EnclosureShort("certificate_incomplete", "log argument not separated from zero")
                     value = RationalInterval(self.work.public(self.work.log(a.lower)).lower,
                         self.work.public(self.work.log(a.upper)).upper)
                 else:

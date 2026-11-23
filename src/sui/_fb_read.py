@@ -53,24 +53,37 @@ def read(records, *, model, run, route_epoch, through_seq) -> _fb.AcquisitionRea
 
 # --- 1・2. 宣言と、その中身の検査 ---
 
-def _declaration(records, model, used, contracts):
+def _declaration(records, model, used, contracts, kind=_c.ACQUISITION_OBSERVATION_MODEL):
+    """観測モデルの記録 (契約 kind) を読む。K26 の有限の観測モデルは中身の形も検査する。時刻を読む観測モデル (K38) は
+    法則・測定核の形を値の型が確かめる (`fb.TimedAcquisitionModel`)。"""
     record = records.get(model)
     # Prediction の書き手は MODEL だけ (records の型が構築で断る) なので、書き手は別に見ない (K26-e (オ))
-    if (record is None or not isinstance(record.body, _Prediction)
-            or record.body.contract != _c.ACQUISITION_OBSERVATION_MODEL):
+    if record is None or not isinstance(record.body, _Prediction) or record.body.contract != kind:
         raise _Unreadable("missing_declaration")
+    typ = _fb.AcquisitionObservationModel if kind == _c.ACQUISITION_OBSERVATION_MODEL else _fb.TimedAcquisitionModel
     try:
         content = record.body.content.as_json()
-        value = _f._decode(content["value"], _fb.AcquisitionObservationModel, "/value")
+        value = _f._decode(content["value"], typ, "/value")
         boot = content["declared_at"]["declaration"]
     except (_f.FInputError, ValueError, TypeError, KeyError):
         raise _Unreadable("shape") from None
-    if value.projection != _c.ACQUISITION_RESULT_PROJECTION or value.time_projection != _VALUE_ONLY:
-        raise _Unreadable("missing_declaration")
-    _check_model(value)
+    if typ is _fb.AcquisitionObservationModel:
+        if value.projection != _c.ACQUISITION_RESULT_PROJECTION or value.time_projection != _VALUE_ONLY:
+            raise _Unreadable("missing_declaration")
+        _check_model(value)
     used.append(model)
-    contracts += [_c.ACQUISITION_OBSERVATION_MODEL]
+    contracts += [kind]
     return value, boot
+
+
+def read_timed(records, *, model, run, route_epoch, through_seq):
+    """時刻を読む観測モデル (K38) で 0〜through_seq の取得の列を読む: (宣言, 観測の列)。列の集め方・口の照らしは K26 と同じ。
+    尤度は件数の法則と時刻から入口 U が計算する (ここでは計算しない)。読めなければ _Unreadable。"""
+    used, contracts = [], []
+    declaration, boot = _declaration(records, model, used, contracts, _c.TIMED_ACQUISITION_MODEL)
+    observations = _sequence(records, run=run, route_epoch=route_epoch, through_seq=through_seq, used=used)
+    _route(records, boot, declaration, route_epoch, used, contracts)
+    return declaration, boot, observations
 
 
 def _check_model(model) -> None:

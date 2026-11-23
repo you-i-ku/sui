@@ -356,11 +356,18 @@ def evaluate_f(root: FRoot, *, budget: RateBudget,
         u = None if bits else _decode(root.selection_draw.value["u"], _Fraction)
         interval = _prefix_interval(_prefix(root)) if bits else None
         if _finite_tree(work) or root.scope.name == "finite_horizon":
-            precision = _Fraction(1, 10**24)
+            precision, short = _Fraction(1, 10**24), False
             for _ in _rounds(budget.max_refinements):
                 from ._f_handles import charge_verification
+                from .f import _EnclosureShort
                 charge_verification('refinements')
-                progress = _evaluate_recursive(root, budget, precision)
+                try:
+                    progress = _evaluate_recursive(root, budget, precision)
+                except _EnclosureShort:
+                    precision /= 2**16   # 端点を分けられない囲みは、精度を上げて計算し直す (入力の不正にしない)
+                    short = True
+                    continue
+                short = False
                 result = certify_f_choice(progress, u=u)
                 if isinstance(result, Selected):
                     return result
@@ -368,8 +375,9 @@ def evaluate_f(root: FRoot, *, budget: RateBudget,
                     return result   # ② 続きのビット (予算の最後の回でもこちら)
                 # Refine only the numerical enclosure; J and the frozen u stay fixed.
                 precision /= 2**16
-            # ④ uniform_bits/1 は精度を上げる予算が尽きた。uniform_unit/1 は今のまま
-            return _no_decision(root, FIncomplete("budget_exhausted" if bits else "selection_boundary"), progress=progress)
+            # ④ uniform_bits/1 (と、囲みを分けられないまま) は精度を上げる予算が尽きた。uniform_unit/1 の境目は今のまま
+            return _no_decision(root, FIncomplete("budget_exhausted" if bits or short else "selection_boundary"),
+                                progress=progress)
         # The execution budget bounds refinement; depth never changes the scope.
         for steps in _rounds(None if budget.max_refinements is None else budget.max_refinements + 1, 1):
             from ._f_handles import charge_verification
