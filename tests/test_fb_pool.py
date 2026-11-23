@@ -781,6 +781,18 @@ def test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading(
     r = pools().start(); r.think(); _, execution = r.enter_step()
     raw_u, old_model = execution.u, execution.model
     candidate = r.save_candidate(NEW, missing=missing)
+    if missing == "correspondence":
+        # K39-c: reject at addition, before any new pool/Decision is saved.
+        # The candidate fixture's own Prediction was saved before this snapshot.
+        before, old_pool = snapshot_records(r), r.pool()
+        with pytest.raises(fb.TimeBeliefError) as error: r.add(candidate=candidate)
+        assert error.value.reason == "correspondence" and candidate.id in error.value.targets
+        assert snapshot_records(r) == before and r.pool() == old_pool
+        r.finish_step(0, T)
+        assert r.actor.calls[0].u == raw_u and r.actor.calls[0].model == old_model
+        assert len(r.facts(contract("sui.fb.execution_result"))) == 1
+        r.exercise_available_updates(); r.assert_joint((T,))
+        return
     added = r.add(candidate=candidate); r.replay()
     adoptions_before_result = tuple(a.cid for a in r.adoption_chain())
     r.finish_step(0, T)
@@ -947,14 +959,17 @@ def test_pool1_latest_confirmed_belief_stays_visible_while_same_pool_adoption_wr
 
 
 def test_pool1_zero_evidence_component_still_requires_its_declared_correspondence(pools):
-    """K37-c(6): do not skip a candidate's malformed reading because it has Z=0."""
+    """K37-c(6), K39-c: Z=0 cannot excuse a missing correspondence at addition."""
     r = pools(thinking=False).start(); r.start_last_passive(); r.complete_last_passive(T); r.adopt(1)
     previous = tuple(a.cid for a in r.adoption_chain())
     impossible = replace(NEW, taken=ZERO, empty=I)
     candidate = r.save_candidate(impossible, missing="correspondence")
-    r.add(impossible, candidate=candidate); r.exercise_available_updates()
-    assert_named_error(r.belief, candidate.model)
+    before, old_pool = snapshot_records(r), r.pool()
+    with pytest.raises(fb.TimeBeliefError) as error: r.add(impossible, candidate=candidate)
+    assert error.value.reason == "correspondence" and candidate.id in error.value.targets
+    assert snapshot_records(r) == before and r.pool() == old_pool
     assert tuple(a.cid for a in r.adoption_chain()) == previous
+    r.assert_joint((T,))
 
 
 def request_for_belief(r, belief):

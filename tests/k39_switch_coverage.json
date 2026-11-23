@@ -1,0 +1,2346 @@
+{
+  "issue": "K39",
+  "request": 124,
+  "revision": 8,
+  "date": "2026-11-24",
+  "workspace": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/work39c/",
+  "specification": {
+    "path": "C:/Users/you11/Desktop/iku/sui/specs/関所F_Fb_今の約束.md",
+    "version": "2.02",
+    "K39_version": "v5",
+    "readings": [
+      {
+        "label": "K39行",
+        "range": [
+          3580,
+          3580
+        ],
+        "read": "全文"
+      },
+      {
+        "label": "K39本文v5",
+        "range": [
+          5271,
+          5330
+        ],
+        "read": "全文。長い行もPythonで分割して読取。"
+      },
+      {
+        "label": "Z63/Z64/Z65と追記",
+        "range": [
+          3834,
+          3836
+        ],
+        "read": "各行全文。Z63の長い行は分割し末尾まで読取。"
+      },
+      {
+        "label": "K37行",
+        "range": [
+          3573,
+          3573
+        ],
+        "read": "既読原文を再利用、名前と位置を確認"
+      },
+      {
+        "label": "K37本文v2",
+        "range": [
+          5162,
+          5215
+        ],
+        "read": "全文を再読"
+      },
+      {
+        "label": "K38行とb〜e",
+        "range": [
+          3574,
+          3578
+        ],
+        "read": "前回までの全文読了を再利用、名前・位置を確認。既読の実装の経過は期待の根拠にしない。"
+      },
+      {
+        "label": "K38-f",
+        "range": [
+          3579,
+          3579
+        ],
+        "read": "全文"
+      },
+      {
+        "label": "K38本文v3とK38-a",
+        "range": [
+          5217,
+          5269
+        ],
+        "read": "全文を再読"
+      },
+      {
+        "label": "CE1宣言と8経路表",
+        "range": [
+          2904,
+          2938
+        ],
+        "read": "該当部分全文"
+      },
+      {
+        "request": 118,
+        "label": "K39 v5 決定1〜11",
+        "range": [
+          5293,
+          5303
+        ],
+        "read": "該当部分をPythonで再読。版はv1.97のまま。実装本文は読んでいない。"
+      },
+      {
+        "request": 119,
+        "label": "K39-b",
+        "range": [
+          3581,
+          3581
+        ],
+        "read": "行全体をPythonで全文読了。K39本文の先頭は現在5272行。"
+      },
+      {
+        "request": 120,
+        "label": "K39行・K39-b行・K39本文v5",
+        "ranges": [
+          [
+            3580,
+            3581
+          ],
+          [
+            5272,
+            5331
+          ]
+        ],
+        "read": "各行全文と本文の末尾までをPythonで再読。特に決定6〜8:5299〜5301。"
+      },
+      {
+        "request": 121,
+        "label": "K39-c",
+        "range": [
+          3582,
+          3582
+        ],
+        "read": "行全文。K28-b(エ)は3545行の該当部分、K37本文5183〜5217の該当部分を再読。"
+      },
+      {
+        "request": 122,
+        "label": "K39-d",
+        "range": [
+          3583,
+          3583
+        ],
+        "read": "行全文をPythonで読了。K37-c 3586行も型の名前と入力の拒否の該当部分を全文再読。"
+      },
+      {
+        "request": 123,
+        "label": "K39-d レビュー3通目追記",
+        "range": [
+          3583,
+          3583
+        ],
+        "read": "追記を含む行全文をPythonで再読。"
+      },
+      {
+        "request": 124,
+        "label": "K39-d v2.02、2-R1と前回CGの裁き",
+        "range": [
+          3583,
+          3583
+        ],
+        "read": "追記を含む行全文をPythonで読了。実装本文は読んでいない。"
+      }
+    ]
+  },
+  "independence": {
+    "source_bodies_read": "traceback_fragments_only",
+    "src_modified": false,
+    "oracle": "Fractionの上昇階乗と有限のビット列の全列挙。各枝の非正規化質量を足してから共通Zで割る。指数/logはK38試験の独立した有理区間の定規。浮動小数の近似一致では判定しない。",
+    "clock": "本体のSourceMeasurer/TimedBeliefUpdater/startをTimeRigのEventで実際に通す。Frameの注入や偽のpriorはしない。",
+    "source_files_opened": false,
+    "request119_limit": "実装ファイルの本文は開いていない。初回の--tb=shortの失敗出力に実装行の短い断片が自動表示された。期待には使わず、その後は--tb=noとXMLのfailure.messageだけを読む。",
+    "request120": {
+      "source_bodies_read": false,
+      "source_files_opened": false,
+      "src_modified": false,
+      "tracebacks_suppressed": true,
+      "scope": "紙・試験の足場と公開の値/署名だけ。119のtraceback断片の表示履歴は別欄に保持。"
+    },
+    "request121": {
+      "source_files_opened": false,
+      "source_bodies_read": false,
+      "src_modified": false,
+      "tracebacks_suppressed": true,
+      "third_party_tests": "test_fb_impl39_switch.pyはユーザー指定で実行する。本文を期待の根拠として読んでいない。"
+    },
+    "request122": {
+      "source_files_opened": false,
+      "source_bodies_read": false,
+      "src_modified": false,
+      "tracebacks_suppressed": true,
+      "scope": "紙と試験の足場、CandidateInputErrorの公開の署名、失敗XMLのfailure.messageだけ。"
+    },
+    "request123": {
+      "source_files_opened": false,
+      "source_bodies_read": false,
+      "src_modified": false,
+      "tracebacks_suppressed": true,
+      "scope": "紙・試験の足場・公開の型/署名と保存した記録/状態/例外の属性だけ。"
+    },
+    "request124": {
+      "source_files_opened": false,
+      "source_bodies_read": false,
+      "src_modified": false,
+      "tracebacks_suppressed": true,
+      "work39d_touched": false,
+      "scope": "紙、試験の足場、公開の型・記録・状態・例外の属性のみ。"
+    }
+  },
+  "public_names": {
+    "authority": "依頼117で選んだ公開の名を、K39-b R2/R3 (紙v1.98、依頼119) に沿って更新。",
+    "declarations": {
+      "SwitchPart": [
+        "id",
+        "kind",
+        "multipliers"
+      ],
+      "SwitchQuantity": [
+        "kind",
+        "candidate",
+        "family",
+        "on",
+        "off",
+        "state",
+        "order",
+        "point"
+      ],
+      "PoissonLaw": [
+        "run",
+        "states",
+        "prior",
+        "rates",
+        "origin_ns",
+        "initial_count",
+        "time_unit",
+        "family",
+        "parts",
+        "a",
+        "b",
+        "state_role"
+      ]
+    },
+    "values": {
+      "BetaMixture": [
+        "root",
+        "candidate",
+        "family",
+        "parts",
+        "a",
+        "b",
+        "components",
+        "proof"
+      ],
+      "BetaMixtureComponent": [
+        "a",
+        "b",
+        "weight"
+      ],
+      "ResolvedBeliefPool": [
+        "document",
+        "candidates",
+        "references"
+      ]
+    },
+    "host_methods": [
+      "query_switch_belief(*,belief,quantity,budget)",
+      "p_distribution(*,belief,candidate,family,budget)",
+      "verify_p_distribution(*,belief,distribution)"
+    ],
+    "function": "resolve_belief_candidates(declaration, *, reader, registry)",
+    "candidate_description_fields": [
+      "id",
+      "states",
+      "prior",
+      "rates",
+      "correspondence",
+      "knowledge_targets",
+      "references"
+    ],
+    "notes": [
+      "SwitchPart.kindはmood/inert。state_role=mood。未知の種類は名指したTimeBeliefError(unsupported)。",
+      "SwitchQuantityはswitch/state/mass/p_mean/p_moment。candidate/familyは必須。on/offは部分的なビット条件。stateは候補内のP(z条件,S|h,M)。",
+      "BeliefQuantity(state)は候補を含めない周辺P(S|h)。candidateを指定したstateはinvalid・field=candidate。共同P(M,S|h)は候補の照会P(M|h)とSwitchQuantity(state)の条件付き値を掛ける。",
+      "p_cdf/p_quantileはpointを持つ要求として名指しのunsupportedを返す。",
+      "分布の重みは根から作り直した数値の証明。verify_p_distributionは変更した自己申告を信用しない。",
+      "ResolvedBeliefPool.documentはホストが保存したモデルのdocumentと一致。Uの結果に余分なdescription欄は要求しない。",
+      "倍率0のtakenでzが分かってもpはBeta(1,2)のまま。平均1/3、2次モーメント1/6で分散が正。",
+      "SwitchQuantity(kind=mass)は決定6の「候補Mに条件づけた値として証拠の質量」からP(h|M)。並びの事前重みalphaを含むZ_M=alpha*P(h|M)とは区別する。"
+    ],
+    "spelling_location": {
+      "path": "tests/test_fb_switch_belief.py",
+      "first_line": 1,
+      "last_line": 25
+    }
+  },
+  "acceptance": [
+    {
+      "id": "A1",
+      "spec_line": 5279,
+      "property": "共通の候補解決を最初/追加の並びから呼ぶ",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_read_only_resolution_matches_host_and_direct_U_before_and_after_addition",
+          "line": 623,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_K38_poisson_and_switch_family_share_the_calculation_kind",
+          "line": 700,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "A2",
+      "spec_line": 5279,
+      "property": "実際の取得の共同尤度が族の事前を更新",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_beta_prior_is_per_bit_string_not_independent_or_binomial_twice",
+          "line": 481,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_joint_update_changes_switch_p_state_and_native_evaluation",
+          "line": 493,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_same_z_persists_and_beta_shapes_do_not_count_acquisitions",
+          "line": 551,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_zero_multiplier_keeps_the_branch_mass_and_existing_items",
+          "line": 539,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 3,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "A3",
+      "spec_line": 5279,
+      "property": "スイッチ/pの保証つき照会と候補内の分母",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_joint_update_changes_switch_p_state_and_native_evaluation",
+          "line": 493,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_candidate_conditional_queries_do_not_use_pool_joint_weights",
+          "line": 681,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_same_family_name_in_another_candidate_does_not_merge_beta_priors",
+          "line": 716,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_zero_evidence_candidate_has_no_conditional_switch_or_p_distribution",
+          "line": 729,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "A4",
+      "spec_line": 5279,
+      "property": "同じ採用の根で本体の評価が進む",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_joint_update_changes_switch_p_state_and_native_evaluation",
+          "line": 493,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_aliases_and_inert_parts_do_not_inflate_information_or_change_p",
+          "line": 568,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "A5",
+      "spec_line": 5279,
+      "property": "原記録からの再構成と保存した混合の検査",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_same_z_persists_and_beta_shapes_do_not_count_acquisitions",
+          "line": 551,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_saved_mixture_weights_are_verified_against_the_root",
+          "line": 602,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_read_only_resolution_matches_host_and_direct_U_before_and_after_addition",
+          "line": 623,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "spec_line": 5279,
+      "property": "別名で知識を増やさず同じスイッチを数え直さない",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_aliases_and_inert_parts_do_not_inflate_information_or_change_p",
+          "line": 568,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_same_z_persists_and_beta_shapes_do_not_count_acquisitions",
+          "line": 551,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_neutral_switch_is_correlated_through_shared_p_without_direct_evidence",
+          "line": 593,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "A7",
+      "spec_line": 5279,
+      "property": "K38とCE1へ帰着",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_k_zero_is_the_K38_law_and_p_stays_prior",
+          "line": 507,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_conditioned_branches_reduce_to_fixed_rates",
+          "line": 523,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_CE1_still_uses_the_public_timed_belief_and_evaluation_entries",
+          "line": 470,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "D1",
+      "spec_line": 5296,
+      "property": "状態ごとの基準率、倍率、k=0、率0と確率0の区別。公開の法則はPoissonLawの一型、family無しの既定と族の欄を区別。",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_k_zero_is_the_K38_law_and_p_stays_prior",
+          "line": 507,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_conditioned_branches_reduce_to_fixed_rates",
+          "line": 523,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_zero_multiplier_keeps_the_branch_mass_and_existing_items",
+          "line": 539,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 3,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_invalid_rational_declarations_are_rejected",
+          "line": 766,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 6,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R2_one_law_type_has_the_fixed_and_family_forms",
+          "line": 772,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R2_family_parameters_must_match_the_declaration",
+          "line": 792,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 13,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "D2",
+      "spec_line": 5297,
+      "property": "調子の役・共通の基準率・Sを読む部品は高々1つ",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_unsupported_part_meanings_are_named",
+          "line": 748,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_beta_prior_is_per_bit_string_not_independent_or_binomial_twice",
+          "line": 481,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R1_birth_names_resolution_shortage_before_any_acquisition",
+          "line": 821,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 5,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "D3",
+      "spec_line": 5298,
+      "property": "共有Beta、正の有理数a/b、列ごとの事前、族/候補の範囲",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_beta_prior_is_per_bit_string_not_independent_or_binomial_twice",
+          "line": 481,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_same_family_name_in_another_candidate_does_not_merge_beta_priors",
+          "line": 716,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_invalid_rational_declarations_are_rejected",
+          "line": 766,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 6,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "D4",
+      "spec_line": 5299,
+      "property": "zは持続しBetaの形に取得回数を足さない。zが分かってもpは有限のBeta分布のまま。",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_same_z_persists_and_beta_shapes_do_not_count_acquisitions",
+          "line": 551,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_zero_multiplier_keeps_the_branch_mass_and_existing_items",
+          "line": 539,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 3,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "D5",
+      "spec_line": 5300,
+      "property": "全枝の非正規化質量を共通Zで正規化、正本から再生",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_joint_update_changes_switch_p_state_and_native_evaluation",
+          "line": 493,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_saved_mixture_weights_are_verified_against_the_root",
+          "line": 602,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_same_z_persists_and_beta_shapes_do_not_count_acquisitions",
+          "line": 551,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "D6",
+      "spec_line": 5301,
+      "property": "候補と族を指定、0候補の条件付き分布を作らない、平均/整数モーメント/混合",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_candidate_conditional_queries_do_not_use_pool_joint_weights",
+          "line": 681,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_same_family_name_in_another_candidate_does_not_merge_beta_priors",
+          "line": 716,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_zero_evidence_candidate_has_no_conditional_switch_or_p_distribution",
+          "line": 729,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_unsupported_distribution_queries_are_named_not_approximated",
+          "line": 740,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_joint_update_changes_switch_p_state_and_native_evaluation",
+          "line": 493,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R3_K38_state_stays_marginal_and_candidate_is_invalid",
+          "line": 808,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_gap120_candidate_mass_is_likelihood_without_the_pool_prior",
+          "line": 453,
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          },
+          "state": "passed_request124"
+        }
+      ]
+    },
+    {
+      "id": "D7",
+      "spec_line": 5302,
+      "property": "解決した率の表と元の知る対象、同じ意味の別名を合算",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_aliases_and_inert_parts_do_not_inflate_information_or_change_p",
+          "line": 568,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_joint_update_changes_switch_p_state_and_native_evaluation",
+          "line": 493,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_gap120_knowledge_targets_merge_equal_rate_tables_and_separate_different_laws",
+          "line": 325,
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          },
+          "state": "passed_request124"
+        }
+      ]
+    },
+    {
+      "id": "D8",
+      "spec_line": 5303,
+      "property": "副作用無しの候補解決、ホスト/Uの同じ記述、Python型の一致に頼らない",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_read_only_resolution_matches_host_and_direct_U_before_and_after_addition",
+          "line": 623,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_K38_poisson_and_switch_family_share_the_calculation_kind",
+          "line": 700,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_beta_prior_is_per_bit_string_not_independent_or_binomial_twice",
+          "line": 481,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R4_public_resolution_and_U_name_invalid_correspondence",
+          "line": 874,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 8,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R4_public_resolution_and_U_use_the_same_valid_correspondence",
+          "line": 896,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_gap120_U_rejects_a_saved_derived_model_different_from_resolution",
+          "line": 399,
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          },
+          "state": "passed_request124"
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_gap120_model_copy_footing_has_valid_records_and_named_U_refusals",
+          "line": 444,
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          },
+          "state": "passed_request124"
+        },
+        {
+          "path": "tests/test_fb_correspondence.py",
+          "name": "test_corr1_both_name_sets_must_be_unique_for_a_bijection",
+          "line": 95,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 12,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_correspondence.py",
+          "name": "test_corr1_pair_shape_holds_at_delta_but_content_is_a_boot_shortage",
+          "line": 153,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 5,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_correspondence.py",
+          "name": "test_corr1_nonstring_state_names_are_named_refusals_at_public_entrances",
+          "line": 214,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 9,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_correspondence.py",
+          "name": "test_corr1_different_state_counts_cannot_form_a_bijection",
+          "line": 327,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 12,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "D9",
+      "spec_line": 5304,
+      "property": "E(S) tensor I(z) tensor I(N) の一歩だけを通す",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_read_only_resolution_matches_host_and_direct_U_before_and_after_addition",
+          "line": 623,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_noninterference_is_checked_before_calling_the_actor",
+          "line": 660,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "D10",
+      "spec_line": 5305,
+      "property": "k=0と全off/onの条件付き帰着、CE1",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_k_zero_is_the_K38_law_and_p_stays_prior",
+          "line": 507,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_conditioned_branches_reduce_to_fixed_rates",
+          "line": 523,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_CE1_still_uses_the_public_timed_belief_and_evaluation_entries",
+          "line": 470,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "D11",
+      "spec_line": 5306,
+      "property": "無効果の部品の周辺化、共有pを通した未観測部品のオン確率",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_aliases_and_inert_parts_do_not_inflate_information_or_change_p",
+          "line": 568,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_neutral_switch_is_correlated_through_shared_p_without_direct_evidence",
+          "line": 593,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    }
+  ],
+  "rulers": [
+    {
+      "id": "R1",
+      "spec_line": 5313,
+      "property": "a=b=1、k2の1/3・1/6",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_independent_beta_and_update_rulers",
+          "line": 281,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_beta_prior_is_per_bit_string_not_independent_or_binomial_twice",
+          "line": 481,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R2",
+      "spec_line": 5314,
+      "property": "a=1/2,b=3/2、5/8・1/8",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_independent_beta_and_update_rulers",
+          "line": 281,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_beta_prior_is_per_bit_string_not_independent_or_binomial_twice",
+          "line": 481,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R3",
+      "spec_line": 5315,
+      "property": "k1のZ,w,qS,p平均、Beta混合、幅のある取得、精度縮小と評価",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_independent_beta_and_update_rulers",
+          "line": 281,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_joint_update_changes_switch_p_state_and_native_evaluation",
+          "line": 493,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R4",
+      "spec_line": 5316,
+      "property": "全部offは基準率、時間を捨てない",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_conditioned_branches_reduce_to_fixed_rates",
+          "line": 523,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_k_zero_is_the_K38_law_and_p_stays_prior",
+          "line": 507,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R5",
+      "spec_line": 5317,
+      "property": "K38へのq/Z/G/確率の帰着、全部on",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_k_zero_is_the_K38_law_and_p_stays_prior",
+          "line": 507,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_conditioned_branches_reduce_to_fixed_rates",
+          "line": 523,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_K38_native_footing_control",
+          "line": 316,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R6",
+      "spec_line": 5318,
+      "property": "倍率0でもemptyと元からのtakenは正の枝",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_zero_multiplier_keeps_the_branch_mass_and_existing_items",
+          "line": 539,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 3,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R7",
+      "spec_line": 5319,
+      "property": "倍率1の部品で周辺・p分布・Gを変えない",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_aliases_and_inert_parts_do_not_inflate_information_or_change_p",
+          "line": 568,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_neutral_switch_is_correlated_through_shared_p_without_direct_evidence",
+          "line": 593,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R8",
+      "spec_line": 5320,
+      "property": "再生と別の取得、Beta総形はa+b+k",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_same_z_persists_and_beta_shapes_do_not_count_acquisitions",
+          "line": 551,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R9",
+      "spec_line": 5321,
+      "property": "名前・順序・同じ法則への質量を保つ分割・改変",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_aliases_and_inert_parts_do_not_inflate_information_or_change_p",
+          "line": 568,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_saved_mixture_weights_are_verified_against_the_root",
+          "line": 602,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R10",
+      "spec_line": 5322,
+      "property": "候補重み1/4でもオン1/2と混合の和1、証拠0は拒否",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_candidate_conditional_queries_do_not_use_pool_joint_weights",
+          "line": 681,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_zero_evidence_candidate_has_no_conditional_switch_or_p_distribution",
+          "line": 729,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R11",
+      "spec_line": 5323,
+      "property": "最初の取得前の一歩/取得始まり/追加後の共通解決",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_read_only_resolution_matches_host_and_direct_U_before_and_after_addition",
+          "line": 623,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_K38_poisson_and_switch_family_share_the_calculation_kind",
+          "line": 700,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "R12",
+      "spec_line": 5324,
+      "property": "役の欠け・状態依存の基準率・2つのS部品・未宣言の種類",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_unsupported_part_meanings_are_named",
+          "line": 748,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          }
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "state": "passed",
+    "focused": {
+      "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py -k different_state_counts -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/focused --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/focused/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/focused/cache",
+      "result": "12 passed in 5.07s; exit 0",
+      "tests": 12,
+      "passed": 12,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/focused/results.xml"
+    },
+    "full2": {
+      "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py tests/test_fb_switch_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/full --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/full/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/full/cache",
+      "result": "120 passed in 99.86s; exit 0",
+      "tests": 120,
+      "passed": 120,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds_xml": "99.695",
+      "files": {
+        "tests.test_fb_correspondence": {
+          "passed": 38,
+          "failed": 0
+        },
+        "tests.test_fb_switch_belief": {
+          "passed": 82,
+          "failed": 0
+        }
+      },
+      "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/full/results.xml"
+    },
+    "new_cases": {
+      "functions": 1,
+      "cases": 12,
+      "negative_cases": 6,
+      "positive_controls": 6,
+      "passed": 12,
+      "failed": 0
+    },
+    "known_implementation_mismatches": 0,
+    "unexpected_other_failures": 0,
+    "not_run": [
+      "指定2ファイル以外の全体回帰",
+      "誤実装の表"
+    ],
+    "processes": "pytest/xdistの6プロセス (31376,16328,536,46880,31256,47744) は終了後のGet-Processで残数0を確認。追加のprobe/背景コマンドは残していない。"
+  },
+  "verification_limits": [
+    {
+      "property": "一つの実装箇所への共通化",
+      "scope": "公開の読み手から同じ記述が出ること、副作用無し、ホストの保存モデルとUの同じ結果まで。二重実装が機能的に同じなら黒箱試験だけでは区別できない。実装の共通化そのものはレビューで確認する。"
+    },
+    {
+      "property": "I_zを破る不正な一歩",
+      "scope": "族の元の一歩はSのモデルから各zへ同じ核で持ち上げる。公開の通常の宣言からzだけを読む一歩を作る入口は今回置いていない。偽のEやpriorを注入しない。count依存/変更の拒否は新しい族でも2ケースを用意。"
+    },
+    {
+      "property": "誤実装での識別力",
+      "scope": "誤実装の表はnot_run。独立の式・対照から作成。"
+    },
+    {
+      "property": "K39-bのAPI不足の解消",
+      "scope": "work39c/srcでK39の82ケースが全件passed。119/120のAPI検査で止まった先まで実行済み。現在の未検証制限にはしない。誤実装の表は今回not_run。"
+    },
+    {
+      "property": "独立性の制限",
+      "scope": "実装ファイルの本文は開いていない。初回の--tb=shortの失敗出力に実装行の短い断片が自動表示された。期待には使わず、その後は--tb=noとXMLのfailure.messageだけを読む。"
+    },
+    {
+      "property": "2-R1 モデル本体の入力拒否",
+      "scope": "モデルの状態ID重複のadd 1ケースはCandidateInputError(/candidate/model)による先行の入力拒否。phiの到達として数えない。モデルが正常でpairsのモデル側だけが重なる対照を3入口へ別に置いた。"
+    },
+    {
+      "property": "3-R1 観測側の公開解決の受理の直し",
+      "scope": "v2.02の裁きと今回の実行でCG-K39D3-OBS-RESOLVEを閉じた。前回の失敗とprobeはverification_historyとk39_session123.jsonに保持。"
+    }
+  ],
+  "out_of_scope": {
+    "spec_lines": [
+      5284,
+      5285,
+      5286,
+      5287,
+      5288
+    ],
+    "items": [
+      "後の部品の中身/調子の遷移",
+      "内部の数の学習",
+      "誕生のa/b/率/倍率の値",
+      "CDF/分位点の計算",
+      "大きいkの性能"
+    ]
+  },
+  "open_CG": [],
+  "needs_user": [],
+  "verification_history": [
+    {
+      "request": 117,
+      "state": "partial",
+      "A": {
+        "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_switch_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests117/k39_final --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests117/k39_final/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests117/k39_final/cache",
+        "collected": 43,
+        "test_functions": 21,
+        "passed": 3,
+        "failed": 40,
+        "errors": 0,
+        "skipped": 0,
+        "result": "40 failed, 3 passed in 9.44s; exit 1",
+        "seconds_xml": "9.230",
+        "expected_failure": "XMLの全40件のfailure.messageがK39 public shape missing。ほかの失敗は0。",
+        "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests117/k39_final/results.xml"
+      },
+      "B": {
+        "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B tests/run_k39_return_barrier_checks.py",
+        "result": "exit 0。単独10回(20件)、別試験と2並列10回(30件)、全50件passed。対象の各受付順は各モード10回ずつ成功。",
+        "serial_consecutive": 10,
+        "parallel_consecutive": 10,
+        "companion": "tests/test_fb_measure.py::test_acquire1_mixed_results_separate_operation_number_from_source_cursor",
+        "results": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests117/repetition_results.json"
+      },
+      "not_run": [
+        "K39のAPIガード以後(未実装)",
+        "誤実装の表",
+        "変更していない既存ファイルの全体回帰"
+      ],
+      "processes": "本回に起動したpytest/反復runnerと全子プロセスはすべて終了。背景に残したコマンドは無い。"
+    },
+    {
+      "request": 118,
+      "verification": {
+        "state": "passed",
+        "scope": "依頼118の指定5ファイル。実装入りwork39/srcから公開の入口を実行。srcの本文は未読・未変更。",
+        "focused": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest 'tests/test_fb_switch_belief.py::test_switch1_zero_multiplier_keeps_the_branch_mass_and_existing_items[0-empty]' tests/test_fb_switch_belief.py::test_switch1_independent_beta_and_update_rulers tests/test_fb_skeleton.py::test_public_export_names_are_exact -n 0 -q --tb=short --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests118/focused --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests118/focused/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests118/focused/cache",
+          "result": "3 passed in 2.52s; exit 0"
+        },
+        "all5": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_switch_belief.py tests/test_fb_skeleton.py tests/test_fb_measure.py tests/test_fb_acquisition_store.py tests/test_fb_acquisition_pending.py -n 2 -q --tb=short --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests118/all5 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests118/all5/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests118/all5/cache",
+          "result": "505 passed in 2812.61s (0:46:52); exit 0",
+          "state": "passed",
+          "collected": 505,
+          "passed": 505,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "seconds_xml": "2812.367",
+          "files": {
+            "tests/test_fb_switch_belief.py": 43,
+            "tests/test_fb_skeleton.py": 180,
+            "tests/test_fb_measure.py": 62,
+            "tests/test_fb_acquisition_store.py": 214,
+            "tests/test_fb_acquisition_pending.py": 6
+          },
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests118/all5/results.xml"
+        },
+        "static_audit": {
+          "test_functions": 21,
+          "mapped_unique": 21,
+          "acceptance": 7,
+          "decisions": 11,
+          "rulers": 12,
+          "json_valid": true,
+          "references_and_lines_valid": true,
+          "xml_in_tests": 0
+        },
+        "processes": "本依頼で起動したpytestとworkerのPython 6プロセスの終了をGet-Processで確認。exec session 12109はexit 0。先行確認と読取コマンドも終了。背景に残したコマンド無し。"
+      }
+    },
+    {
+      "request": 119,
+      "verification": {
+        "state": "partial",
+        "run": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_switch_belief.py tests/test_fb_skeleton.py tests/test_fb_time_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests119/final3 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests119/final3/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests119/final3/cache",
+          "result": "65 failed, 280 passed in 88.02s; exit 1",
+          "collected": 345,
+          "passed": 280,
+          "failed": 65,
+          "errors": 0,
+          "skipped": 0,
+          "files": {
+            "tests.test_fb_switch_belief": {
+              "failed": 63,
+              "passed": 10
+            },
+            "tests.test_fb_skeleton": {
+              "passed": 179,
+              "failed": 1
+            },
+            "tests.test_fb_time_belief": {
+              "passed": 91,
+              "failed": 1
+            }
+          },
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests119/final3/results.xml"
+        },
+        "latest_valid_correspondence_control": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_switch_belief.py::test_switch1_review_R4_public_resolution_and_U_use_the_same_valid_correspondence -n 0 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests119/correspondence_control --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests119/correspondence_control/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests119/correspondence_control/cache",
+          "result": "2 passed in 1.82s; exit 0",
+          "reason": "pairsの列挙順を固定しない最終の集合比較を確認。"
+        },
+        "failure_counts": {
+          "R2_missing_API": 59,
+          "R3_state_candidate": 2,
+          "R4_correspondence": 3,
+          "R2_old_export": 1
+        },
+        "failed_cases": {
+          "R2_missing_API": [
+            "test_switch1_review_R2_one_law_type_has_the_fixed_and_family_forms",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[no-family-a]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[no-family-b]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[no-family-parts]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[family-a-missing]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[family-a-zero]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[family-a-negative]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[family-a-bool]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[family-a-float]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[family-b-missing]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[family-b-zero]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[family-b-negative]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[family-b-bool]",
+            "test_switch1_review_R2_family_parameters_must_match_the_declaration[family-b-float]",
+            "test_switch1_review_R1_birth_names_resolution_shortage_before_any_acquisition[mood-role]",
+            "test_switch1_review_R1_birth_names_resolution_shortage_before_any_acquisition[base-role]",
+            "test_switch1_review_R1_birth_names_resolution_shortage_before_any_acquisition[two-mood]",
+            "test_switch1_review_R1_birth_names_resolution_shortage_before_any_acquisition[unknown-kind]",
+            "test_switch1_review_R1_birth_names_resolution_shortage_before_any_acquisition[valid-control]",
+            "test_switch1_beta_prior_is_per_bit_string_not_independent_or_binomial_twice[a0-b0]",
+            "test_switch1_beta_prior_is_per_bit_string_not_independent_or_binomial_twice[a1-b1]",
+            "test_switch1_joint_update_changes_switch_p_state_and_native_evaluation[point]",
+            "test_switch1_joint_update_changes_switch_p_state_and_native_evaluation[uniform]",
+            "test_switch1_k_zero_is_the_K38_law_and_p_stays_prior[base0]",
+            "test_switch1_k_zero_is_the_K38_law_and_p_stays_prior[base1]",
+            "test_switch1_conditioned_branches_reduce_to_fixed_rates[common-base-all-off]",
+            "test_switch1_conditioned_branches_reduce_to_fixed_rates[common-base-all-on]",
+            "test_switch1_conditioned_branches_reduce_to_fixed_rates[state-dependent-base-with-inert-part-all-off]",
+            "test_switch1_conditioned_branches_reduce_to_fixed_rates[state-dependent-base-with-inert-part-all-on]",
+            "test_switch1_zero_multiplier_keeps_the_branch_mass_and_existing_items[0-empty]",
+            "test_switch1_zero_multiplier_keeps_the_branch_mass_and_existing_items[1-taken]",
+            "test_switch1_zero_multiplier_keeps_the_branch_mass_and_existing_items[0-taken]",
+            "test_switch1_same_z_persists_and_beta_shapes_do_not_count_acquisitions",
+            "test_switch1_aliases_and_inert_parts_do_not_inflate_information_or_change_p[neutral]",
+            "test_switch1_aliases_and_inert_parts_do_not_inflate_information_or_change_p[rename]",
+            "test_switch1_aliases_and_inert_parts_do_not_inflate_information_or_change_p[reorder]",
+            "test_switch1_aliases_and_inert_parts_do_not_inflate_information_or_change_p[same-law-alias]",
+            "test_switch1_neutral_switch_is_correlated_through_shared_p_without_direct_evidence",
+            "test_switch1_saved_mixture_weights_are_verified_against_the_root",
+            "test_switch1_read_only_resolution_matches_host_and_direct_U_before_and_after_addition[acquisition-first]",
+            "test_switch1_read_only_resolution_matches_host_and_direct_U_before_and_after_addition[step-first]",
+            "test_switch1_noninterference_is_checked_before_calling_the_actor[count-dependent]",
+            "test_switch1_noninterference_is_checked_before_calling_the_actor[count-shifting]",
+            "test_switch1_candidate_conditional_queries_do_not_use_pool_joint_weights",
+            "test_switch1_K38_poisson_and_switch_family_share_the_calculation_kind",
+            "test_switch1_same_family_name_in_another_candidate_does_not_merge_beta_priors",
+            "test_switch1_zero_evidence_candidate_has_no_conditional_switch_or_p_distribution",
+            "test_switch1_unsupported_distribution_queries_are_named_not_approximated[p_cdf]",
+            "test_switch1_unsupported_distribution_queries_are_named_not_approximated[p_quantile]",
+            "test_switch1_unsupported_part_meanings_are_named[missing-role]",
+            "test_switch1_unsupported_part_meanings_are_named[nonconstant-base]",
+            "test_switch1_unsupported_part_meanings_are_named[two-mood]",
+            "test_switch1_unsupported_part_meanings_are_named[unknown-kind]",
+            "test_switch1_invalid_rational_declarations_are_rejected[a-value0]",
+            "test_switch1_invalid_rational_declarations_are_rejected[b-value1]",
+            "test_switch1_invalid_rational_declarations_are_rejected[a-value2]",
+            "test_switch1_invalid_rational_declarations_are_rejected[b-value3]",
+            "test_switch1_invalid_rational_declarations_are_rejected[base-value4]",
+            "test_switch1_invalid_rational_declarations_are_rejected[factors-value5]"
+          ],
+          "R3_state_candidate": [
+            "test_switch1_review_R3_K38_state_stays_marginal_and_candidate_is_invalid",
+            "test_time1_review_R6_initial_public_candidate_name_works_for_weight_and_all_counts"
+          ],
+          "R4_correspondence": [
+            "test_switch1_review_R4_public_resolution_and_U_name_invalid_correspondence[resolve-poisson-unknown-state]",
+            "test_switch1_review_R4_public_resolution_and_U_name_invalid_correspondence[resolve-finite-unknown-state]",
+            "test_switch1_review_R4_public_resolution_and_U_name_invalid_correspondence[resolve-finite-empty]"
+          ],
+          "R2_old_export": [
+            "test_public_export_names_are_exact"
+          ]
+        },
+        "unexpected_failures": 0,
+        "public_metadata": {
+          "exports_extra": [
+            "SwitchPoissonLaw"
+          ],
+          "exports_missing": [],
+          "PoissonLaw_fields": [
+            "run",
+            "states",
+            "prior",
+            "rates",
+            "origin_ns",
+            "initial_count",
+            "time_unit"
+          ]
+        },
+        "limits": "API不足59件はその先の本体が未検証。R1の起動の場面、族の宣言・R3の共同の積の本体は直し後に回す。誤実装の表は今回not_run。",
+        "processes": "全pytestコマンド・xdist worker・公開データのprobeは終了済み。バックグラウンドに残したコマンド無し。最終確認時に01:30以降起動のPythonプロセスは残っていない。"
+      }
+    },
+    {
+      "request": 120,
+      "verification": {
+        "state": "partial",
+        "focused": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_switch_belief.py -k 'gap120 or independent_beta_and_update_rulers' -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests120/focused --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests120/focused/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests120/focused/cache",
+          "result": "7 failed, 3 passed in 2.53s; exit 1",
+          "tests": 10,
+          "passed": 3,
+          "failed": 7,
+          "errors": 0,
+          "skipped": 0,
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests120/focused/results.xml"
+        },
+        "full": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_switch_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests120/full --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests120/full/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests120/full/cache",
+          "result": "70 failed, 12 passed in 8.70s; exit 1",
+          "tests": 82,
+          "passed": 12,
+          "failed": 70,
+          "errors": 0,
+          "skipped": 0,
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests120/full/results.xml",
+          "failure_counts": {
+            "R2_missing_API": 66,
+            "R3_state_candidate": 1,
+            "R4_correspondence": 3
+          }
+        },
+        "added": {
+          "functions": 4,
+          "cases": 9,
+          "passed": 2,
+          "failed": 7,
+          "failures": "7件ともPoissonLawのa/b/family/parts/state_role不足のAPI検査。対象の族の分岐には未到達。",
+          "passed_cases": [
+            "test_switch1_gap120_model_copy_footing_has_valid_records_and_named_U_refusals[prior]",
+            "test_switch1_gap120_model_copy_footing_has_valid_records_and_named_U_refusals[knowledge-target]"
+          ]
+        },
+        "probe": {
+          "scope": "現在のK38 PoissonLawの公開Uでモデル写しの足場を確認。",
+          "same_contents": "IssuedUpdate",
+          "changed_prior": "Rejected; issue.code=result_mismatch"
+        },
+        "unexpected_failures": 0,
+        "not_run": [
+          "新しい族7ケースのAPI検査より先",
+          "誤実装の表",
+          "今回変更していない他の試験ファイルの全体回帰"
+        ],
+        "processes": "起動したpytest/xdist workerと公開の値のprobeはすべて終了。背景に残したコマンド無し。",
+        "static_audit": {
+          "functions_mapped": 31,
+          "new_functions": 4,
+          "new_cases": 9,
+          "references_and_line_numbers": "valid",
+          "JSON": "valid",
+          "open_CG": 0,
+          "unexpected_failures": 0,
+          "XML_in_tests": 0
+        },
+        "process_check": "Get-Processで02:10以降起動のPythonが残っていないことを確認。すべての実行セルは終了済み。"
+      }
+    },
+    {
+      "request": 121,
+      "verification": {
+        "state": "passed",
+        "focused": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_belief.py::test_belief1_invalid_declarations_are_not_valid_updates_or_numerical_noops tests/test_fb_belief.py::test_belief1_delta_slot_name_type_is_pending_args_not_a_halted_host tests/test_fb_pool.py::test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading tests/test_fb_pool.py::test_pool1_zero_evidence_component_still_requires_its_declared_correspondence -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/focused --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/focused/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/focused/cache",
+          "result": "23 passed in 21.65s; exit 0",
+          "tests": 23,
+          "passed": 23,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/focused/results.xml"
+        },
+        "full6": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_belief.py tests/test_fb_pool.py tests/test_fb_switch_belief.py tests/test_fb_skeleton.py tests/test_fb_time_belief.py tests/test_fb_impl39_switch.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/full6 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/full6/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/full6/cache",
+          "result": "720 passed in 331.86s (0:05:31); exit 0",
+          "tests": 720,
+          "passed": 720,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "seconds_xml": "331.662",
+          "files": {
+            "tests.test_fb_belief": 285,
+            "tests.test_fb_pool": 69,
+            "tests.test_fb_switch_belief": 82,
+            "tests.test_fb_skeleton": 180,
+            "tests.test_fb_time_belief": 92,
+            "tests.test_fb_impl39_switch": 12
+          },
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/full6/results.xml"
+        },
+        "migrated_cases": [
+          "test_belief1_invalid_declarations_are_not_valid_updates_or_numerical_noops[correspondence-duplicate]",
+          "test_belief1_invalid_declarations_are_not_valid_updates_or_numerical_noops[correspondence-missing]",
+          "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading[missing-correspondence]",
+          "test_pool1_zero_evidence_component_still_requires_its_declared_correspondence"
+        ],
+        "guards": "correspondence-absentのdelta:*、route/observation_modelのlist形delta:args、正常なslot名の対照、missing-operation/missing-cellの後段の拒否を含めてpassed。",
+        "not_run": [
+          "指定6ファイル以外の全体回帰",
+          "誤実装の表"
+        ],
+        "processes": "指定6ファイルのpytestとxdist workerのPython 6プロセス（37812,36016,53128,1104,32188,33748）はGet-Processで全件終了を確認。先行実行と読取コマンドも終了。背景に残したコマンド無し。"
+      }
+    },
+    {
+      "request": 122,
+      "verification": {
+        "state": "passed",
+        "focused": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/focused2 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/focused2/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/focused2/cache",
+          "result": "17 passed in 3.71s; exit 0",
+          "tests": 17,
+          "passed": 17,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/focused2/results.xml"
+        },
+        "full4": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py tests/test_fb_belief.py tests/test_fb_pool.py tests/test_fb_switch_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/full4 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/full4/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/full4/cache",
+          "result": "453 passed in 264.11s (0:04:24); exit 0",
+          "tests": 453,
+          "passed": 453,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "seconds_xml": "263.940",
+          "files": {
+            "tests.test_fb_belief": 285,
+            "tests.test_fb_correspondence": 17,
+            "tests.test_fb_pool": 69,
+            "tests.test_fb_switch_belief": 82
+          },
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/full4/results.xml"
+        },
+        "new_cases": {
+          "functions": 2,
+          "cases": 17,
+          "R1": 12,
+          "R2": 5,
+          "passed": 17
+        },
+        "limits": [
+          "モデルの状態ID重複のadd 1ケースはCandidateInputError(/candidate/model)による先行の入力拒否。phiの到達として数えない。モデルが正常でpairsのモデル側だけが重なる対照を3入口へ別に置いた。",
+          "実装の共通化そのものの構造は黒箱試験で証明できない。"
+        ],
+        "not_run": [
+          "指定4ファイル以外の全体回帰",
+          "誤実装の表"
+        ],
+        "processes": "pytestとxdist workerのPython 6プロセス（49780,33996,44868,45736,48656,42280）はGet-Processで全件終了を確認。先行実行・読取コマンドも終了。背景に残したコマンド無し。"
+      }
+    },
+    {
+      "request": 123,
+      "verification": {
+        "state": "failed",
+        "focused": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py -k nonstring_state_names -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/focused2 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/focused2/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/focused2/cache",
+          "result": "1 failed, 8 passed in 2.75s; exit 1",
+          "tests": 9,
+          "passed": 8,
+          "failed": 1,
+          "errors": 0,
+          "skipped": 0,
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/focused2/results.xml"
+        },
+        "full2": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py tests/test_fb_switch_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/full2 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/full2/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/full2/cache",
+          "result": "1 failed, 107 passed in 82.02s; exit 1",
+          "tests": 108,
+          "passed": 107,
+          "failed": 1,
+          "errors": 0,
+          "skipped": 0,
+          "seconds_xml": "81.854",
+          "files": {
+            "tests.test_fb_correspondence": {
+              "passed": 25,
+              "failed": 1
+            },
+            "tests.test_fb_switch_belief": {
+              "passed": 82
+            }
+          },
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/full2/results.xml"
+        },
+        "failed_case": {
+          "name": "test_corr1_nonstring_state_names_are_named_refusals_at_public_entrances[list-observation-names-resolve]",
+          "file": "tests.test_fb_correspondence",
+          "state": "failed",
+          "message": "Failed: DID NOT RAISE TimeBeliefError"
+        },
+        "new_cases": {
+          "functions": 1,
+          "cases": 9,
+          "passed": 8,
+          "failed": 1,
+          "model_record_entrances_passed": 3
+        },
+        "known_implementation_mismatches": 1,
+        "unexpected_other_failures": 0,
+        "limits": [
+          "観測側の配列名は公開のPython型で作れるが、起動はFbInputError(shape,/declaration/observation_models/0/value)で保存前に断る。そのケースを計画不足への到達の確認には数えない。",
+          "addのモデル本体の入力拒否は共有の対応検査の到達と区別。"
+        ],
+        "not_run": [
+          "指定2ファイル以外の全体回帰",
+          "誤実装の表"
+        ],
+        "processes": "pytestとxdist workerのPython 6プロセス（12036,52032,51380,32716,44416,17160）はGet-Processで全件終了を確認。先行実行と公開の値のprobeも終了。背景に残したコマンド無し。"
+      }
+    }
+  ],
+  "request118_correction": {
+    "verdict": "試験側の定規の誤り",
+    "source_lines": [
+      5293,
+      5297
+    ],
+    "scene": "事前1/2ずつ、k=1、a=b=1、基準率(1,1)、倍率(0,0)、t=1のempty。",
+    "derivation": "x=exp(-1)。W[off,A]=W[off,B]=x/4、W[on,A]=W[on,B]=1/4。Z=(1+x)/2、P(A|h)=(x+1)/(2(x+1))=1/2。一方P(on|h)=1/(1+x)>1/2であり、枝の更新を省略してはいけない。",
+    "general_identity": "各zでL[z,A]=L[z,B]=L[z]ならW[z,s]=P(z)*prior[s]*sensor[s]*L[z]。状態周辺はprior[s]*sensor[s]/sum_s prior[s]*sensor[s]へ厳密に簡約する。全枝で同じLを仮定するのではない。",
+    "fix": "OracleJointに証明済みの厳密な状態周辺だけを添える。各(z,S)の式・枝の重み・Z・pの混合は従来のまま残す。一般のassert_containsを緩めたり、数値の幅を広げたりしていない。",
+    "controls": "一様/非一様の事前と、Sだけを読む一歩の効果付きの3対照。枝のオン確率が1/2を超えることとZも独立式で確認。非対称な率の従来の定規も維持。",
+    "before": "0-emptyは独立の区間定規が幅0の答えを包含できずに失敗したことを再現。",
+    "focused_result": "対象0-empty・独立定規・公開名一覧: 3 passed in 2.52s。",
+    "whole_result": "指定5ファイル505 passed。K39は43 passed。期待は変更せず、定規の厳密な簡約を訂正。"
+  },
+  "review_request119": [
+    {
+      "id": "K39-b-R1",
+      "spec_line": 3581,
+      "property": "起動の候補解決の不足は最初の取得より前に計画で名指しし、考える・更新・一歩を進めない。正常な起動との対照。",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R1_birth_names_resolution_shortage_before_any_acquisition",
+          "line": 821,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 5,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "K39-b-R2",
+      "spec_line": 3581,
+      "property": "PoissonLaw一型、rates、family無しの既定値、族の有無とa/b/partsの妥当性、旧型の廃止。",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R2_one_law_type_has_the_fixed_and_family_forms",
+          "line": 772,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R2_family_parameters_must_match_the_declaration",
+          "line": 792,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 13,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "K39-b-R3",
+      "spec_line": 3581,
+      "property": "stateは周辺。candidate付きはinvalid/field=candidate。候補重み1/4と条件付き1/2を掛けて共同1/8。旧K38のstateは同じ。",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_candidate_conditional_queries_do_not_use_pool_joint_weights",
+          "line": 681,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R3_K38_state_stays_marginal_and_candidate_is_invalid",
+          "line": 808,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        }
+      ],
+      "additional_test": {
+        "path": "tests/test_fb_time_belief.py",
+        "name": "test_time1_review_R6_initial_public_candidate_name_works_for_weight_and_all_counts",
+        "line": 1303,
+        "cases": {
+          "passed": 0,
+          "failed": 0
+        },
+        "state": "not_run_request123"
+      }
+    },
+    {
+      "id": "K39-b-R4",
+      "spec_line": 3581,
+      "property": "Poisson/有限の不正な状態名と空の対応は公開解決・Uが名指して断る。identity/swapの正常な対応から同じモデル状態の率を得る。失敗の自由な文やpairsの順を固定しない。",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R4_public_resolution_and_U_name_invalid_correspondence",
+          "line": 874,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 8,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_review_R4_public_resolution_and_U_use_the_same_valid_correspondence",
+          "line": 896,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          }
+        }
+      ]
+    }
+  ],
+  "gaps_request120": [
+    {
+      "id": "K39-D7-GAP120",
+      "spec_line": 5302,
+      "property": "率の表が等しい枝を同じ知る対象へ、異なる率の表を別へ。元の対象を同じにして法則の区別だけを見る。中立の枝、調子の枝、両方、名前と順の変更。各同値類の率の多重集合と事前重み、独立の情報量/G/選択の確率まで。",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_gap120_knowledge_targets_merge_equal_rate_tables_and_separate_different_laws",
+          "line": 325,
+          "cases": {
+            "passed": 4,
+            "failed": 0
+          },
+          "state": "passed_request124"
+        }
+      ]
+    },
+    {
+      "id": "K39-D8-GAP120",
+      "spec_line": 5303,
+      "property": "保存された派生モデルの事前/知る対象だけを変えた有効な文書の写しをUがresult_mismatchで断る。同じ内容の別Pointは発行し、同じ数学的内容を保持。Q*/reader/reading/correspondenceのモデル参照は一貫して移し、boot/poolは変えない。",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_gap120_U_rejects_a_saved_derived_model_different_from_resolution",
+          "line": 399,
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          },
+          "state": "passed_request124"
+        },
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_gap120_model_copy_footing_has_valid_records_and_named_U_refusals",
+          "line": 444,
+          "cases": {
+            "passed": 2,
+            "failed": 0
+          },
+          "state": "passed_request124"
+        }
+      ]
+    },
+    {
+      "id": "K39-D6-GAP120",
+      "spec_line": 5301,
+      "property": "massは候補Mに条件づけたP(h|M)。候補追加alpha=1/4、旧率(1,1)・新率(2,2)、倍率(1,2)でP(h|M)、alpha*P(h|M)、並び全体のZを区別。",
+      "tests": [
+        {
+          "path": "tests/test_fb_switch_belief.py",
+          "name": "test_switch1_gap120_candidate_mass_is_likelihood_without_the_pool_prior",
+          "line": 453,
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          },
+          "state": "passed_request124"
+        }
+      ],
+      "decision": "紙の「候補Mに条件づけた値として」が証拠の質量にも掛かるためP(h|M)と読んだ。追加の規則は試験で作らない。",
+      "formulas": {
+        "x": "exp(-1)",
+        "old_likelihood": "(3*x+x^2)/4",
+        "new_likelihood": "(3*x^2+x^4)/4",
+        "new_unnormalized_block": "new_likelihood/4",
+        "total_evidence": "3*old_likelihood/4+new_likelihood/4",
+        "posterior_candidate": "(new_likelihood/4)/total_evidence"
+      }
+    }
+  ],
+  "migrations_request121": [
+    {
+      "id": "K39-c-K28-correspondence-content",
+      "spec_line": 3582,
+      "case_ids": [
+        "correspondence-duplicate",
+        "correspondence-missing"
+      ],
+      "before": "対応の中身に欠け・重複があってもQ*を保存しUが断る。",
+      "after": "起動の計画のperception:candidate:correspondence:<候補名>をboot Pointで名指しし、Q*/R*/A*を作らない。delta:*のargs形の拒否は残す。",
+      "tests": [
+        {
+          "path": "tests/test_fb_belief.py",
+          "name": "test_belief1_invalid_declarations_are_not_valid_updates_or_numerical_noops",
+          "line": 651,
+          "state": "not_run_request123",
+          "cases": {
+            "passed": 0,
+            "failed": 0
+          }
+        }
+      ],
+      "contrast": [
+        {
+          "path": "tests/test_fb_belief.py",
+          "name": "test_belief1_delta_slot_name_type_is_pending_args_not_a_halted_host",
+          "line": 1663,
+          "state": "not_run_request123",
+          "cases": {
+            "passed": 0,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "K39-c-K37-execution-reading",
+      "spec_line": 3582,
+      "case_ids": [
+        "missing-correspondence"
+      ],
+      "before": "対応の欠けた候補を足し、旧い一歩の結果を読む時に名指しの不足。",
+      "after": "候補を足す口がTimeBeliefError(reason=correspondence、候補IDをtargets)で断り、呼出しで保存を増やさない。旧いEと一歩の結果はそのまま旧い並びで採用し独立の答えと一致。kernel/cellの欠けの後段の拒否は維持。",
+      "tests": [
+        {
+          "path": "tests/test_fb_pool.py",
+          "name": "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading",
+          "line": 780,
+          "state": "not_run_request123",
+          "cases": {
+            "passed": 0,
+            "failed": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "K39-c-K37-zero-evidence",
+      "spec_line": 3582,
+      "case_ids": [
+        "zero-evidence-component"
+      ],
+      "before": "証拠0でも不完全な候補を足し、読む時に名指し。",
+      "after": "証拠0の候補でも対応の欠けをadd_candidateで名指し拒否し、保存・並び・採用の鎖を変えない。0の尤度/単位核を埋めない。",
+      "tests": [
+        {
+          "path": "tests/test_fb_pool.py",
+          "name": "test_pool1_zero_evidence_component_still_requires_its_declared_correspondence",
+          "line": 961,
+          "state": "not_run_request123",
+          "cases": {
+            "passed": 0,
+            "failed": 0
+          }
+        }
+      ]
+    }
+  ],
+  "review_request122": [
+    {
+      "id": "K39-d-2-R1",
+      "spec_line": 3583,
+      "property": "観測モデルの状態名/宣言モデルの状態ID/形が正しいpairsのモデル側の重複を、resolve/add/Uで名指し拒否。名前が一意な正常対照は3入口とも成功。同じモデル・観測モデル・pairsを各入口の公開の形で使う。",
+      "tests": [
+        {
+          "path": "tests/test_fb_correspondence.py",
+          "name": "test_corr1_both_name_sets_must_be_unique_for_a_bijection",
+          "line": 95,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 12,
+            "failed": 0
+          }
+        }
+      ],
+      "cases": 12,
+      "limits": "宣言モデルの状態ID自体の重複はaddの公開入力検査でCandidateInputError(field=/candidate/model)になる。その1ケースはphiへの到達として数えない。モデルの両側の名前が一意でpairsのモデル側だけが重なる対照を別に置く。Uは紙でコードの綴りを決めていないためshape/measurement_conflictの名指しのfields/evidenceを検査し、自由文は固定しない。",
+      "additional_test": {
+        "path": "tests/test_fb_correspondence.py",
+        "name": "test_corr1_different_state_counts_cannot_form_a_bijection",
+        "line": 327,
+        "state": "passed_request124",
+        "cases": {
+          "passed": 12,
+          "failed": 0
+        }
+      }
+    },
+    {
+      "id": "K39-d-2-R2",
+      "spec_line": 3583,
+      "property": "pairs=[[A]]/[[A,1]]はdelta:correspondence。形が合う重複/欠けはperception:candidate:correspondence:<候補名>。正常対照は対応と読みの計画を保存する。どの負例もQ*/R*/A*を作らず、別の境目の理由では止めない。",
+      "tests": [
+        {
+          "path": "tests/test_fb_correspondence.py",
+          "name": "test_corr1_pair_shape_holds_at_delta_but_content_is_a_boot_shortage",
+          "line": 153,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 5,
+            "failed": 0
+          }
+        }
+      ],
+      "cases": 5
+    }
+  ],
+  "review_request123": [
+    {
+      "id": "K39-d-3-R1",
+      "spec_line": 3583,
+      "property": "モデル記録のidをJSON配列にしたもの、公開の型で作れる観測モデルの配列名、正常な文字列名をresolve/start/addから試す。モデル記録の起動は名指しの計画不足で止める。",
+      "tests": [
+        {
+          "path": "tests/test_fb_correspondence.py",
+          "name": "test_corr1_nonstring_state_names_are_named_refusals_at_public_entrances",
+          "line": 214,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 9,
+            "failed": 0
+          }
+        }
+      ],
+      "cases": 9,
+      "limits": "観測側はPythonの公開の型で構築できるが、Bootの入力ではFbInputError(shape, /declaration/observation_models/0/value)で保存前に拒否。その対照は計画不足への到達に数えない。モデル側のaddも先行入力拒否なら/candidate/modelを名指す。"
+    }
+  ],
+  "gaps_request124": [
+    {
+      "id": "K39-d-2-R1-cardinality",
+      "spec_line": 3583,
+      "property": "観測2状態→モデル1状態の多対1、観測1状態→モデル2状態の1対多を、公開解決・起動・候補追加で名指し拒否する。両側の法則と核は正常にし、1対1・2対2の正常対照を同じ3入口に置く。",
+      "tests": [
+        {
+          "path": "tests/test_fb_correspondence.py",
+          "name": "test_corr1_different_state_counts_cannot_form_a_bijection",
+          "line": 327,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 12,
+            "failed": 0
+          }
+        }
+      ],
+      "cases": 12,
+      "negative_cases": 6,
+      "positive_controls": 6,
+      "refusals": {
+        "resolve_add": "TimeBeliefError(reason=correspondence, targetsに候補名)。追加の拒否で記録を増やさない。",
+        "start": "perception:candidate:correspondence:<候補名> をBootのPointとともにpendingへ。考える・更新・一歩の要求を作らない。"
+      },
+      "limits": "この依頼の追加場面はresolve/start/addの3入口。Uへの新しい到達を主張しない。誤実装の表は未実行。"
+    }
+  ],
+  "closed_CG": [
+    {
+      "id": "CG-K39D3-OBS-RESOLVE",
+      "state": "closed_request124",
+      "spec_line": 3583,
+      "claim": "解決の入口は両側の名前が文字列の列であることを確かめ、記述か名指しの不足だけを返す。",
+      "observed": {
+        "candidate_states": [
+          [
+            "A"
+          ],
+          [
+            "B"
+          ]
+        ],
+        "saved_observation_states": [
+          [
+            "A"
+          ],
+          [
+            "B"
+          ]
+        ],
+        "saved_pairs": [
+          [
+            "A",
+            "A"
+          ],
+          [
+            "B",
+            "B"
+          ]
+        ],
+        "public_resolution": "成功。候補states=(A,B)、correspondence=()。"
+      },
+      "expected": "TimeBeliefError(reason=correspondence、候補を名指し)で断る。",
+      "decision_needed": false,
+      "note": "紙と公開の挙動の食い違い。内部原因は実装未読のため未確認。srcは書込範囲外で修正していない。",
+      "failing_case": "test_corr1_nonstring_state_names_are_named_refusals_at_public_entrances[list-observation-names-resolve]",
+      "resolution": {
+        "spec_line": 3583,
+        "version": "2.02",
+        "decision": "観測モデルを宣言したのに読めなければ名指しの不足correspondence。宣言が無い場合だけ観測を読まない。",
+        "verification": "該当のlist-observation-names-resolveを含め9ケースすべてpassed。",
+        "test": {
+          "path": "tests/test_fb_correspondence.py",
+          "name": "test_corr1_nonstring_state_names_are_named_refusals_at_public_entrances",
+          "line": 214,
+          "state": "passed_request124",
+          "cases": {
+            "passed": 9,
+            "failed": 0
+          }
+        }
+      },
+      "test_request123": {
+        "path": "tests/test_fb_correspondence.py",
+        "name": "test_corr1_nonstring_state_names_are_named_refusals_at_public_entrances",
+        "line": 203,
+        "state": "failed_request123",
+        "cases": {
+          "passed": 8,
+          "failed": 1
+        }
+      }
+    }
+  ]
+}

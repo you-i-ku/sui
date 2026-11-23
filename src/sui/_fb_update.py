@@ -227,8 +227,8 @@ def _plan(state, boot):
 # --- 取りに行きの δ: 物語の対応と読み方 (K28 (2)(a)〜(c)・K28-a (ア)) ---
 
 def _check_acquisition_args(boot, args, timed=False):
-    """取りに行きの δ の args の形: {route, observation_model, correspondence: {pairs}}。対応の中身 (1 対 1・target) と
-    宣言どうしの一致は U が検査する。ここは計画を置けるかだけ (口・観測モデル・取りに行き方を名指せるか)。"""
+    """取りに行きの δ の args の形: {route, observation_model, correspondence: {pairs}}。対応の中身 (1 対 1) は候補の
+    解決の 1 か所 (`f_update2._phi`、K39-c)、宣言どうしの一致は U が検査する。ここは計画を置けるかだけ (口・観測モデル・取りに行き方を名指せるか)。"""
     if not hasattr(args, "items") or set(args) - {"execution"} != {"route", "observation_model", "correspondence"} \
             or not isinstance(args["route"], str) or not isinstance(args["observation_model"], str):
         return "delta:args"
@@ -248,11 +248,10 @@ def _check_acquisition_args(boot, args, timed=False):
     kind = _fb.TimedAcquisitionModel if timed else _fb.AcquisitionObservationModel
     if not isinstance(model, kind) or model.route_slot != args["route"]:
         return "delta:observation_model"
+    from .f_update2 import _json as _u2_json, pairs_shape as _pairs_shape
     correspondence = args["correspondence"]
     if not hasattr(correspondence, "items") or set(correspondence) != {"pairs"} \
-            or not isinstance(correspondence["pairs"], list) \
-            or any(not isinstance(p, list) or len(p) != 2 or not all(isinstance(x, str) for x in p)
-                   for p in correspondence["pairs"]):
+            or not _pairs_shape(_u2_json(correspondence["pairs"])):   # 形の確かめは 1 か所 (K39 レビュー 2 通目 R2)
         return "delta:correspondence"
     return None
 
@@ -501,7 +500,7 @@ def _frame_blocks(state, plan, symbol):
         for m in plan.current.members:
             ev = (m["model"],)
             control, phi = u2.member_reading(m, route=plan.current.route, evidence_model=ev, evidence_pairs=ev)
-            out.append(u2.passive_block(control, phi, symbol, sampling=_sampling(plan), evidence=ev))
+            out.append(u2.passive_block(control, phi, symbol, sampling=_sampling(plan), evidence=ev, size=m["size"]))
         return out
     except u2._Issue as issue:
         return _Unread(issue.code, issue.evidence)
@@ -1065,7 +1064,8 @@ def _inputs(state, plan, ob, prior, pool) -> frozenset:
         out = {plan.boot.d, pool.origin, pool.model, plan.points[_reading_name("law", pool)],
                _reading_point(plan, pool, "frame"), ob.binding, ob.report, b["segment"], b["route"]}
     else:
-        out = {plan.boot.d, pool.origin, pool.model} | (set() if pool.initial else set(pool.records))
+        # 並びとその参照の閉包 (最初の並びでは、派生のモデルとその元の宣言のモデル、K39 決定 8)
+        out = {plan.boot.d, pool.origin, pool.model} | set(pool.records)
         if ob.kind == "rebuild":
             out.add(ob.report)
         for o in _covered(plan, ob):

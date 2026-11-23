@@ -649,7 +649,11 @@ def test_belief1_zero_mass_retains_read_and_update_stage_without_epsilon(make_be
     "target-crossing", "repeat-contract", "repeat-args", "control-id", "first", "after", "weight",
     "emission-kind", "emission-contract", "emission-value", "cell-value"])
 def test_belief1_invalid_declarations_are_not_valid_updates_or_numerical_noops(make_belief1, defect):
-    """K28 decisions 3/9: each single mismatching declaration is explicit nonadoption, not epsilon or noop."""
+    """K28 decisions 3/9 + K39-c: name invalid content without epsilon/noop.
+
+    Correspondence content is checked by the shared candidate resolution at
+    boot. Delta still holds malformed argument shapes at delta:* below.
+    """
     belief1_api(status=True)
     def mutate(model, args):
         if defect == "correspondence-absent": args.pop("correspondence")
@@ -694,13 +698,26 @@ def test_belief1_invalid_declarations_are_not_valid_updates_or_numerical_noops(m
                 replace(declaration, ref=repeat.contract),), implementations=rig.registry.implementations)
     rig = make_belief1(symbols=(T,), mutate=mutate, repeat=repeat,
         targets=("left", "right") if defect == "target-crossing" else ("box", "box"), before_host=before_host)
+    if defect in ("correspondence-duplicate", "correspondence-missing"):
+        candidate = rig.boot_input.declaration.perception.slot
+        reason = "perception:candidate:correspondence:" + candidate
+        rig.until(lambda: any(p.reason == reason for p in rig.host.window.status().pending))
+        boot_point = rig.one(c.BOOT_DECLARATION).cid
+        status = rig.host.window.status()
+        assert any(p.reason == reason and p.target == boot_point for p in status.pending)
+        assert not any(p.reason.startswith("delta:") and p.target == boot_point for p in status.pending)
+        assert not rig.requests("belief_update")
+        assert not rig.facts(c.BELIEF_ADOPTED) and not rig.facts(c.UPDATE_RESULT)
+        assert rig.host.halted is None
+        return
     if repeat is not None:
         for _ in range(5): rig.round()
     else:
         rig.begin(); rig.publish(0, last=True)
         for _ in range(5): rig.round()
         if defect != "correspondence-absent":
-            # K28-b(d): these CONTENT checks belong to U, not delta.
+            # Remaining observation-content checks belong to U. K39-c moves
+            # correspondence content to the shared candidate resolution above.
             rig.until(lambda: len(rig.requests("belief_update")) == 1)
             rig.run_stage("belief_update")
     assert not rig.facts(c.BELIEF_ADOPTED)

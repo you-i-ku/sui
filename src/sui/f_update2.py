@@ -695,16 +695,21 @@ def _correspondence(reader, pargs, model, reading):
     return corr
 
 
-def _initial_member(reader, model, declaration, boot, pairs):
-    """最初の並び (起動の宣言の 1 枚) の候補 (K37・K38-b R6): 名前は感じる側の宣言の位置で、`_fb_pool.initial_pool` が公開する
-    最初の候補の名前と同じ。足した並びの候補と同じ形で、計算と照会へ渡す。"""
-    c = _c()
+def _initial_member(reader, model, declaration, boot, pairs, evidence):
+    """最初の並び (起動の宣言の 1 枚) の候補 (K37・K38-b R6・K39 決定 8): ホストの `_fb_pool.initial_pool` と同じ候補の解決
+    (`initial_candidate`) で、起動の宣言の名前・モデルと、読み方が名指す観測モデルの記録 (declaration) と物語の対応の記録
+    (pairs) から作り、要求のモデル model (保存した派生のモデル) の document が解決の document と同じことを照らす。解決の不足は
+    evidence (読み方が名指した観測モデルと対応の記録) を名指した不適合。"""
+    from .f import _dumps
     try:
-        name = _content(reader, boot, c.BOOT_DECLARATION)["perception"]["slot"]
-    except (KeyError, TypeError):
-        raise _Issue("rejected", "shape", "the boot declaration names no perception", evidence=(boot,)) from None
-    return {"id": name, "document": _model_document(reader, model, evidence=(model,)), "observation": declaration,
-            "pairs": pairs}
+        member = initial_candidate(reader, boot, named=(declaration, _json(pairs)))
+    except Unresolved as exc:
+        raise _Issue("rejected", exc.code, "the candidate is unresolvable: " + exc.reason, fields=(exc.field,),
+                     evidence=evidence) from None
+    if _dumps(member["document"]) != _dumps(_model_document(reader, model, evidence=(model,))):
+        raise _Issue("rejected", "result_mismatch", "the model differs from the resolved initial candidate",
+                     fields=("/args/model",), evidence=(model, boot))
+    return member
 
 
 def _check_change(reader, pools, previous, applied, desc, point) -> None:
@@ -812,6 +817,224 @@ def direct_sum(members) -> dict:
             "certificate_capabilities": first["certificate_capabilities"]}
 
 
+# --- 候補の解決 (紙 F-b K39 決定 8、★ (b)) ---
+# 最初の並び・足した並び・スイッチの族の候補を、保存した宣言と参照先だけを読む副作用の無いこの 1 か所で作る。ホスト
+# (`_fb_pool`) は結果を並び (Pool) に包み、入口 U は要求の入力に見える記録だけから同じ解決を呼んで、保存した派生のモデルと
+# 照らす。候補の間の法則の一致は、ここが返す計算の種類 (computation) と測定の条件 (measurement) で確かめる (Python の型で
+# 確かめない)。
+
+_PART_KINDS = ("mood", "inert")   # この本が読める部品の種類 (倍率が何を読むか: 調子 S / 何も読まない、K39 決定 1)
+
+
+def _rising(x, n):
+    """上昇階乗 (x)_n = x (x+1) … (x+n−1)。"""
+    out = 1
+    for i in range(n):
+        out *= x + i
+    return out
+
+
+class Unresolved(Exception):
+    """候補の解決の名指しの不足 (K39 決定 8・K39-b R1): この本で読めない候補。reason は理由の語、named は名指し (候補の名前と
+    部品の名前)、field は宣言の欄、code は入口 U の不適合の語 (missing_contract / shape)。解決は正準な記述か、これのどちらかだけ
+    を返す (不足を抱えた記述を返さない)。"""
+
+    def __init__(self, reason, named, field, code):
+        super().__init__(reason)
+        self.reason, self.named, self.field, self.code = reason, tuple(named), field, code
+
+
+def describe_candidate(*, id, model, document, observation, pairs, weight) -> dict:
+    """候補 1 つの正準な記述 (K39 決定 8)。入力は宣言の値だけ (名前 id・候補のモデルの Point model とその document・観測の
+    見込み observation・物語の対応 pairs・並びの起点での重み weight) で、何も書かない。この本で読めない候補は `Unresolved`。
+
+    返す記述: id・model・base (宣言したモデルの document)・document (展開した状態と事前の document。スイッチの族が部品を
+    持つ時は (z, S) に展開した直和 (`direct_sum`) で、知る対象は「解決した率の表の識別 / 元の知る対象」、部品 0 個なら base の
+    まま = K38)・observation・pairs・phi (観測モデルの状態の番号 → base の状態の番号。対応はここ 1 か所で確かめる、K39-b R4)・
+    weight・law (候補の法則の識別、`candidate_law`)・computation (計算の種類: "finite_kernel" (K26 の有限の核) / "poisson"
+    (固定の Poisson 源とスイッチの族) / "finite_count" (有限の法則の時刻つきの例) / None (観測の見込みを読まない候補))・
+    measurement (時刻を読む候補の測定の条件)・family (族の名前・a・b・部品の辞書)・branches (スイッチの列 z ごとの事前 P(z)・
+    法則の状態ごとの率・率の表の識別、展開の順)・size (展開した状態の数)・references (要る参照: 候補のモデル。宣言の記録は
+    読む側が足す)。
+
+    法則の形は 1 つ (決定 1・K39-b R2): PoissonLaw の family が None なら部品 0 個・p を宣言しない族 (K38)。"""
+    from fractions import Fraction
+    from .fb import AcquisitionObservationModel, FiniteCountLaw, PoissonLaw, TimedAcquisitionModel
+    states = document.get("states") if hasattr(document, "get") else None
+    out = {"id": id, "model": model, "base": document, "document": document, "observation": observation,
+           "pairs": pairs, "phi": None, "weight": weight, "law": candidate_law(document, observation, pairs),
+           "computation": None, "measurement": None, "family": None, "branches": None,
+           "size": len(states) if isinstance(states, list) else 0, "references": frozenset({model})}
+    if observation is None:   # 観測の見込みを読まない候補 (区間の札の δ。取りに行きの δ の形の不足は更新の計画が名指す)
+        return out
+    if isinstance(observation, AcquisitionObservationModel):
+        out["computation"], observed = "finite_kernel", observation.states
+    elif not isinstance(observation, TimedAcquisitionModel):
+        raise Unresolved("observation_unsupported", (id,), "/observation_model", "missing_contract")
+    elif isinstance(observation.law, (PoissonLaw, FiniteCountLaw)):
+        out["computation"] = "poisson" if isinstance(observation.law, PoissonLaw) else "finite_count"
+        out["measurement"] = _json(_enc((observation.decision_time, observation.conditioning)))
+        observed = observation.law.states
+    else:
+        raise Unresolved("law_unsupported", (id,), "/observation_model/law", "missing_contract")
+    out["phi"] = _phi(id, pairs, observed, states)
+    if out["computation"] != "poisson":
+        return out
+    law = observation.law
+    parts, role = law.parts, law.state_role
+    # 受け付ける部品 (K39 決定 1・2): 調子の部品 (S を読む倍率、族に高々 1 つ、S 全体が調子の役で遷移なしと宣言 + 基準の率が
+    # S によらない、を法則から確かめる) と倍率 1 の部品だけ。ほかは名指して対応していない
+    unknown = tuple(x.id for x in parts if x.kind not in _PART_KINDS)
+    moods = tuple(x.id for x in parts if x.kind == "mood")
+    if unknown:
+        raise Unresolved("part_kind", (id, *unknown), "/observation_model/law/parts", "missing_contract")
+    if role not in (None, "mood"):
+        raise Unresolved("state_role", (id, role), "/observation_model/law/state_role", "missing_contract")
+    if len(moods) > 1:
+        raise Unresolved("mood_parts", (id, *moods), "/observation_model/law/parts", "missing_contract")
+    if moods and role is None:
+        raise Unresolved("mood_role", (id, *moods), "/observation_model/law/state_role", "missing_contract")
+    if moods and len(set(law.rates)) > 1:
+        raise Unresolved("mood_base_rate", (id, *moods), "/observation_model/law/rates", "missing_contract")
+    from itertools import product
+    from .f import _digest
+    k = len(parts)
+    branches = []
+    for z in product((0, 1), repeat=k):
+        m = sum(z)
+        rates = tuple(rate * _multiplier(parts, z, i) for i, rate in enumerate(law.rates))
+        table = _digest({"domain": "sui.fb.rate_table/1",
+                         "rates": [[s, _enc(r)] for s, r in sorted(zip(law.states, rates))]})
+        branches.append({"z": z, "label": "z=" + "".join(map(str, z)),
+                         "prior": _rising(law.a, m) * _rising(law.b, k - m) / _rising(law.a + law.b, k) if k
+                         else Fraction(1), "rates": rates, "table": table})
+    out["branches"] = branches
+    if law.family is not None:
+        out["family"] = {"name": law.family, "a": law.a, "b": law.b, "parts": [[x.id, x.kind] for x in parts]}
+    if k:   # (z, S) に展開: 枝ごとに宣言のモデルの写しを、事前 P(z) と率の表の識別で直和に並べる (状態を変えない核は I_z ⊗ K)
+        try:
+            out["document"] = direct_sum([{"id": x["label"], "document": document, "weight": x["prior"], "law": x["table"]}
+                                          for x in branches])
+        except (ValueError, KeyError, TypeError):
+            raise Unresolved("model_shape", (id,), "/args/model", "shape") from None
+        out["size"] = len(out["document"]["states"])
+    return out
+
+
+def _phi(name, pairs, observed, states):
+    """物語の対応の確かめ (K39-b R4、K28 新しい決定 3 の 1 対 1): pairs が [観測モデルの状態, 宣言のモデルの状態] の組の列で、
+    両側の状態の集合とちょうど 1 対 1。観測モデルの状態の番号 → 宣言のモデルの状態の番号 を返す。外れたら名指しの不足。"""
+    ids = [s.get("id") for s in states] if isinstance(states, list) and all(isinstance(s, dict) for s in states) else None
+    pairs = _json(pairs)
+    # 両側が文字列の状態名の列だと確かめてから 1 対 1 を作る (K39 レビュー 3 通目 R1: 壊れたモデルの名前で集合を作ると TypeError)
+    if ids is None or not all(isinstance(x, str) for x in ids) or not all(isinstance(x, str) for x in observed) \
+            or not pairs_shape(pairs):
+        raise Unresolved("correspondence", (name,), "/pairs", "shape")
+    # 重ならない名前どうしの 1 対 1 を作れた時だけ返す (K39 レビュー 2 通目 R1: 両側の名前が重なると dict が上書きして
+    # 1 対 1 でない対応を成功として返していた)
+    forward, backward = dict(pairs), {m: a for a, m in pairs}
+    if len(forward) != len(pairs) or len(backward) != len(pairs) or len(set(observed)) != len(observed) \
+            or len(set(ids)) != len(ids) or set(forward) != set(observed) or set(backward) != set(ids):
+        raise Unresolved("correspondence", (name,), "/pairs", "shape")
+    return [ids.index(forward[a]) for a in observed]
+
+
+def pairs_shape(pairs) -> bool:
+    """物語の対応の形 (組 [観測モデルの状態, 宣言のモデルの状態] の列、どちらも文字列) だけを見る 1 か所 (K39 レビュー 2 通目
+    R2)。形の誤りは起動の δ の hold (`delta:correspondence`) が名指し、中身 (1 対 1) は候補の解決 (`_phi`) が名指す。"""
+    return isinstance(pairs, list) and all(
+        isinstance(x, list) and len(x) == 2 and all(isinstance(y, str) for y in x) for x in pairs)
+
+
+def _multiplier(parts, z, i):
+    """スイッチの列 z の下で、法則の状態 i の基準の率に掛かる倍率 Π_{z_j = 1} r_j(S_i) (倍率 1 の部品は 1)。"""
+    out = 1
+    for part, bit in zip(parts, z):
+        if bit and part.kind == "mood":
+            out *= part.multipliers[i]
+    return out
+
+
+def initial_candidate(reader, boot, *, named=None) -> dict:
+    """最初の並び (起動の宣言の 1 枚) の候補の記述 (K39 決定 8): 保存した起動の宣言の感じる側 (名前 = perception.slot、モデル、
+    δ の args が名指す観測モデルの位置と物語の対応) と、そのモデルの document を読み、`describe_candidate` で解く。δ の args の
+    形が違えば (観測モデルを名指せない・対応が組の列でない) 観測の見込みを読まない候補として記述する (δ の形の不足を示すのは
+    更新の計画)。宣言の中身が読めなければ `Unresolved` (起動の計画の不足として示す、K39-b R1)。
+    named = (観測モデル, 対応の pairs) は、読み方が名指した記録から読んだ宣言 (入口 U。K28 決定 6: 読み方が名指す宣言で読む)。
+    名前とモデルは起動の宣言のまま。"""
+    from fractions import Fraction
+    from .f import FInputError, _decode
+    from .fb import AcquisitionObservationModel, TimedAcquisitionModel
+    c = _c()
+    content = _json(_content(reader, boot, c.BOOT_DECLARATION))
+    try:
+        perception = content["perception"]
+        name, value = perception["slot"], perception["declaration"]["value"]
+        model, args = value["model"], value["derivation"]["method"]["args"]
+    except (KeyError, TypeError):
+        raise _Issue("rejected", "shape", "the boot declaration names no perception", evidence=(boot,)) from None
+    args = args if isinstance(args, dict) else {}
+    kinds = {_dumps_enc(c.ACQUISITION_OBSERVATION_MODEL): AcquisitionObservationModel,
+             _dumps_enc(c.TIMED_ACQUISITION_MODEL): TimedAcquisitionModel}
+    observation = None
+    for item in content.get("observation_models") or ():
+        if not isinstance(item, dict) or item.get("slot") != args.get("observation_model"):
+            continue
+        try:
+            typ = kinds.get(_dumps_enc(item["declaration"]["contract"]))
+            observation = None if typ is None else _decode(item["declaration"]["value"], typ)
+        except (FInputError, KeyError, TypeError, ValueError):
+            # 名指した観測モデルの記録が読めない時は、観測を読まない候補 (区間の札の δ) とまとめずに名指しの不足
+            # (K39 試験の係 123 通目 CG: 読めないことと宣言しないことは別の意味)
+            raise Unresolved("correspondence", (name,), "/observation_model", "shape") from None   # 対応の片側の名前が読めない
+    correspondence = args.get("correspondence")
+    pairs = correspondence.get("pairs") if isinstance(correspondence, dict) else None
+    if not pairs_shape(_json(pairs)):   # δ の args の形の不足は更新の計画が名指す (候補は観測の見込みを読まない)
+        observation = None
+    if named is not None:
+        observation, pairs = named
+    member = describe_candidate(id=name, model=model, document=_model_document(reader, model, evidence=(boot, model)),
+                                observation=observation, pairs=pairs, weight=Fraction(1))
+    member["offset"], member["references"] = 0, member["references"] | {boot}
+    return member
+
+
+def _dumps_enc(value):
+    from .f import _dumps
+    return _dumps(value if isinstance(value, dict) else _enc(value))
+
+
+def pool_candidates(reader, point):
+    """足した並びの記録 (`sui.fb.belief_pool/1`) の候補の記述の列 (K39 決定 8): 記録の各候補の宣言 (モデル・観測モデル・物語の
+    対応・重み) を読み、`describe_candidate` で解き、並びの順に offset を付ける。記録した法則の識別が解決と違えば不適合
+    (派生物を信じない)。(並びの記録の本文, 候補の記述の列) を返す。"""
+    from .f import FInputError, _Fraction, _decode
+    from .fb import AcquisitionObservationModel, TimedAcquisitionModel
+    content = _json(_content(reader, point, _c().BELIEF_POOL))
+    members, offset = [], 0
+    for value in content.get("members", ()):
+        ev = (point, value.get("model"))
+        document = _model_document(reader, value.get("model"), evidence=ev)
+        try:
+            observation = _decode(value["observation_model"], AcquisitionObservationModel | TimedAcquisitionModel)
+            weight = _decode(value["prior_weight"], _Fraction)
+            pairs = value["correspondence"]["pairs"]
+        except (FInputError, KeyError, TypeError, ValueError):
+            raise _Issue("rejected", "shape", "a pool member is unreadable", evidence=ev) from None
+        try:
+            member = describe_candidate(id=value["id"], model=value["model"], document=document,
+                                        observation=observation, pairs=pairs, weight=weight)
+        except Unresolved as exc:
+            raise _Issue("rejected", exc.code, "a pool member is unresolvable: " + exc.reason, fields=(exc.field,),
+                         evidence=ev) from None
+        if value.get("law") != member["law"]:
+            raise _Issue("rejected", "result_mismatch", "a pool member's law differs from its declaration", evidence=ev)
+        member["offset"], member["references"] = offset, member["references"] | {point}
+        offset += member["size"]
+        members.append(member)
+    return content, members
+
+
 class _Pools:
     """系列の頭の要求の入力にある並びの記録を、要る所 (取りに行き・行った一歩を読む所と、model の替わり目) で初めて
     読む (区間の札の系列は並びを読まない)。get(model) はその model を直和のモデルに持つ並び、無ければ None。"""
@@ -829,8 +1052,7 @@ def _pools(reader, desc) -> dict:
     """要求の入力にある並びの記録 (`sui.fb.belief_pool/1`) を、その直和のモデルの Point ごとに読む (K37 決定 1・3)。同じ
     model の並びが 2 つあれば読めない。記録した候補から法則と直和のモデルを作り直し、保存した直和のモデルと全比較する
     (派生物を信じない)。"""
-    from .f import FInputError, _Fraction, _decode, _dumps
-    from .fb import AcquisitionObservationModel, TimedAcquisitionModel
+    from .f import _dumps
     c = _c()
     out = {}
     for p in sorted(desc["input_points"]):
@@ -843,23 +1065,7 @@ def _pools(reader, desc) -> dict:
         content = _json(record.body.content.as_json())
         if content.get("model") in out:
             raise _Issue("rejected", "shape", "two pools of one model", evidence=(out[content["model"]]["point"], p))
-        members, offset = [], 0
-        for value in content.get("members", ()):
-            ev = (p, value.get("model"))
-            document = _model_document(reader, value.get("model"), evidence=ev)
-            try:
-                observation = _decode(value["observation_model"], AcquisitionObservationModel | TimedAcquisitionModel)
-                weight = _decode(value["prior_weight"], _Fraction)
-                pairs = value["correspondence"]["pairs"]
-            except (FInputError, KeyError, TypeError, ValueError):
-                raise _Issue("rejected", "shape", "a pool member is unreadable", evidence=ev) from None
-            if value.get("law") != candidate_law(document, observation, pairs):
-                raise _Issue("rejected", "result_mismatch", "a pool member's law differs from its declaration",
-                             evidence=ev)
-            members.append({"id": value["id"], "model": value["model"], "document": document,
-                            "observation": observation, "pairs": pairs, "weight": weight, "law": value["law"],
-                            "offset": offset, "size": len(document["states"])})
-            offset += len(document["states"])
+        content, members = pool_candidates(reader, p)   # ホストの `_fb_pool.resolve` と同じ候補の解決 (K39 決定 8)
         try:
             expected = direct_sum(members) if members else None
         except ValueError:
@@ -888,8 +1094,9 @@ def _diag(blocks):
 def member_reading(member, *, route, evidence_model, evidence_pairs):
     """候補 1 つの受け身の観測の読み方 (K28 新しい決定 3・9、K37 決定 6): 観測モデルの宣言がその並びの口 route のもの
     (同じ起動の口の宣言の位置、`fb.AcquisitionObservationModel.route_slot`) で、読み口と同じ形の検査・取りに行き方の制御の
-    表と重みに合い、物語の対応 (1 対 1・知る対象を横切らない) が読めることを確かめ、(制御, 観測モデルの状態の番号 →
-    候補のモデルの状態の番号) を返す。member は {document, observation, pairs}。読めなければ不適合 (名指しは evidence)。
+    表と重みに合い、核が物語の対応 (1 対 1 は候補の解決が確かめた phi) で知る対象を横切らないことを確かめ、(制御, 観測モデルの
+    状態の番号 → 候補の宣言したモデル (base) の状態の番号) を返す。member は候補の記述 (`describe_candidate`)。読めなければ
+    不適合 (名指しは evidence)。
     家の人の事前の判定と入口 U が同じこの関数を使う。"""
     from . import _fb_read
     c = _c()
@@ -899,7 +1106,7 @@ def member_reading(member, *, route, evidence_model, evidence_pairs):
                      fields=("/observation_model",), evidence=evidence_model)
     from .fb import TimedAcquisitionModel
     if isinstance(declaration, TimedAcquisitionModel):
-        return None, _timed_member(member, declaration, evidence_model=evidence_model, evidence_pairs=evidence_pairs)
+        return None, _timed_member(member, declaration, evidence_model=evidence_model)
     try:
         if declaration.projection != c.ACQUISITION_RESULT_PROJECTION or declaration.time_projection != _value_only() \
                 or declaration.control_rule.contract != c.ACQUISITION_CONTROL_TABLE \
@@ -919,16 +1126,9 @@ def member_reading(member, *, route, evidence_model, evidence_pairs):
         raise _Issue("rejected", "missing_contract", "acquisition repeat or control declaration",
                      fields=("/observation_model",), evidence=evidence_model)
     control, = declaration.controls
-    states = member["document"]["states"]
-    ids, targets = [s["id"] for s in states], [s["target"] for s in states]
-    pairs = _json(member["pairs"])
-    if not isinstance(pairs, list) or any(not isinstance(pair, list) or len(pair) != 2 for pair in pairs) \
-            or len(pairs) != len(ids) or sorted(a for a, _m in pairs) != sorted(declaration.states) \
-            or sorted(m for _a, m in pairs) != sorted(ids):
-        raise _Issue("rejected", "shape", "the correspondence is not one to one", fields=("/pairs",),
-                     evidence=evidence_pairs)
-    phi = [ids.index(dict(pairs)[a]) for a in declaration.states]   # 観測モデルの状態の番号 → 見立ての状態の番号
-    n = len(ids)
+    targets = [s["target"] for s in member["base"]["states"]]
+    phi = member["phi"]   # 観測モデルの状態の番号 → 見立ての状態の番号 (候補の解決が確かめた対応、K39-b R4)
+    n = len(targets)
     for o in control.kernel.outcomes:
         for i in range(n):
             for j in range(n):
@@ -938,21 +1138,18 @@ def member_reading(member, *, route, evidence_model, evidence_pairs):
     return control, phi
 
 
-def _timed_member(member, declaration, *, evidence_model, evidence_pairs):
-    """時刻を読む観測モデル (K38) の候補 1 つの読み方: 取りに行き方の制御の表と重みは K26 と同じ形、件数の法則はこの本が
-    対応しているもの (固定の Poisson 源・有限の法則) で、時計の run が端点の予定と同じ、物語の対応が 1 対 1、法則の事前が
-    その候補のモデルの事前と同じ (事前を 2 か所に持たない)。観測モデルの状態の番号 → 候補のモデルの状態の番号 を返す。"""
+def _timed_member(member, declaration, *, evidence_model):
+    """時刻を読む観測モデル (K38) の候補 1 つの読み方: 取りに行き方の制御の表と重みは K26 と同じ形、件数の法則とスイッチの族は
+    候補の解決がこの本で読めるとしたもの (固定の Poisson 源とスイッチの族・有限の法則。読めなければ解決が名指して止める、
+    K39 決定 1・2・8) で、時計の run が端点の予定と同じ、法則の事前がその候補の宣言したモデルの事前と同じ (事前を 2 か所に
+    持たない)。観測モデルの状態の番号 → 候補の宣言したモデル (base) の状態の番号 (解決が確かめた対応) を返す。"""
     from fractions import Fraction
     from .f import _Fraction, _decode
-    from .fb import FiniteCountLaw, PoissonLaw
     c = _c()
     u_id = c.ACQUISITION_REPEAT_WHEN_DONE.name + "/" + c.ACQUISITION_REPEAT_WHEN_DONE.version
     from . import _fb_read
     symbols = sorted(set(_fb_read._SYMBOLS.values()))
     law = declaration.law
-    if not isinstance(law, (PoissonLaw, FiniteCountLaw)):
-        raise _Issue("rejected", "missing_contract", "the count law is not supported by this book",
-                     fields=("/observation_model/law",), evidence=evidence_model)
     if declaration.control_rule.contract != c.ACQUISITION_CONTROL_TABLE \
             or declaration.control_independence.contract != c.STATE_INDEPENDENT_CONTROL_SELECTION \
             or _json(declaration.control_rule.args) != {"first": [u_id], "after": {s: [u_id] for s in symbols}} \
@@ -962,31 +1159,24 @@ def _timed_member(member, declaration, *, evidence_model, evidence_pairs):
     if law.run != declaration.conditioning.run:
         raise _Issue("rejected", "missing_contract", "the law and the schedule read different clocks",
                      fields=("/observation_model/law/run",), evidence=evidence_model)
-    states = member["document"]["states"]
-    ids = [s["id"] for s in states]
-    pairs = _json(member["pairs"])
-    if not isinstance(pairs, list) or any(not isinstance(pair, list) or len(pair) != 2 for pair in pairs) \
-            or len(pairs) != len(ids) or sorted(a for a, _m in pairs) != sorted(law.states) \
-            or sorted(m for _a, m in pairs) != sorted(ids):
-        raise _Issue("rejected", "shape", "the correspondence is not one to one", fields=("/pairs",),
-                     evidence=evidence_pairs)
-    phi = [ids.index(dict(pairs)[a]) for a in law.states]
-    initial = _decode(member["document"]["initial"], tuple[_Fraction, ...])
+    phi = member["phi"]   # 候補の解決が確かめた対応 (K39-b R4)
+    initial = _decode(member["base"]["initial"], tuple[_Fraction, ...])
     if any(initial[phi[a]] != p for a, p in enumerate(law.prior)):
         raise _Issue("rejected", "shape", "the law's prior differs from the model's prior",
                      fields=("/observation_model/law/prior",), evidence=evidence_model)
     return phi
 
 
-def passive_block(control, phi, symbol, *, sampling, evidence):
+def passive_block(control, phi, symbol, *, sampling, evidence, size):
     """受け身の取りに行き 1 回の、候補 1 つのかたまりの行列 (候補のモデルの状態の順、正規化する前のセルの和)。sampling は
     測る契約 (K26-d (ク) の照らし。None は照らさない = 順の判定だけに使う時)。セルの無い観測は質量 0 のかたまり。
-    時刻を読む取りに行き (control=None、K38) は S を変えず源の件数だけに働く (状態ごとのかたまり)。S の上の行列ではないので、
-    順の判定 (状態を変えない一歩との交換) には単位で表す。数は時刻を読む正本で計算する。"""
+    時刻を読む取りに行き (control=None、K38) は S とスイッチを変えず源の件数だけに働く (状態ごとのかたまり)。S の上の行列では
+    ないので、順の判定 (状態を変えない一歩との交換) には、候補の展開した状態の数 size (K39) の単位で表す。数は時刻を読む正本で
+    計算する。"""
     from fractions import Fraction
     from . import _fb_read
     if control is None:
-        return [[Fraction(int(i == j)) for j in range(len(phi))] for i in range(len(phi))]
+        return [[Fraction(int(i == j)) for j in range(size)] for i in range(size)]
     outcomes = {o.id: o for o in control.kernel.outcomes}
     if sampling is not None:
         # K26-d (ク): セルの観測値と、そのセルの outcome の evidence (kind・測る契約・射影した観測値) が一致する
@@ -1252,7 +1442,7 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc, po
                      fields=("/observation_model",), evidence=(pargs["observation_model"],))
     symbol = _fb_read._SYMBOLS[(observation.result, observation.source_called)]
     if pool is None:
-        members = [_initial_member(reader, model, declaration, boot, corr["pairs"])]
+        members = [_initial_member(reader, model, declaration, boot, corr["pairs"], (pargs["observation_model"], point))]
         evidence = [((pargs["observation_model"],), (point,))]
     else:
         members = pool["members"]
@@ -1269,7 +1459,7 @@ def _apply_acquisition(reader, state, model, binding, reading, b, plan, desc, po
         if (control is None) != timed:   # 時刻を読む候補と有限の核の候補を 1 つの読み方に混ぜない (K38)
             raise _Issue("rejected", "missing_contract", "a candidate reads time differently from the reading",
                          fields=("/observation_model",), evidence=ev_model)
-        blocks.append(passive_block(control, phi, symbol, sampling=sampling, evidence=ev_model))
+        blocks.append(passive_block(control, phi, symbol, sampling=sampling, evidence=ev_model, size=member["size"]))
         read_members.append({**member, "phi": phi})
     m = _diag(blocks)
     n = len(m)
@@ -1322,35 +1512,37 @@ def _mode(state, mode, binding) -> None:
 
 
 def _timed_units(state, members, evidence):
-    """時刻を読む正本の units (K38 決定 1・5): 並びの状態ごとに、その候補の件数の法則のその状態の部分と、並びの事前
-    (候補の重み × 候補の中の事前) と、独立の故障の核。全部の候補が同じ測定核と端点の予定で読む (候補ごとに時間の
-    条件づけ方を変えて証拠の質量を比べない、決定 3)。"""
+    """時刻を読む正本の units (K38 決定 1・5・K39 決定 5): 並びの (候補, スイッチの列 z, 状態) ごとに、その枝の件数の法則
+    (スイッチを当てた後の率) と、並びの事前 (候補の重み × P(z) × 候補の中の事前) と、独立の故障の核。スイッチの族を持つ候補の
+    units は枝 z と族 (名前・a・b・部品の辞書) を持つ (p の照会の材料、決定 6)。候補の間の法則の一致は、候補の解決が返す
+    計算の種類と測定の条件で確かめる (Python の型で確かめない、決定 8): 全部の候補が同じ計算の種類で、同じ測定核と端点の
+    予定で読む (候補ごとに時間の条件づけ方を変えて証拠の質量を比べない、K38 決定 3)。"""
     from . import _fb_time
-    from .fb import TimedAcquisitionModel
-    first = None
+    first = members[0]
     units = []
     for member, ev in zip(members, evidence):
-        declaration = member["observation"]
-        if not isinstance(declaration, TimedAcquisitionModel):
+        if member["computation"] not in ("poisson", "finite_count"):
             raise _Issue("rejected", "missing_contract", "a candidate does not read time", evidence=ev)
-        basis = _json(_enc((declaration.decision_time, declaration.conditioning)))
-        if first is not None and basis != first:
+        if member["measurement"] != first["measurement"]:
             raise _Issue("rejected", "missing_contract", "candidates read time under different conditioning",
                          fields=("/observation_model/conditioning",), evidence=ev)
-        first = basis
-        if type(declaration.law) is not type(members[0]["observation"].law):
+        if member["computation"] != first["computation"]:
             raise _Issue("rejected", "missing_contract", "candidates' count laws are of different kinds",
                          fields=("/observation_model/law",), evidence=ev)
-        phi = member["phi"]
-        states = member["document"]["states"]
-        for a, name in enumerate(declaration.law.states):
-            j = member.get("offset", 0) + phi[a]
-            law = _fb_time.unit_law(declaration.law, name)
-            units.append({"index": j, "candidate": member.get("id"), "state": states[phi[a]]["id"],
-                          "prior": state.joint[j], "law": law,
-                          "failure": None if declaration.failure is None else declaration.failure.unavailable_probability,
-                          "disconnection": None if declaration.disconnection is None
-                          else declaration.disconnection.coefficient})
+        declaration = member["observation"]
+        phi, states = member["phi"], member["base"]["states"]
+        for b, branch in enumerate(member["branches"] or (None,)):
+            for a, name in enumerate(declaration.law.states):
+                j = member["offset"] + b * len(states) + phi[a]   # 展開の順: 枝ごとに宣言のモデルの状態の順 (`direct_sum`)
+                unit = {"index": j, "candidate": member["id"], "state": states[phi[a]]["id"], "prior": state.joint[j],
+                        "law": _fb_time.unit_law(declaration.law, name, None if branch is None else branch["rates"][a]),
+                        "failure": None if declaration.failure is None
+                        else declaration.failure.unavailable_probability,
+                        "disconnection": None if declaration.disconnection is None
+                        else declaration.disconnection.coefficient}
+                if member["family"] is not None:
+                    unit.update(branch=list(branch["z"]), family=member["family"])
+                units.append(unit)
     return sorted(units, key=lambda u: u["index"])
 
 
@@ -1386,7 +1578,7 @@ def _timed_step_members(reader, model, pargs, pool, reading, binding):
     except _fb_read._Unreadable as exc:
         raise _Issue("rejected", _UNREADABLE[exc.reason], "the observation model is unreadable: " + exc.reason,
                      evidence=(point,)) from None
-    member = _initial_member(reader, model, declaration, boot, corr["pairs"])
+    member = _initial_member(reader, model, declaration, boot, corr["pairs"], (point, pargs["correspondence"]))
     ev = (point,)
     phi = member_reading(member, route=declaration.route_slot, evidence_model=ev,
                          evidence_pairs=(pargs["correspondence"],))[1]

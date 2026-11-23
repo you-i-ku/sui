@@ -1,4 +1,7 @@
-"""K28 pending sequence and acknowledgement loss, from real acquire envelopes."""
+"""K28 pending sequence and acknowledgement loss, from real acquire envelopes.
+
+Request117 also checks the lifetime of the deliberately held acquire return.
+"""
 
 import json
 from threading import Event
@@ -235,10 +238,15 @@ def test_row2_accept_order_ack_loss_confirms_a_before_q_b_and_keeps_one_chain(ac
             assert len([e for e in ctx.evidence().acquisitions if result.cid in e.contents]) == 1
             assert len([g for g in rig.facts(ACQUIRED) if result.cid in g.value["contents"]]) == 1
         assert not rig.facts(c.STALE) and len(rig.calls) == len(rig.source.calls) == 3
+        with rig.changed:
+            assert rig.changed.wait_for(lambda: len(rig.return_waiting) == 3, 30)
+        assert rig.return_waiting == [0, 1, 2]
+        assert rig.return_released == [0, 1]  # Final return intentionally held until close.
         interruption, = rig.host.interruptions()
         assert_keep_interruption(interruption, loss.loss_error, kind="store", count=1)
         assert rig.host.halted is None
     finally: rig.close()
+    assert rig.return_released == [0, 1, 2]
 
 
 def test_row5_pending_order_follows_received_time_and_envelope_not_report_sort_keys():

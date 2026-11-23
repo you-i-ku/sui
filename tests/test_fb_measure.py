@@ -205,7 +205,11 @@ class AcquirePort(fb.FWorkContext):
             rig.calls.append(call)
             rig.changed.notify_all()
         if rig.hold_return:
-            assert rig.return_release.wait(30), "test did not release the acquire return"
+            hold = getattr(rig, "hold_acquire_return", None)
+            if hold is None:
+                assert rig.return_release.wait(30), "test did not release the acquire return"
+            else:
+                hold(call)
         if rig.script is None and rig.gate_production_return:
             # K25 examines one operation. The test holds this forwarding return
             # until stop(), rather than relying on an obsolete one-shot worker.

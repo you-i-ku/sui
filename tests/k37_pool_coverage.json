@@ -1,6 +1,6 @@
 {
   "issue": "K37",
-  "request": 109,
+  "request": 124,
   "spec": {
     "path": "C:/Users/you11/Desktop/iku/sui/specs/関所F_Fb_今の約束.md",
     "version": "v1.76",
@@ -93,7 +93,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
-          "line": 824
+          "line": 836
         },
         {
           "file": "tests/test_fb_pool.py",
@@ -116,7 +116,13 @@
           "line": 747
         }
       ],
-      "state": "passed"
+      "state": "passed",
+      "pre_K39_c_spec_line": 3573,
+      "K39_c_update": {
+        "source_line": 3582,
+        "rule": "対応の欠けは候補の追加時にTimeBeliefErrorで名指し、保存しない。核/セルの欠けを0や単位で埋めない所と旧いEの意味は維持。証拠0は対応の欠けを免除しない。",
+        "state": "passed_request121"
+      }
     },
     {
       "id": "D1",
@@ -182,7 +188,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
-          "line": 824
+          "line": 836
         }
       ],
       "state": "passed"
@@ -210,7 +216,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_started_conflict_stays_pending_but_does_not_block_acquisition_replay",
-          "line": 839
+          "line": 851
         }
       ],
       "state": "passed",
@@ -241,8 +247,8 @@
     },
     {
       "id": "D6",
-      "spec_line": 5170,
-      "claim": "Old E keeps raw operation u; use each added component kernel or explicitly reject missing reading",
+      "spec_line": 5184,
+      "claim": "Old E keeps raw operation u. K39-c rejects a missing candidate correspondence at addition; operation/cell shortages of accepted candidates remain named at reading.",
       "tests": [
         {
           "file": "tests/test_fb_pool.py",
@@ -252,10 +258,16 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_replay_rechecks_overlapping_raw_intervals_in_each_added_block",
-          "line": 803
+          "line": 815
         }
       ],
-      "state": "passed"
+      "state": "passed",
+      "pre_K39_c_spec_line": 5170,
+      "K39_c_update": {
+        "source_line": 3582,
+        "rule": "対応の欠けは候補の追加時にTimeBeliefErrorで名指し、保存しない。核/セルの欠けを0や単位で埋めない所と旧いEの意味は維持。証拠0は対応の欠けを免除しない。",
+        "state": "passed_request121"
+      }
     },
     {
       "id": "D7",
@@ -275,7 +287,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
-          "line": 824
+          "line": 836
         }
       ],
       "state": "passed"
@@ -362,7 +374,7 @@
     },
     {
       "id": "S05",
-      "spec_line": 5192,
+      "spec_line": 5206,
       "claim": "K37 body (6), scene 5",
       "tests": [
         {
@@ -371,7 +383,13 @@
           "line": 780
         }
       ],
-      "state": "passed"
+      "state": "passed",
+      "pre_K39_c_spec_line": 5192,
+      "K39_c_update": {
+        "source_line": 3582,
+        "rule": "対応の欠けは候補の追加時にTimeBeliefErrorで名指し、保存しない。核/セルの欠けを0や単位で埋めない所と旧いEの意味は維持。証拠0は対応の欠けを免除しない。",
+        "state": "passed_request121"
+      }
     },
     {
       "id": "S06",
@@ -407,7 +425,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_started_conflict_stays_pending_but_does_not_block_acquisition_replay",
-          "line": 839
+          "line": 851
         }
       ],
       "state": "input_report_conflict_unreachable_by_public_acquire; outside_gate_boundary_control_written",
@@ -425,7 +443,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
-          "line": 824
+          "line": 836
         }
       ],
       "state": "passed"
@@ -516,7 +534,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_replay_rechecks_overlapping_raw_intervals_in_each_added_block",
-          "line": 803
+          "line": 815
         }
       ],
       "state": "passed"
@@ -588,7 +606,7 @@
     },
     {
       "id": "S16-missing",
-      "spec_line": 5203,
+      "spec_line": 5217,
       "claim": "Missing kernel/cell/correspondence never becomes zero/identity",
       "tests": [
         {
@@ -597,7 +615,13 @@
           "line": 780
         }
       ],
-      "state": "passed"
+      "state": "passed",
+      "pre_K39_c_spec_line": 5203,
+      "K39_c_update": {
+        "source_line": 3582,
+        "rule": "対応の欠けは候補の追加時にTimeBeliefErrorで名指し、保存しない。核/セルの欠けを0や単位で埋めない所と旧いEの意味は維持。証拠0は対応の欠けを免除しない。",
+        "state": "passed_request121"
+      }
     },
     {
       "id": "K37-c-1",
@@ -607,7 +631,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_initial_pool_identity_and_cached_getters_do_not_advance_the_host",
-          "line": 852
+          "line": 864
         }
       ],
       "state": "passed"
@@ -620,12 +644,12 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_common_kernel_intersection_prunes_operations_and_policies_to_closed_references",
-          "line": 869
+          "line": 881
         },
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_shared_outcome_id_with_different_metadata_is_not_addable",
-          "line": 886
+          "line": 898
         }
       ],
       "state": "passed"
@@ -638,7 +662,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_pool_boundary_replaces_origin_and_reader_then_keeps_them_within_pool",
-          "line": 900
+          "line": 912
         }
       ],
       "state": "passed"
@@ -664,20 +688,20 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_pool_boundary_replaces_origin_and_reader_then_keeps_them_within_pool",
-          "line": 900
+          "line": 912
         }
       ],
       "state": "passed"
     },
     {
       "id": "K37-c-6",
-      "spec_line": 3576,
-      "claim": "Every candidate correspondence is checked even when that component has zero evidence; execution readings also check it.",
+      "spec_line": 3586,
+      "claim": "Every candidate correspondence is required even with zero evidence; K39-c names and rejects a missing correspondence at addition before saving.",
       "tests": [
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_zero_evidence_component_still_requires_its_declared_correspondence",
-          "line": 949
+          "line": 961
         },
         {
           "file": "tests/test_fb_pool.py",
@@ -685,7 +709,13 @@
           "line": 780
         }
       ],
-      "state": "passed"
+      "state": "passed",
+      "pre_K39_c_spec_line": 3576,
+      "K39_c_update": {
+        "source_line": 3582,
+        "rule": "対応の欠けは候補の追加時にTimeBeliefErrorで名指し、保存しない。核/セルの欠けを0や単位で埋めない所と旧いEの意味は維持。証拠0は対応の欠けを免除しない。",
+        "state": "passed_request121"
+      }
     },
     {
       "id": "K37-c-7",
@@ -695,7 +725,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_latest_confirmed_belief_stays_visible_while_same_pool_adoption_write_is_pending",
-          "line": 933
+          "line": 945
         },
         {
           "file": "tests/test_fb_pool.py",
@@ -705,7 +735,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_initial_pool_identity_and_cached_getters_do_not_advance_the_host",
-          "line": 852
+          "line": 864
         }
       ],
       "state": "passed"
@@ -759,7 +789,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_two_additions_without_intermediate_replay_use_the_actual_work_reader",
-          "line": 983
+          "line": 998
         }
       ],
       "contrast": "Original T,E,T native history; no test-owned reader/closure is supplied to the worker.",
@@ -773,7 +803,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_candidate_observation_model_must_name_the_observed_route",
-          "line": 1023
+          "line": 1038
         }
       ],
       "contrast": "Three route_slot variants, same-route positive control; a distinct real route has zero allocation; the original route is proven to adopt before addition.",
@@ -787,7 +817,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_candidate_reuse_checks_its_own_generator_after_pool_change",
-          "line": 1044
+          "line": 1059
         }
       ],
       "contrast": "Late conflict from the new source blocks reuse; old-source conflict and identical new-source redelivery allow reuse of the new CG.",
@@ -801,7 +831,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_failed_generation_after_pool_change_does_not_readmit_the_same_material",
-          "line": 1101
+          "line": 1116
         }
       ],
       "contrast": "Native CandidateGenerator with one public-port read fault vs successful generation. Compare activity/request sets captured before the terminal; after completion no residual occupancy hides a retry.",
@@ -815,7 +845,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_U_pool_boundary_requires_the_previous_model_in_its_ancestry",
-          "line": 1160
+          "line": 1175
         }
       ],
       "contrast": "Public saved Q* clone; positive and negative use identical expanded real records and declared boundary. Only prior changes to an actual descendant adoption with the same T,E history. No fabricated prior or raw report.",
@@ -829,7 +859,7 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_U_pool_replay_requires_the_same_raw_prefix_in_the_same_order",
-          "line": 1188
+          "line": 1203
         }
       ],
       "contrast": "Actual native original Q* issues; two saved clones change only observations: omit the prefix or reverse it. Same valid pool, prior, reading plans and raw records remain visible.",
@@ -843,13 +873,13 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_unconsumed_old_adoption_waits_for_replay_when_the_thinking_seat_opens",
-          "line": 1231,
+          "line": 1246,
           "role": "primary unconsumed-material contrast; executed in request109"
         },
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_thinking_waits_for_the_new_pool_adoption_with_a_free_thinking_seat",
-          "line": 1203,
+          "line": 1218,
           "role": "already-consumed-material control; last executed in request108, not claimed to reach mutation12"
         }
       ],
@@ -912,12 +942,14 @@
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_started_conflict_stays_pending_but_does_not_block_acquisition_replay",
-          "line": 839
+          "line": 851,
+          "line_before_request121": 839
         },
         {
           "file": "tests/test_fb_pool.py",
           "function": "test_pool1_update_thinking_and_next_execution_share_one_boundary_pool",
-          "line": 824
+          "line": 836,
+          "line_before_request121": 824
         }
       ]
     },
@@ -937,20 +969,57 @@
   "open_contract_gaps": [],
   "verification_limit": "Request107 runs against the K37 implementation through public APIs. No production source body was opened; source-line centralization and mutation-test results are not independently inspected here.",
   "verification": {
-    "state": "passed",
-    "request": 109,
-    "scope": "New request109 case only; existing 68 cases not rerun in this request.",
-    "command": "..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_pool.py::test_pool1_unconsumed_old_adoption_waits_for_replay_when_the_thinking_seat_opens -n 0 -q --tb=short --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109/k37_results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109/cache",
-    "exit_code": 0,
-    "total": 1,
-    "passed": 1,
-    "failed": 0,
-    "errors": 0,
-    "skipped": 0,
-    "elapsed_pytest_seconds": 14.99,
-    "results_xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109/k37_results.xml",
-    "checks": "JUnit confirms one case in tests.test_fb_pool, zero failures/errors/skips. Coverage function names/line references refreshed.",
-    "processes": "Targeted pytest exited successfully; native fixture threads joined in teardown. No task-owned background command remains."
+    "state": "not_run",
+    "scope": "test_fb_pool.pyの全体は依頼124では実行していない。過去の69 passedを今回の結果として扱わない。",
+    "related_request124_run": {
+      "state": "passed",
+      "focused": {
+        "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py -k different_state_counts -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/focused --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/focused/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/focused/cache",
+        "result": "12 passed in 5.07s; exit 0",
+        "tests": 12,
+        "passed": 12,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/focused/results.xml"
+      },
+      "full2": {
+        "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py tests/test_fb_switch_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/full --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/full/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/full/cache",
+        "result": "120 passed in 99.86s; exit 0",
+        "tests": 120,
+        "passed": 120,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "seconds_xml": "99.695",
+        "files": {
+          "tests.test_fb_correspondence": {
+            "passed": 38,
+            "failed": 0
+          },
+          "tests.test_fb_switch_belief": {
+            "passed": 82,
+            "failed": 0
+          }
+        },
+        "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests124/full/results.xml"
+      },
+      "new_cases": {
+        "functions": 1,
+        "cases": 12,
+        "negative_cases": 6,
+        "positive_controls": 6,
+        "passed": 12,
+        "failed": 0
+      },
+      "known_implementation_mismatches": 0,
+      "unexpected_other_failures": 0,
+      "not_run": [
+        "指定2ファイル以外の全体回帰",
+        "誤実装の表"
+      ],
+      "processes": "pytest/xdistの6プロセス (31376,16328,536,46880,31256,47744) は終了後のGet-Processで残数0を確認。追加のprobe/背景コマンドは残していない。"
+    }
   },
   "recent_sources": [
     {
@@ -1070,6 +1139,187 @@
       "results_xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests108/k37_results.xml",
       "checks": "JUnit confirms 68 tests in tests.test_fb_pool and zero failures/errors/skips. All mapped test functions exist and line references refreshed.",
       "processes": "Both pytest runs exited successfully. Native fixture worker threads joined in teardown; no task-owned background command remains."
+    },
+    {
+      "request": 109,
+      "verification": {
+        "state": "passed",
+        "request": 109,
+        "scope": "New request109 case only; existing 68 cases not rerun in this request.",
+        "command": "..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_pool.py::test_pool1_unconsumed_old_adoption_waits_for_replay_when_the_thinking_seat_opens -n 0 -q --tb=short --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109/k37_results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109/cache",
+        "exit_code": 0,
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "elapsed_pytest_seconds": 14.99,
+        "results_xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui2238/bt_tests109/k37_results.xml",
+        "checks": "JUnit confirms one case in tests.test_fb_pool, zero failures/errors/skips. Coverage function names/line references refreshed.",
+        "processes": "Targeted pytest exited successfully; native fixture threads joined in teardown. No task-owned background command remains."
+      }
+    },
+    {
+      "request": 121,
+      "verification": {
+        "state": "passed",
+        "focused": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_belief.py::test_belief1_invalid_declarations_are_not_valid_updates_or_numerical_noops tests/test_fb_belief.py::test_belief1_delta_slot_name_type_is_pending_args_not_a_halted_host tests/test_fb_pool.py::test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading tests/test_fb_pool.py::test_pool1_zero_evidence_component_still_requires_its_declared_correspondence -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/focused --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/focused/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/focused/cache",
+          "result": "23 passed in 21.65s; exit 0",
+          "tests": 23,
+          "passed": 23,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/focused/results.xml"
+        },
+        "full6": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_belief.py tests/test_fb_pool.py tests/test_fb_switch_belief.py tests/test_fb_skeleton.py tests/test_fb_time_belief.py tests/test_fb_impl39_switch.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/full6 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/full6/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/full6/cache",
+          "result": "720 passed in 331.86s (0:05:31); exit 0",
+          "tests": 720,
+          "passed": 720,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "seconds_xml": "331.662",
+          "files": {
+            "tests.test_fb_belief": 285,
+            "tests.test_fb_pool": 69,
+            "tests.test_fb_switch_belief": 82,
+            "tests.test_fb_skeleton": 180,
+            "tests.test_fb_time_belief": 92,
+            "tests.test_fb_impl39_switch": 12
+          },
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests121/full6/results.xml"
+        },
+        "migrated_cases": [
+          "test_belief1_invalid_declarations_are_not_valid_updates_or_numerical_noops[correspondence-duplicate]",
+          "test_belief1_invalid_declarations_are_not_valid_updates_or_numerical_noops[correspondence-missing]",
+          "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading[missing-correspondence]",
+          "test_pool1_zero_evidence_component_still_requires_its_declared_correspondence"
+        ],
+        "guards": "correspondence-absentのdelta:*、route/observation_modelのlist形delta:args、正常なslot名の対照、missing-operation/missing-cellの後段の拒否を含めてpassed。",
+        "not_run": [
+          "指定6ファイル以外の全体回帰",
+          "誤実装の表"
+        ],
+        "processes": "指定6ファイルのpytestとxdist workerのPython 6プロセス（37812,36016,53128,1104,32188,33748）はGet-Processで全件終了を確認。先行実行と読取コマンドも終了。背景に残したコマンド無し。",
+        "scope": "K37の69件とK39-cの移行を含む指定6ファイル。"
+      }
+    },
+    {
+      "request": 122,
+      "verification": {
+        "state": "passed",
+        "focused": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/focused2 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/focused2/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/focused2/cache",
+          "result": "17 passed in 3.71s; exit 0",
+          "tests": 17,
+          "passed": 17,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/focused2/results.xml"
+        },
+        "full4": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py tests/test_fb_belief.py tests/test_fb_pool.py tests/test_fb_switch_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/full4 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/full4/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/full4/cache",
+          "result": "453 passed in 264.11s (0:04:24); exit 0",
+          "tests": 453,
+          "passed": 453,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "seconds_xml": "263.940",
+          "files": {
+            "tests.test_fb_belief": 285,
+            "tests.test_fb_correspondence": 17,
+            "tests.test_fb_pool": 69,
+            "tests.test_fb_switch_belief": 82
+          },
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests122/full4/results.xml"
+        },
+        "new_cases": {
+          "functions": 2,
+          "cases": 17,
+          "R1": 12,
+          "R2": 5,
+          "passed": 17
+        },
+        "limits": [
+          "モデルの状態ID重複のadd 1ケースはCandidateInputError(/candidate/model)による先行の入力拒否。phiの到達として数えない。モデルが正常でpairsのモデル側だけが重なる対照を3入口へ別に置いた。",
+          "実装の共通化そのものの構造は黒箱試験で証明できない。"
+        ],
+        "not_run": [
+          "指定4ファイル以外の全体回帰",
+          "誤実装の表"
+        ],
+        "processes": "pytestとxdist workerのPython 6プロセス（49780,33996,44868,45736,48656,42280）はGet-Processで全件終了を確認。先行実行・読取コマンドも終了。背景に残したコマンド無し。",
+        "scope": "K37の69件を含む指定4ファイル。"
+      }
+    },
+    {
+      "request": 123,
+      "verification": {
+        "state": "not_run",
+        "scope": "test_fb_pool.pyの全体は依頼123では実行していない。直近の69 passedは依頼122の履歴。",
+        "related_request123_run": {
+          "state": "failed",
+          "focused": {
+            "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py -k nonstring_state_names -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/focused2 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/focused2/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/focused2/cache",
+            "result": "1 failed, 8 passed in 2.75s; exit 1",
+            "tests": 9,
+            "passed": 8,
+            "failed": 1,
+            "errors": 0,
+            "skipped": 0,
+            "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/focused2/results.xml"
+          },
+          "full2": {
+            "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_correspondence.py tests/test_fb_switch_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/full2 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/full2/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/full2/cache",
+            "result": "1 failed, 107 passed in 82.02s; exit 1",
+            "tests": 108,
+            "passed": 107,
+            "failed": 1,
+            "errors": 0,
+            "skipped": 0,
+            "seconds_xml": "81.854",
+            "files": {
+              "tests.test_fb_correspondence": {
+                "passed": 25,
+                "failed": 1
+              },
+              "tests.test_fb_switch_belief": {
+                "passed": 82
+              }
+            },
+            "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui1838/bt_tests123/full2/results.xml"
+          },
+          "failed_case": {
+            "name": "test_corr1_nonstring_state_names_are_named_refusals_at_public_entrances[list-observation-names-resolve]",
+            "file": "tests.test_fb_correspondence",
+            "state": "failed",
+            "message": "Failed: DID NOT RAISE TimeBeliefError"
+          },
+          "new_cases": {
+            "functions": 1,
+            "cases": 9,
+            "passed": 8,
+            "failed": 1,
+            "model_record_entrances_passed": 3
+          },
+          "known_implementation_mismatches": 1,
+          "unexpected_other_failures": 0,
+          "limits": [
+            "観測側の配列名は公開のPython型で作れるが、起動はFbInputError(shape,/declaration/observation_models/0/value)で保存前に断る。そのケースを計画不足への到達の確認には数えない。",
+            "addのモデル本体の入力拒否は共有の対応検査の到達と区別。"
+          ],
+          "not_run": [
+            "指定2ファイル以外の全体回帰",
+            "誤実装の表"
+          ],
+          "processes": "pytestとxdist workerのPython 6プロセス（12036,52032,51380,32716,44416,17160）はGet-Processで全件終了を確認。先行実行と公開の値のprobeも終了。背景に残したコマンド無し。"
+        }
+      }
     }
   ],
   "corrections107": {
@@ -1094,5 +1344,110 @@
   },
   "reachability109": {
     "12": "A1 explicitly verified unevaluated and not handed off while the sole seat is counted with residual native work; seat is then released while new-pool replay remains pending. This supplies the missing precondition from request108."
+  },
+  "K39_c_request121": {
+    "request": 121,
+    "source_line": 3582,
+    "read_scope": "K39-c行全文、K37本文5183〜5217の該当部分",
+    "migrations": [
+      {
+        "id": "K39-c-K37-execution-reading",
+        "spec_line": 3582,
+        "case_ids": [
+          "missing-correspondence"
+        ],
+        "before": "対応の欠けた候補を足し、旧い一歩の結果を読む時に名指しの不足。",
+        "after": "候補を足す口がTimeBeliefError(reason=correspondence、候補IDをtargets)で断り、呼出しで保存を増やさない。旧いEと一歩の結果はそのまま旧い並びで採用し独立の答えと一致。kernel/cellの欠けの後段の拒否は維持。",
+        "tests": [
+          {
+            "path": "tests/test_fb_pool.py",
+            "name": "test_pool1_old_execution_uses_new_candidate_kernel_or_names_missing_reading",
+            "line": 780,
+            "state": "passed_request121",
+            "cases": {
+              "passed": 4,
+              "failed": 0
+            }
+          }
+        ]
+      },
+      {
+        "id": "K39-c-K37-zero-evidence",
+        "spec_line": 3582,
+        "case_ids": [
+          "zero-evidence-component"
+        ],
+        "before": "証拠0でも不完全な候補を足し、読む時に名指し。",
+        "after": "証拠0の候補でも対応の欠けをadd_candidateで名指し拒否し、保存・並び・採用の鎖を変えない。0の尤度/単位核を埋めない。",
+        "tests": [
+          {
+            "path": "tests/test_fb_pool.py",
+            "name": "test_pool1_zero_evidence_component_still_requires_its_declared_correspondence",
+            "line": 961,
+            "state": "passed_request121",
+            "cases": {
+              "passed": 1,
+              "failed": 0
+            }
+          }
+        ]
+      }
+    ],
+    "verification": "対象の2件と核/セル不足の対照を含め、test_fb_pool.py全69件passed。指定6ファイル720 passed。"
+  },
+  "K39_d_request122": {
+    "source_line": 3583,
+    "tests": [
+      {
+        "path": "tests/test_fb_correspondence.py",
+        "name": "test_corr1_both_name_sets_must_be_unique_for_a_bijection",
+        "line": 95,
+        "state": "passed_request124",
+        "cases": {
+          "passed": 12,
+          "failed": 0
+        }
+      }
+    ],
+    "rule": "対応の両側の名前と行き/帰りの対応が1対1でなければ名指し拒否。モデルID重複のaddはモデル入力検査に先に止まることを区別。",
+    "verification": "新しい17ケースと指定4ファイル453件すべてpassed。",
+    "limits": [
+      "モデルの状態ID重複のadd 1ケースはCandidateInputError(/candidate/model)による先行の入力拒否。phiの到達として数えない。モデルが正常でpairsのモデル側だけが重なる対照を3入口へ別に置いた。",
+      "実装の共通化そのものの構造は黒箱試験で証明できない。"
+    ]
+  },
+  "K39_d3_request123": {
+    "source_line": 3583,
+    "tests": [
+      {
+        "path": "tests/test_fb_correspondence.py",
+        "name": "test_corr1_nonstring_state_names_are_named_refusals_at_public_entrances",
+        "line": 214,
+        "state": "passed_request124",
+        "cases": {
+          "passed": 9,
+          "failed": 0
+        }
+      }
+    ],
+    "open_CG": [],
+    "verification": "前回8 passed/1 failedのCGを紙v2.02の裁きで閉じた。今回は同じ9ケースが全件passed。履歴はverification_historyへ保持。"
+  },
+  "K39_cardinality_request124": {
+    "source_line": 3583,
+    "tests": [
+      {
+        "path": "tests/test_fb_correspondence.py",
+        "name": "test_corr1_different_state_counts_cannot_form_a_bijection",
+        "line": 327,
+        "state": "passed_request124",
+        "cases": {
+          "passed": 12,
+          "failed": 0
+        }
+      }
+    ],
+    "rule": "観測2状態→モデル1状態の多対1、観測1状態→モデル2状態の1対多を、公開解決・起動・候補追加で名指し拒否する。両側の法則と核は正常にし、1対1・2対2の正常対照を同じ3入口に置く。",
+    "verification": "対応38件・スイッチ82件で120 passed。test_fb_pool.py自体は今回not_run。"
   }
 }

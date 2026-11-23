@@ -1309,7 +1309,10 @@ def test_time1_review_R6_initial_public_candidate_name_works_for_weight_and_all_
     assert weight.exact == all_counts.exact == 1
     assert_contains(r.query("count", candidate=member.id, count=0), rat(1))
     expected, mass = posterior([expneg(rate) for rate in r.rates])
-    assert_contains(r.query("state", state="A", candidate=member.id), expected)
+    assert_contains(r.query("state", state="A"), expected)
+    with pytest.raises(fb.TimeBeliefError) as error:
+        r.query("state", state="A", candidate=member.id)
+    assert error.value.kind == "invalid" and error.value.field == "candidate"
     r.check(expected, mass)
 
 

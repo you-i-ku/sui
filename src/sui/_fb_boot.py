@@ -18,7 +18,7 @@ from . import fb_contracts as _c
 from ._fb_wire import dumps as _dumps, encode as _encode
 from .clock_contracts import SOURCE as _CLOCK_SOURCE
 from .contracts import ContractRef as _ContractRef
-from .f_contracts import KNOWLEDGE_ORIGIN as _KNOWLEDGE_ORIGIN, ROUTE_CONFIG as _ROUTE_CONFIG
+from .f_contracts import KNOWLEDGE_ORIGIN as _KNOWLEDGE_ORIGIN, MODEL_SOURCE as _MODEL_SOURCE, ROUTE_CONFIG as _ROUTE_CONFIG
 from .ids import RefKind as _RefKind
 from .records import Decided as _Decided, Observed as _Observed, Payload as _Payload, \
     Prediction as _Prediction, Record as _Record, Role as _Role
@@ -151,15 +151,23 @@ def plan_boot(state, declaration, d) -> BootPlan:
         elif not allocation_ok(value.allocation):
             plan.missing.append("perception:allocation")
         else:
-            from ._fb_pool import initial_model
+            from ._fb_pool import boot_shortfall
             try:
-                state.ledger.entry(initial_model(declaration))
+                state.ledger.entry(value.model)
             except KeyError:
                 plan.missing.append("perception:model")
             else:
-                state.allocations[_fb.BootSlot(declaration=d, slot=value.allocation.slot)] = value.allocation.value.amount
-                plan.steps.append(_origin_step(perception))
-                sensing = True
+                # 最初の候補を候補の解決で解く。読めない宣言は起動の計画の不足 (考える・更新・一歩より先、K39-b R1)
+                member, missing = boot_shortfall(state.ledger, d)
+                if missing is not None:
+                    plan.missing.append(missing)
+                else:
+                    state.allocations[_fb.BootSlot(declaration=d, slot=value.allocation.slot)] = \
+                        value.allocation.value.amount
+                    if member["document"] is not member["base"]:   # (z, S) に展開した派生のモデル (K39 決定 8)。読み手より先
+                        plan.steps.append(_derived_model_step(member["document"]))
+                    plan.steps.append(_origin_step(perception))
+                    sensing = True
     if initial is not None:
         value = initial.value
         if initial.contract != _c.INITIAL_PROCESS or not isinstance(value, _fb.InitialProcess):
@@ -384,13 +392,32 @@ def _route_steps(route_slot):
             Step(name="k:" + name, build=build_k, on_prepared=k_prepared)]
 
 
+def _derived_model_step(document):
+    """最初の並びの派生のモデルの記録 (`sui.f.model_source/1`、Prediction / MODEL、K39 決定 8): 起動の宣言の候補を候補の解決で
+    展開した document (スイッチの列 z × 状態、知る対象は率の表の識別つき)。入口 U は同じ解決で作り直して照らす。about・basis は
+    起動の宣言と宣言のモデル、親は両方。"""
+    from ._fb_pool import DERIVED
+
+    def build(state, plan):
+        from ._fb_core import Slot
+        ledger = state.ledger
+        declared = plan.declaration.perception.value.model
+        body = _Prediction(target="belief_pool_model", about=(ledger.record(plan.d).id,),
+                           basis=(ledger.record(plan.d).id, ledger.record(declared).id),
+                           content=_Payload.json({"document": document}), contract=_MODEL_SOURCE)
+        return Slot(contract=_MODEL_SOURCE, record=_record(state, body, _RefKind.PREDICTION, _Role.MODEL),
+                    parents=_front(state.ledger, {plan.d, declared}))
+
+    return Step(name=DERIVED, build=build)
+
+
 def _origin_step(perception_slot):
     """knowledge_origin (感じる側の読み手の位置、K36 新しい決定 2)。モデルは最初の並びのモデル (`_fb_pool.initial_model`)。"""
 
     def build_origin(state, plan):
         from ._fb_core import Slot, mono_ns
         from ._fb_pool import initial_model
-        model = initial_model(plan.declaration)
+        model = initial_model(plan)
         # r は窓口がこの記録の成立を確かめた時の M の読み (§2-5-1 U2)。時刻なしだと F-a が文脈の
         # 境界と比べられない (chronology の unknown time)
         body = _Observed(route="fb", content=_Payload.json({"model": model}),

@@ -51,6 +51,8 @@ __all__ = [
     "EvaluationStatus", "ThinkingMaterialStatus",
     "BeliefCandidate", "CandidateAddition", "PoolMember", "PoolState", "BeliefPool", "CandidatePosterior",
     "PoolBelief", "CandidateInputError", "CandidatePoolError",
+    "SwitchPart", "SwitchQuantity", "BetaMixture", "BetaMixtureComponent",
+    "ResolvedBeliefPool", "resolve_belief_candidates",
     "PoissonLaw", "FiniteCountLaw", "UniformAcquisitionTime", "FixedAcquisitionSchedule",
     "IndependentAcquisitionFailure", "IndependentSourceDisconnection", "TimedAcquisitionModel", "SourceCountReading", "TimedExecutionDeclaration",
     "BeliefExpression", "BeliefQuantity", "BeliefValue", "SelectionValues", "TimedBeliefUpdater", "TimeBeliefError",
@@ -962,7 +964,8 @@ class BeliefCandidate:
     """足す候補 1 つ (紙 F-b K37 決定 1)。id は並びの中の名前 (並びの中で一意)、model は保存済みの見立てのモデル
     (`sui.f.model_source/1`、状態の一覧・事前・核) の Point、observation_model はその候補の取りに行きの観測の見込み、
     correspondence は物語の対応 {pairs: [[観測モデルの状態, モデルの状態], ...]}。宣言で、正しいことの証明ではない
-    (読めない宣言は、その候補で観測を読む時に名指して止まる)。"""
+    (候補の解決が読めない宣言 = 対応・法則・部品は、足す時に名指して断る (K39-b R1)。操作の核が無いなどの読み方の不足は、
+    その候補で観測を読む時に名指して止まる)。"""
     id: str
     model: Point
     observation_model: AcquisitionObservationModel
@@ -1082,10 +1085,40 @@ def _distribution(states, prior, field) -> None:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
+class SwitchPart:
+    """スイッチの族の部品 1 つ (紙 F-b K39 決定 1)。id は族の部品の辞書の名前。部品の種類 kind は倍率が何を読むかで決まる:
+    "mood" = 調子の部品 (multipliers は状態 S を読む倍率 r(S)、法則の states の順の非負の有理数)、"inert" = 何も読まない倍率 1 の
+    部品 (multipliers は None か全部 1)。ほかの kind は宣言として受け取り、この本では対応していない種類として候補の解決が名指して
+    止まる (読み方の無い部品を無効果とみなさない、決定 2・11)。"""
+    id: str
+    kind: str
+    multipliers: tuple[_Fraction, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.id) is not str or not self.id:
+            raise TimeBeliefError(kind="invalid", reason="a part needs a name", field="id")
+        if type(self.kind) is not str or not self.kind:
+            raise TimeBeliefError(kind="invalid", reason="a part names what its multiplier reads", field="kind")
+        if self.multipliers is not None:
+            if type(self.multipliers) is not tuple:
+                raise TimeBeliefError(kind="invalid", reason="multipliers must be a tuple", field="multipliers")
+            for r in self.multipliers:
+                _exact(r, "multipliers")
+        if self.kind == "mood" and self.multipliers is None:
+            raise TimeBeliefError(kind="invalid", reason="a mood part reads one multiplier per state", field="multipliers")
+        if self.kind == "inert" and self.multipliers is not None and any(r != 1 for r in self.multipliers):
+            raise TimeBeliefError(kind="invalid", reason="an inert part has multiplier 1", field="multipliers")
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
 class PoissonLaw:
-    """固定の Poisson 源 (K38 決定 1): 静的な有限の状態 states・状態ごとの事前 prior・状態ごとの一定の到着率 rates (宣言した単位
-    あたり)・起点 origin_ns (run の時計の ns)・起点で源に既にある件数 initial_count・時間の単位 time_unit (ns あたりの換算の
-    係数、正)。経過時間は (ns − origin_ns) × time_unit で、段に丸めない。率は後で学べる量へ広げられる (この本では宣言の値)。"""
+    """固定の Poisson 源とスイッチの族の法則 (K38 決定 1・K39 決定 1〜3。法則の形は 1 つ、K39-b R2): 静的な有限の状態 states・
+    状態ごとの事前 prior・状態ごとの基準の率 rates (λ_0(S)、宣言した単位あたり)・起点 origin_ns (run の時計の ns)・起点で源に
+    既にある件数 initial_count・時間の単位 time_unit (ns あたりの換算の係数、正)。経過時間は (ns − origin_ns) × time_unit で、
+    段に丸めない。family は族の名前 (p の共有の範囲。None は族を宣言しない = K38 の部品 0 個の族で、parts は空・a・b は None)、
+    parts は部品の辞書、a・b はスイッチの入る割合 p の事前 Beta(a, b) (族があれば正の有理数)、state_role は状態の役 ("mood" =
+    S 全体が調子の役で、調子の遷移は無い)。スイッチの列 z の下の率は λ_0(S) · Π_{z_j = 1} r_j(S)、z の事前は
+    (a)_m (b)_{k−m} / (a+b)_k。率は後で学べる量へ広げられる (この本では宣言の値)。"""
     run: Ref
     states: tuple[str, ...]
     prior: tuple[_Fraction, ...]
@@ -1093,6 +1126,11 @@ class PoissonLaw:
     origin_ns: int
     initial_count: int
     time_unit: _Fraction
+    family: str | None = None
+    parts: tuple[SwitchPart, ...] = ()
+    a: _Fraction | None = None
+    b: _Fraction | None = None
+    state_role: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.rates) is not tuple:
@@ -1108,6 +1146,22 @@ class PoissonLaw:
             raise TimeBeliefError(kind="invalid", reason="rates need one rate per state", field="rates")
         if not isinstance(self.run, Ref):
             raise TimeBeliefError(kind="invalid", reason="run must be a Ref", field="run")
+        if self.family is None:
+            if self.parts != () or self.a is not None or self.b is not None:
+                raise TimeBeliefError(kind="invalid", reason="parts and p need a declared family", field="family")
+        else:
+            if type(self.family) is not str or not self.family:
+                raise TimeBeliefError(kind="invalid", reason="a family needs a name", field="family")
+            _exact(self.a, "a", positive=True)
+            _exact(self.b, "b", positive=True)
+        if type(self.parts) is not tuple or any(type(x) is not SwitchPart for x in self.parts):
+            raise TimeBeliefError(kind="invalid", reason="parts must be a tuple of switch parts", field="parts")
+        if len({x.id for x in self.parts}) != len(self.parts):
+            raise TimeBeliefError(kind="invalid", reason="part names must be distinct", field="parts")
+        if any(x.multipliers is not None and len(x.multipliers) != len(self.states) for x in self.parts):
+            raise TimeBeliefError(kind="invalid", reason="multipliers need one value per state", field="multipliers")
+        if self.state_role is not None and (type(self.state_role) is not str or not self.state_role):
+            raise TimeBeliefError(kind="invalid", reason="state_role must be a name", field="state_role")
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -1262,7 +1316,7 @@ class BeliefExpression:
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class BeliefQuantity:
-    """照会する量 (K38 決定 5): state = P(S=state | h)、candidate = P(M=candidate | h)、mass = 証拠の質量 Z、count = P(N=count
+    """照会する量 (K38 決定 5): state = P(S=state | h) (周辺。candidate を名指すと invalid)、candidate = P(M=candidate | h)、mass = 証拠の質量 Z、count = P(N=count
     [, S=state, M=candidate] | h) (信念の時刻の源の総件数。at_least なら N ≥ count)。"""
     kind: _Literal["state", "candidate", "mass", "count"]
     state: str | None = None
@@ -1272,15 +1326,90 @@ class BeliefQuantity:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
+class SwitchQuantity:
+    """スイッチと p の照会する量 (紙 F-b K39 決定 6)。候補 candidate と族 family を名指し、候補 M に条件づけた値を返す (並び全体の
+    共同の確率は BeliefQuantity の candidate の照会と掛けて作る。1 つの照会で混ぜない)。on・off は部品の名前の組で、スイッチの列の
+    部分的な条件 (on は 1、off は 0)。kind: switch = P(on・off | h, M) (1 つならオンの確率、複数なら同時の確率)、state =
+    P(on・off, S=state | h, M)、mass = P(h | M)、p_mean = E[p | h, M]、p_moment = E[p^order | h, M] (order は非負の整数)。
+    p_cdf・p_quantile (点 point での p の累積確率・分位点) はこの本では対応していない (名指して断る)。"""
+    kind: _Literal["switch", "state", "mass", "p_mean", "p_moment", "p_cdf", "p_quantile"]
+    candidate: str
+    family: str
+    on: tuple[str, ...] = ()
+    off: tuple[str, ...] = ()
+    state: str | None = None
+    order: int | None = None
+    point: _Fraction | None = None
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
 class BeliefValue:
     """照会の答え (K38 決定 5・P10): 真の値を含む有理数の上下界。exact は正準な式が有理数の時のその値 (そうでなければ None)、
     proof は使った精度の控え (検査は根から作り直して行い、控えを信じない)。"""
     root: str
-    quantity: BeliefQuantity
+    quantity: BeliefQuantity | SwitchQuantity
     lower: _Fraction
     upper: _Fraction
     exact: _Fraction | None
     proof: ImmutableJSON
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class BetaMixtureComponent:
+    """p の混合の 1 成分 (K39 決定 6): スイッチの列 z の枝の Beta(a, b) = Beta(族の a + |z|, 族の b + k − |z|) と、その重み weight
+    (= P(z | h, M) の照会の答え。quantity はその枝の on・off を名指した switch の照会)。"""
+    a: _Fraction
+    b: _Fraction
+    weight: BeliefValue
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class BetaMixture:
+    """候補 M に条件づけたスイッチの入る割合 p の分布の、作り直せる混合の表現 (K39 決定 6): 根 root・候補 candidate・族 family・
+    部品の辞書 parts (宣言の順の名前)・事前 a, b と、スイッチの列ごとの成分 components (2^k 個、z の辞書順。同じ形の成分は
+    p だけの照会ではまとめて読んでよい)。重みの数は根から作り直した照会の答えで、`FThreadHost.verify_p_distribution` は保存した
+    自己申告を信じず根から確かめる。proof は控え。"""
+    root: str
+    candidate: str
+    family: str
+    parts: tuple[str, ...]
+    a: _Fraction
+    b: _Fraction
+    components: tuple[BetaMixtureComponent, ...]
+    proof: ImmutableJSON
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class ResolvedCandidate:
+    """候補の解決 (K39 決定 8) が返す候補 1 つの正準な記述: 名前 id・展開した状態 states (スイッチの列 z × 宣言のモデルの状態。
+    部品 0 個なら宣言のモデルの状態のまま)・候補の中の事前 prior (P(z) × 状態の事前、和 1)・状態ごとの率 rates (z を当てた後の
+    率。Poisson の族でない法則は None)・物語の対応 correspondence・知る対象への写像 knowledge_targets (「解決した率の表の識別 /
+    元の知る対象」。部品 0 個なら元の知る対象)・要る参照 references。"""
+    id: str
+    states: tuple[str, ...]
+    prior: tuple[_Fraction, ...]
+    rates: tuple[_Fraction, ...] | None
+    correspondence: tuple[tuple[str, str], ...]
+    knowledge_targets: tuple[str, ...]
+    references: frozenset[Point]
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class ResolvedBeliefPool:
+    """`resolve_belief_candidates` の答え: 並びのモデルの document (ホストが保存した並びのモデルの document と同じ)・候補の記述の
+    列 candidates (並びの順)・要る参照 references。"""
+    document: ImmutableJSON
+    candidates: tuple[ResolvedCandidate, ...]
+    references: frozenset[Point]
+
+
+def resolve_belief_candidates(declaration: Point, *, reader, registry: FRegistry) -> ResolvedBeliefPool:
+    """保存した起動の宣言か並びの記録 declaration から、候補の並びを読むだけで解く (K39 決定 8)。reader は record(Point) で記録を
+    返す読み手 (無ければ KeyError)。ホスト (`_fb_pool`) と入口 U が使う 1 か所の解決 (`f_update2.describe_candidate`) と同じ答え。
+    何も書かない。この本で読めない候補 (対応していない部品・法則) は TimeBeliefError(unsupported、名指しは候補と部品の名前)、
+    読めない記録は TimeBeliefError(unavailable / invalid)。registry は署名の互換のために受け取る (解決には使わない)。"""
+    from ._fb_time import resolve_public
+    return resolve_public(reader, declaration)
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -1507,6 +1636,23 @@ class FThreadHost:
         """正本から作り直した量の、精度 budget.tolerance 以下の幅の有理数の上下界 (K38 決定 5・P10)。"""
         from . import _fb_time
         return _fb_time.query_belief(self._state, belief, quantity, budget)
+
+    def query_switch_belief(self, *, belief: BeliefExpression, quantity: SwitchQuantity,
+                            budget: RateBudget) -> BeliefValue:
+        """スイッチと p の照会 (K39 決定 6): 候補 M に条件づけた値を、精度 budget.tolerance 以下の有理数の上下界で返す。"""
+        from . import _fb_time
+        return _fb_time.query_switch(self._state, belief, quantity, budget)
+
+    def p_distribution(self, *, belief: BeliefExpression, candidate: str, family: str,
+                       budget: RateBudget) -> BetaMixture:
+        """候補 candidate の族 family のスイッチの入る割合 p の、候補に条件づけた分布の作り直せる混合の表現 (K39 決定 6)。"""
+        from . import _fb_time
+        return _fb_time.p_distribution(self._state, belief, candidate, family, budget)
+
+    def verify_p_distribution(self, *, belief: BeliefExpression, distribution: BetaMixture) -> bool:
+        """混合の表現が信念の根から作り直した混合と同じ成分を持ち、各重みの上下界が真の値を含むか (自己申告を信じない)。"""
+        from . import _fb_time
+        return _fb_time.verify_p_distribution(self._state, belief, distribution)
 
     def query_selection(self, *, selection: Point, budget: RateBudget) -> SelectionValues:
         """選択が使った評価の値 (情報量・G・方策の確率) の保証つきの照会 (K38 決定 5)。"""

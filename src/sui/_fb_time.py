@@ -10,6 +10,11 @@ exp(−q) は異なる有理数 q で有理数の上で一次独立 (Lindemann�
 件数は減らず、列の判定は C 未満の閾値しか使わないので、その列について正確な集約。照会でもっと細かい件数が要る時は、
 正本 (法則と列) から C を上げて作り直す。一様の判定時刻の取得区間の核は、区間に n 件届いた時に判定時刻の件数が
 {k..k+n} の一様になることから、K[j,k] = P(n = j−k) · #{m ∈ [k, j] : 判定が m で成り立つ} / (n + 1)。
+
+スイッチの族 (紙 F-b K39): units は (候補, スイッチの列 z, 状態) ごとで、z を当てた後の率と P(z) を掛けた事前を持つ (枝と
+状態の対応は候補の解決 `f_update2.describe_candidate`)。z は取得ごとに引き直さない (同じ unit の率で列全体を読む)。
+スイッチと p の照会は候補 M に条件づける (`_conditional`、公開の口は `FThreadHost.query_switch_belief`・`p_distribution`・
+`verify_p_distribution`)。候補の解決の公開の口は `fb.resolve_belief_candidates` (`resolve_public`)。
 """
 
 from fractions import Fraction as _Q
@@ -365,12 +370,13 @@ def weights(spec):
 
 # --- 正本を作る (入口 U が使う) ---
 
-def unit_law(law, state):
-    """法則の状態 state の件数の法則を正本の形 (dict) にする。対応していない法則は None。"""
+def unit_law(law, state, rate=None):
+    """法則の状態 state の件数の法則を正本の形 (dict) にする。rate はスイッチを当てた後の率 (K39、None は宣言の率)。対応して
+    いない法則は None。"""
     i = law.states.index(state)
     if isinstance(law, _fb.PoissonLaw):
-        out = {"kind": "poisson", "rate": law.rates[i], "origin_ns": law.origin_ns, "time_unit": law.time_unit,
-               "initial_count": law.initial_count}
+        out = {"kind": "poisson", "rate": law.rates[i] if rate is None else rate, "origin_ns": law.origin_ns,
+               "time_unit": law.time_unit, "initial_count": law.initial_count}
     elif isinstance(law, _fb.FiniteCountLaw):
         out = {"kind": "finite", "origin_ns": law.origin_ns, "initial_count": law.initial_count,
                "positions_ns": law.positions_ns, "paths": law.paths, "weights": law.weights_by_state[i]}
@@ -381,10 +387,13 @@ def unit_law(law, state):
 
 def encode_spec(spec):
     def unit(u):
-        return {**{k: v for k, v in u.items() if k not in ("law", "prior", "failure", "disconnection")},
-                "prior": _f._encode(u["prior"]), "failure": None if u["failure"] is None else _f._encode(u["failure"]),
-                "disconnection": None if u["disconnection"] is None else _f._encode(u["disconnection"]),
-                "law": {k: _f._encode(v) for k, v in u["law"].items()}}
+        out = {**{k: v for k, v in u.items() if k not in ("law", "prior", "failure", "disconnection", "family")},
+               "prior": _f._encode(u["prior"]), "failure": None if u["failure"] is None else _f._encode(u["failure"]),
+               "disconnection": None if u["disconnection"] is None else _f._encode(u["disconnection"]),
+               "law": {k: _f._encode(v) for k, v in u["law"].items()}}
+        if "family" in u:   # スイッチの族 (K39 決定 5: 部品の辞書・p の共有範囲・a, b。枝は branch)
+            out["family"] = {**u["family"], "a": _f._encode(u["family"]["a"]), "b": _f._encode(u["family"]["b"])}
+        return out
 
     def entry(e):
         return {k: ([_f._encode(x) for x in v] if k == "factors" else v) for k, v in e.items()}
@@ -405,9 +414,12 @@ def decode_spec(value):
             out["weights"] = tuple(q(x) for x in out["weights"])
             out["paths"] = tuple(tuple(p) for p in out["paths"])
         return out
+    def family(raw):
+        return {**raw, "a": q(raw["a"]), "b": q(raw["b"])}
     units = [{**u, "prior": q(u["prior"]), "failure": None if u["failure"] is None else q(u["failure"]),
               "disconnection": None if u["disconnection"] is None else q(u["disconnection"]),
-              "law": law(u["law"])} for u in value["units"]]
+              "law": law(u["law"]), **({"family": family(u["family"])} if "family" in u else {})}
+             for u in value["units"]]
     entries = [{**e, **({"factors": [q(x) for x in e["factors"]]} if e["kind"] == "step" else {})}
                for e in value["entries"]]
     return {"units": units, "entries": entries, "terminal_ns": value["terminal_ns"]}
@@ -434,7 +446,10 @@ def _c():
 # --- 照会 (決定 5・6) ---
 
 def _quantity(spec, quantity):
-    """照会する量の (分子, 分母) の Poly。分母は証拠の質量 Z (mass は分母 1)。"""
+    """照会する量の (分子, 分母) の Poly。分母は証拠の質量 Z (mass は分母 1)。スイッチと p の照会 (SwitchQuantity) は候補に
+    条件づける (`_conditional`、K39 決定 6)。"""
+    if isinstance(quantity, _fb.SwitchQuantity):
+        return _conditional(spec, quantity)
     kind = quantity.kind
     units = spec["units"]
     if kind == "mass":
@@ -450,12 +465,93 @@ def _quantity(spec, quantity):
                  for i in keep), Poly())
         Z = sum((sum(v, Poly()).scale(u["prior"]) for u, v in zip(units, vs)), Poly())
         return n, Z
+    if kind == "state" and quantity.candidate is not None:
+        # state は周辺 P(S | h) (K39-b R3)。候補に条件づけた値は SwitchQuantity、共同の値は candidate の照会と掛けて作る
+        raise _fb.TimeBeliefError(kind="invalid", reason="a state query does not name a candidate", field="candidate",
+                                  targets=(quantity.candidate,))
     W, Z = weights(spec)
     key = {"state": "state", "candidate": "candidate"}.get(kind)
     target = quantity.state if kind == "state" else quantity.candidate
     if key is None or target not in {u[key] for u in units}:
         raise _fb.TimeBeliefError(kind="invalid", reason="unknown quantity", field=kind)
     return sum((w for w, u in zip(W, units) if u[key] == target), Poly()), Z
+
+
+def _member(spec, candidate, family):
+    """スイッチと p の照会の候補 M の units の番号と、その族 (名前・a・b・部品の辞書)。候補 M の族の名前が family と合うこと
+    (ほかの候補の同じ名前の族と 1 つにしない、K39 決定 3)。"""
+    units = spec["units"]
+    mine = [i for i, u in enumerate(units) if u["candidate"] == candidate]
+    if not mine:
+        raise _fb.TimeBeliefError(kind="invalid", reason="unknown candidate", field="candidate", targets=(candidate,))
+    found = units[mine[0]].get("family")
+    if found is None or found["name"] != family:
+        raise _fb.TimeBeliefError(kind="invalid", reason="unknown family of the candidate", field="family",
+                                  targets=(candidate, family))
+    return mine, found
+
+
+def _evidence(spec, mine, candidate):
+    """候補 M の未正規化のかたまり W_i (i ∈ M) と Z_M。Z_M が形で 0 なら条件つきの値を作らずに M を名指す (K37 決定 5。
+    並び全体の証拠 0 とは理由で分ける)。"""
+    every, _Z = weights(spec)
+    W = {i: every[i] for i in mine}
+    Z = sum(W.values(), Poly())
+    if Z.zero:
+        raise _fb.TimeBeliefError(kind="model_falsified", reason="candidate_evidence_zero", targets=(candidate,))
+    return W, Z
+
+
+def _conditional(spec, quantity):
+    """候補 M に条件づけた値の (分子, 分母) (K39 決定 6)。分母は Z_M = Σ_{z,S ∈ M} W_{z,S}。on・off は部品の名前で、スイッチの
+    列の部分的な条件。p の成分は枝 z ごとに Beta(a + |z|, b + k − |z|) で、取得の回数を足さない (決定 4)。"""
+    kind = quantity.kind
+    if kind in ("p_cdf", "p_quantile"):   # p の累積確率・分位点の保証つきの照会は後の本 (K39 (2))
+        raise _fb.TimeBeliefError(kind="unsupported", reason=kind + "_not_supported", field="kind",
+                                  targets=(quantity.candidate, quantity.family))
+    units = spec["units"]
+    mine, family = _member(spec, quantity.candidate, quantity.family)
+    names = [x[0] for x in family["parts"]]
+    a, b, k = family["a"], family["b"], len(names)
+    on, off = quantity.on, quantity.off
+    if type(on) is not tuple or type(off) is not tuple or set(on) & set(off) \
+            or any(x not in names for x in (*on, *off)) or len(set(on)) != len(on) or len(set(off)) != len(off):
+        raise _fb.TimeBeliefError(kind="invalid", reason="on and off must name distinct parts of the family",
+                                  field="on", targets=(quantity.candidate, quantity.family))
+    if (on or off) and kind not in ("switch", "state"):
+        raise _fb.TimeBeliefError(kind="invalid", reason="on and off condition only switch and state", field="on")
+    W, Z = _evidence(spec, mine, quantity.candidate)
+
+    def picked(i):   # 名指したスイッチの値に合う枝か (名指しが無ければ全部)
+        z = units[i]["branch"]
+        return all(z[names.index(x)] == 1 for x in on) and all(z[names.index(x)] == 0 for x in off)
+
+    def total(factor):
+        return sum((W[i].scale(factor(i)) for i in mine), Poly())
+
+    def ones(i):
+        return sum(units[i]["branch"])
+    if kind == "switch":
+        return total(lambda i: int(picked(i))), Z
+    if kind == "state":
+        if quantity.state not in {units[i]["state"] for i in mine}:
+            raise _fb.TimeBeliefError(kind="invalid", reason="unknown state", field="state")
+        return total(lambda i: int(picked(i) and units[i]["state"] == quantity.state)), Z
+    if kind == "mass":   # P(h | M) = Z_M / (M の起点の事前の重み)
+        return Z.scale(1 / sum((units[i]["prior"] for i in mine), _Q(0))), Poly.const(1)
+    if kind == "p_mean":
+        return total(lambda i: (a + ones(i)) / (a + b + k)), Z
+    if kind == "p_moment":
+        r = quantity.order
+        if type(r) is not int or r < 0:
+            raise _fb.TimeBeliefError(kind="invalid", reason="order must be a non-negative int", field="order")
+        return total(lambda i: _rising(a + ones(i), r) / _rising(a + b + k, r)), Z
+    raise _fb.TimeBeliefError(kind="invalid", reason="unknown quantity", field="kind")
+
+
+def _rising(x, n):
+    from .f_update2 import _rising as rising
+    return _Q(rising(x, n))
 
 
 def query(spec, root, quantity, budget):
@@ -641,6 +737,123 @@ def verify_belief_value(state, belief, value) -> bool:
     if value.exact is not None and not value.lower == value.exact == value.upper:
         return False
     return contains(spec, value.quantity, value.lower, value.upper)
+
+
+def query_switch(state, belief, quantity, budget):
+    if not isinstance(quantity, _fb.SwitchQuantity):
+        raise _fb.TimeBeliefError(kind="invalid", reason="SwitchQuantity required", field="quantity")
+    with state.lock:
+        spec = _spec(state, belief)
+    return query(spec, belief.root, quantity, budget)
+
+
+def _mixture(spec, candidate, family):
+    """p の混合の成分の形 (K39 決定 6): スイッチの列 z (辞書順) ごとに (Beta の a, b, その枝の重みの照会)。M の証拠 0 は名指し。"""
+    mine, found = _member(spec, candidate, family)
+    _evidence(spec, mine, candidate)
+    from itertools import product
+    names = [x[0] for x in found["parts"]]
+    a, b, k = found["a"], found["b"], len(names)
+    out = []
+    for z in product((0, 1), repeat=k):
+        quantity = _fb.SwitchQuantity(kind="switch", candidate=candidate, family=family,
+                                      on=tuple(x for x, bit in zip(names, z) if bit),
+                                      off=tuple(x for x, bit in zip(names, z) if not bit))
+        out.append((a + sum(z), b + k - sum(z), quantity))
+    return found, out
+
+
+def p_distribution(state, belief, candidate, family, budget):
+    """候補 M に条件づけた p の分布の作り直せる混合の表現 (K39 決定 6): 枝 z ごとの成分 Beta(a + |z|, b + k − |z|) と、その重み
+    P(z | h, M) の照会の答え (根から作り直した上下界)。"""
+    with state.lock:
+        spec = _spec(state, belief)
+    found, shapes = _mixture(spec, candidate, family)
+    return _fb.BetaMixture(
+        root=belief.root, candidate=candidate, family=family, parts=tuple(x[0] for x in found["parts"]),
+        a=found["a"], b=found["b"], components=tuple(_fb.BetaMixtureComponent(
+            a=x, b=y, weight=query(spec, belief.root, q, budget)) for x, y, q in shapes),
+        proof=_f._freeze({"components": "bit_strings", "weights": "switch_queries"}))
+
+
+def verify_p_distribution(state, belief, distribution) -> bool:
+    """混合の表現が根から作り直した混合と同じ候補・族・部品の辞書・a, b・成分の形と重みの照会を持ち、各重みの上下界が真の値を
+    含むか (保存した重みの自己申告を信じない)。"""
+    if not isinstance(distribution, _fb.BetaMixture) or distribution.root != belief.root:
+        return False
+    with state.lock:
+        try:
+            spec = _spec(state, belief)
+            found, shapes = _mixture(spec, distribution.candidate, distribution.family)
+        except _fb.TimeBeliefError:
+            return False
+    if distribution.parts != tuple(x[0] for x in found["parts"]) or (distribution.a, distribution.b) != (
+            found["a"], found["b"]) or len(distribution.components) != len(shapes):
+        return False
+    for component, (x, y, q) in zip(distribution.components, shapes):
+        w = component.weight
+        if (component.a, component.b) != (x, y) or not isinstance(w, _fb.BeliefValue) or w.root != belief.root \
+                or w.quantity != q or not (isinstance(w.lower, _Q) and isinstance(w.upper, _Q)) \
+                or w.exact is not None and not w.lower == w.exact == w.upper or not contains(spec, q, w.lower, w.upper):
+            return False
+    return True
+
+
+def resolve_public(reader, declaration):
+    """`fb.resolve_belief_candidates` の中身 (K39 決定 8): 起動の宣言か並びの記録から、ホストと入口 U と同じ候補の解決で並びを
+    読むだけで解く。読めない候補は名指して断る。"""
+    from . import f_update2 as u
+    c = _c()
+    try:
+        record = reader.record(declaration)
+    except (KeyError, TypeError):
+        raise _fb.TimeBeliefError(kind="unavailable", reason="unresolved_reference", targets=(declaration,)) from None
+    try:
+        if record.body.contract == c.BOOT_DECLARATION:
+            members = [u.initial_candidate(reader, declaration)]
+            document = members[0]["document"]
+        elif record.body.contract == c.BELIEF_POOL:
+            _content, members = u.pool_candidates(reader, declaration)
+            document = u.direct_sum(members)
+        else:
+            raise _fb.TimeBeliefError(kind="invalid", reason="reference_kind", targets=(declaration,))
+    except u.Unresolved as exc:   # 候補の解決の名指しの不足 (K39-b R1)
+        raise unresolved_error(exc) from None
+    except u._Issue as issue:
+        raise _fb.TimeBeliefError(kind="unavailable" if issue.code == "unresolved_reference" else "invalid",
+                                  reason=issue.code,
+                                  targets=tuple(sorted(x for x in issue.evidence if isinstance(x, str)))) from None
+    except ValueError as exc:   # 直和のモデルに表せない (`direct_sum`)
+        raise _fb.TimeBeliefError(kind="invalid", reason="pool:" + str(exc), targets=(declaration,)) from None
+    out = [_resolved(m) for m in members]
+    references = frozenset().union(*(x.references for x in out))
+    return _fb.ResolvedBeliefPool(document=_f._freeze(document), candidates=tuple(out), references=references)
+
+
+def unresolved_error(exc):
+    """候補の解決の名指しの不足 (`f_update2.Unresolved`) を公開の答えにする (公開の解決の口と候補を足す口が同じこれを使う):
+    この本が対応していない宣言は unsupported、対応・モデルの形の誤りは invalid。名指しは候補と部品の名前。"""
+    return _fb.TimeBeliefError(kind="unsupported" if exc.code == "missing_contract" else "invalid",
+                               reason=exc.reason, targets=exc.named, field=exc.field)
+
+
+def _resolved(member):
+    """候補の記述の公開の形 (`fb.ResolvedCandidate`)。対応は候補の解決が確かめた phi (入口 U と同じ、K39-b R4) で、率を展開した
+    状態の順に並べる。観測の見込みを読まない候補 (区間の札の δ) は対応が空。"""
+    from .f import _Fraction, _decode
+    document = member["document"]
+    states = document["states"]
+    rates = None
+    if member["computation"] == "poisson":
+        law_state = {j: a for a, j in enumerate(member["phi"])}   # 宣言のモデルの状態の番号 → 法則の状態の番号
+        rates = tuple(branch["rates"][law_state[j]] for branch in member["branches"]
+                      for j in range(len(member["base"]["states"])))
+    pairs = member["pairs"] if member["phi"] is not None else []
+    return _fb.ResolvedCandidate(
+        id=member["id"], states=tuple(s["id"] for s in states),
+        prior=_decode(document["initial"], tuple[_Fraction, ...]), rates=rates,
+        correspondence=tuple(tuple(x) for x in pairs), knowledge_targets=tuple(s["target"] for s in states),
+        references=frozenset(member["references"]))
 
 
 def same_belief(state, left, right) -> bool:

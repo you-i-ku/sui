@@ -35,6 +35,23 @@ class AcquisitionFaultRig(AcquisitionLoopRig):
                     capacity=fb.QuantityValue(contract=c.SEATS, value=capacity)))
         super().__init__(continuation=True, before_host=install, defer_boot=True, **kwargs)
         self.hold_return = True
+        self.return_waiting, self.return_released = [], []
+
+    def hold_acquire_return(self, call):
+        """An intentional phase barrier, released by publish_operation/close.
+
+        Its lifetime includes arbitrary host evaluation/storage work. A wall
+        timeout here turns slow correct work into a worker exception. The
+        source/start/join watchdogs still diagnose failures to reach a phase;
+        AcquireRig.close always sets return_release before joining workers.
+        """
+        with self.changed:
+            self.return_waiting.append(call.sequence)
+            self.changed.notify_all()
+        self.return_release.wait()
+        with self.changed:
+            self.return_released.append(call.sequence)
+            self.changed.notify_all()
 
     def publish_operation(self, index):
         """Release only the source. Production code calls the actual acquire()."""

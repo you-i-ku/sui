@@ -25,7 +25,7 @@ from .records import Decided as _Decided, Observed as _Observed, Payload as _Pay
 
 @_dataclass(frozen=True)
 class Pool:
-    """解いた並び。members は候補ごとの {id, model, document, observation, pairs, weight, law, offset, size} (並びの順)。
+    """解いた並び。members は候補ごとの記述 (`f_update2.describe_candidate` の値に offset を足したもの、並びの順)。
     route は並びの観測を読む口 (感じる側の δ が名指す口の宣言の位置。どの候補の観測モデルもこの口のもの、K37 決定 6)、
     lineage は前の並びのモデル (古い順)、records は要求の入力に入れる並びとその参照の閉包 (`_closure`)、decision は
     足した決定 (最初の並びは None)。"""
@@ -44,7 +44,6 @@ class Pool:
 
 
 # 並びの候補の観測の見込みの型 (有限の核 K26 / 時刻を読む K38)。どちらで読むかは感じる側の δ が決める
-_OBSERVATION = _fb.AcquisitionObservationModel | _fb.TimedAcquisitionModel
 _KINDS = {_c.SAVED_ACQUISITION_UPDATE: _fb.AcquisitionObservationModel,
           _c.SAVED_TIMED_ACQUISITION_UPDATE: _fb.TimedAcquisitionModel}
 
@@ -75,36 +74,51 @@ def _seen(state, boundary):
         raise _fb.CandidateInputError(reason="boundary", field="/boundary") from None
 
 
-def initial_model(declaration):
-    """最初の並びのモデル = 起動の宣言の感じる側のモデル (K36 新しい決定 2)。起動の宣言から並びのモデルを読むのはここだけ
-    (今効いている並びは `resolve`、最初の並びは `initial_pool` がこれを使う)。"""
-    return declaration.perception.value.model
+DERIVED = "perception_model"   # 起動の計画の歩の名前: 最初の候補を展開した派生のモデル (K39 決定 8)
+
+
+def boot_shortfall(ledger, d):
+    """起動の宣言 d の最初の候補を候補の解決で解く (K39 決定 8・K39-b R1)。(候補の記述, None) か、解けなければ (None, 起動の
+    計画の不足の語)。不足の語は "perception:candidate:<理由の語>:<名指し>..."。起動の計画はこれを、感じる側・考える側・
+    一歩のどれより先に示す (派生のモデル・読み手を作らない)。"""
+    try:
+        return _u.initial_candidate(ledger, d), None
+    except _u.Unresolved as exc:
+        return None, ":".join(("perception:candidate", exc.reason, *exc.named))
+    except _u._Issue as issue:
+        return None, "perception:candidate:" + issue.code
+
+
+def initial_model(plan):
+    """最初の並びのモデル (K36 新しい決定 2・K39 決定 8): 起動の計画が派生のモデルを保存する歩を持てばその記録、無ければ起動の
+    宣言の感じる側のモデル。並びのモデルを起動から読むのはここだけ (今効いている並びは `resolve`、最初の並びは
+    `initial_pool` がこれを使う)。派生のモデルの歩がまだ保存されていなければ KeyError (宣言のモデルへ黙って戻らない)。"""
+    if any(step.name == DERIVED for step in plan.steps):
+        return plan.points[DERIVED]
+    return plan.declaration.perception.value.model
 
 
 def initial_pool(state, boot) -> Pool:
-    """最初の並び = 起動の宣言の 1 枚 (候補が 1 つ)。点は起動の宣言、モデルは感じる側のモデル、読み手は起動の origin。
-    保存済みの起動の宣言とモデルだけから決まる不変の値なので、起動ごとに 1 回だけ作る。"""
+    """最初の並び = 起動の宣言の 1 枚 (候補が 1 つ)。候補は保存した起動の宣言から候補の解決 (`f_update2.initial_candidate`、
+    入口 U と同じ 1 か所、K39 決定 8) で作る。点は起動の宣言、モデルは `initial_model`、読み手は起動の origin。保存済みの
+    記録だけから決まる不変の値なので、起動ごとに 1 回だけ作る。"""
     known = state.initial_pools.get(boot.d)
     if known is not None:
         return known
-    perception = boot.declaration.perception
-    args = _u._json(perception.value.derivation.method.args)
-    args = args if isinstance(args, dict) else {}
-    models = {m.slot: m.value for m in boot.declaration.observation_models}
-    slot = args.get("observation_model")
-    observation = models.get(slot) if isinstance(slot, str) else None   # 名指せない宣言は起動の計画が不足として示す
-    correspondence = args.get("correspondence")
-    pairs = correspondence.get("pairs") if isinstance(correspondence, dict) else None
-    model = initial_model(boot.declaration)
-    document = _read(state, model)["document"]
-    member = {"id": perception.slot, "model": model, "document": document, "observation": observation,
-              "pairs": pairs, "weight": _Fraction(1), "law": _u.candidate_law(document, observation, pairs),
-              "offset": 0, "size": len(document["states"])}
-    route = args.get("route")
+    member, missing = boot_shortfall(state.ledger, boot.d)
+    if member is None:   # 起動の計画が不足として示した宣言 (origin を作らないので、ふつうはここへ来ない)
+        raise _fb.CandidatePoolError(reason=missing, targets=(boot.d,), retryable=False)
+    args = _u._json(boot.declaration.perception.value.derivation.method.args)
+    route = args.get("route") if isinstance(args, dict) else None
+    model = initial_model(boot)
     pool = Pool(point=boot.d, model=model, origin=boot.points["origin"], route=route if isinstance(route, str) else None,
-                members=(member,), lineage=(), records=frozenset({model}), decision=None)
+                members=(member,), lineage=(), records=frozenset({model}) | member["references"], decision=None)
     state.initial_pools[boot.d] = pool
     return pool
+
+
+def _reason(issue) -> str:
+    return "unreadable_record" if issue.code == "unresolved_reference" else issue.code
 
 
 def resolve(state, boot, boundary) -> Pool:
@@ -125,16 +139,11 @@ def resolve(state, boot, boundary) -> Pool:
         current = decisions[kids[0]]["pool"]
     if not chain:
         return initial_pool(state, boot)
-    content = _read(state, current)
-    members, offset = [], 0
-    for value in content["members"]:
-        document = _read(state, value["model"])["document"]
-        members.append({"id": value["id"], "model": value["model"], "document": document,
-                        "observation": _f._decode(value["observation_model"], _OBSERVATION),
-                        "pairs": value["correspondence"]["pairs"],
-                        "weight": _f._decode(value["prior_weight"], _f._Fraction), "law": value["law"],
-                        "offset": offset, "size": len(document["states"])})
-        offset += len(document["states"])
+    try:   # 入口 U の `_pools` と同じ候補の解決 (K39 決定 8)
+        content, members = _u.pool_candidates(state.ledger, current)
+    except _u._Issue as issue:
+        raise _fb.CandidatePoolError(reason=_reason(issue), targets=tuple(sorted(x for x in issue.evidence if isinstance(x, str))) or (current,),
+                                     retryable=False) from None
     return Pool(point=current, model=content["model"], origin=content["origin"], route=content["route"],
                 members=tuple(members), lineage=tuple(content["lineage"]),
                 records=_closure(state, chain, decisions), decision=chain[-1])
@@ -247,7 +256,8 @@ def _candidate(state, candidate, kind):
 
 def add(state, boot, candidate, alpha, boundary):
     """候補を 1 つ足す (K37 決定 2・3・8)。入力 (α・候補の形・境目) を先に全部確かめ、合わなければ何も保存せずに
-    CandidateInputError。境目で前の並びを解き (解けなければ CandidatePoolError)、新しい並びの直和のモデルを作れる時だけ、
+    CandidateInputError。足す候補が候補の解決で解けなければ TimeBeliefError (名指し、`_fb_time.unresolved_error`)。
+    境目で前の並びを解き (解けなければ CandidatePoolError)、新しい並びの直和のモデルを作れる時だけ、
     候補の記録 → 直和のモデル → 読み手 → 並びの記録 → 足した決定 を 1 点ずつ保存する。足したことは観測に数えない
     (見立ての作り直しは更新の計画が足した決定をきっかけに行う)。"""
     alpha = _alpha(alpha)
@@ -262,10 +272,13 @@ def add(state, boot, candidate, alpha, boundary):
         previous = resolve(state, plan, seen_boundary)
         if candidate.id in {m["id"] for m in previous.members}:
             raise _fb.CandidateInputError(reason="candidate_id", field="/candidate/id")
-        law = _u.candidate_law(document, candidate.observation_model, pairs)
         members = [{**m, "weight": m["weight"] * (1 - alpha)} for m in previous.members]
-        members.append({"id": candidate.id, "model": candidate.model, "document": document,
-                        "observation": candidate.observation_model, "pairs": pairs, "weight": alpha, "law": law})
+        try:   # 足す候補も同じ候補の解決で解く。解けなければ名指して何も保存しない (K39 決定 8・K39-b R1)
+            members.append(_u.describe_candidate(id=candidate.id, model=candidate.model, document=document,
+                                                 observation=candidate.observation_model, pairs=pairs, weight=alpha))
+        except _u.Unresolved as exc:   # 公開の解決の口と同じ名指し (何も保存しない)
+            from ._fb_time import unresolved_error
+            raise unresolved_error(exc) from None
         try:
             model_document = _u.direct_sum(members)
             from .f_model import f_model11_from_json
