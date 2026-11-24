@@ -823,7 +823,7 @@ def direct_sum(members) -> dict:
 # 照らす。候補の間の法則の一致は、ここが返す計算の種類 (computation) と測定の条件 (measurement) で確かめる (Python の型で
 # 確かめない)。
 
-_PART_KINDS = ("mood", "inert")   # この本が読める部品の種類 (倍率が何を読むか: 調子 S / 何も読まない、K39 決定 1)
+_PART_KINDS = ("mood", "inert", "clock")   # この本が読める部品の種類 (倍率が何を読むか: 調子 S / 何も読まない / 時計の位置、K39 決定 1・K40 決定 1)
 
 
 def _rising(x, n):
@@ -854,7 +854,8 @@ def describe_candidate(*, id, model, document, observation, pairs, weight) -> di
     weight・law (候補の法則の識別、`candidate_law`)・computation (計算の種類: "finite_kernel" (K26 の有限の核) / "poisson"
     (固定の Poisson 源とスイッチの族) / "finite_count" (有限の法則の時刻つきの例) / None (観測の見込みを読まない候補))・
     measurement (時刻を読む候補の測定の条件)・family (族の名前・a・b・部品の辞書)・branches (スイッチの列 z ごとの事前 P(z)・
-    法則の状態ごとの率・率の表の識別、展開の順)・size (展開した状態の数)・references (要る参照: 候補のモデル。宣言の記録は
+    法則の状態ごとの率・率の表の識別、展開の順。時計の部品のオンの z は周期の候補ごとの枝に分かれ、事前は P(z)·π_T、時計の形
+    clock を持つ。オフの枝の clock は None、K40)・size (展開した状態の数)・references (要る参照: 候補のモデル。宣言の記録は
     読む側が足す)。
 
     法則の形は 1 つ (決定 1・K39-b R2): PoissonLaw の family が None なら部品 0 個・p を宣言しない族 (K38)。"""
@@ -896,6 +897,13 @@ def describe_candidate(*, id, model, document, observation, pairs, weight) -> di
         raise Unresolved("mood_role", (id, *moods), "/observation_model/law/state_role", "missing_contract")
     if moods and len(set(law.rates)) > 1:
         raise Unresolved("mood_base_rate", (id, *moods), "/observation_model/law/rates", "missing_contract")
+    # 時計の部品 (K40 決定 1): 族に高々 1 つ。S を読まない。オンの枝は周期の候補ごとに分かれる (区切りの数・周期の候補は
+    # k や |z| に足さない、決定 5)
+    clocks = tuple(x for x in parts if x.kind == "clock")
+    if len(clocks) > 1:
+        raise Unresolved("clock_parts", (id, *(x.id for x in clocks)), "/observation_model/law/parts", "missing_contract")
+    choices, material = _clock_choices(id, clocks[0]) if clocks else ((), None)
+    on = parts.index(clocks[0]) if clocks else None
     from itertools import product
     from .f import _digest
     k = len(parts)
@@ -903,14 +911,21 @@ def describe_candidate(*, id, model, document, observation, pairs, weight) -> di
     for z in product((0, 1), repeat=k):
         m = sum(z)
         rates = tuple(rate * _multiplier(parts, z, i) for i, rate in enumerate(law.rates))
-        table = _digest({"domain": "sui.fb.rate_table/1",
-                         "rates": [[s, _enc(r)] for s, r in sorted(zip(law.states, rates))]})
-        branches.append({"z": z, "label": "z=" + "".join(map(str, z)),
-                         "prior": _rising(law.a, m) * _rising(law.b, k - m) / _rising(law.a + law.b, k) if k
-                         else Fraction(1), "rates": rates, "table": table})
+        pz = _rising(law.a, m) * _rising(law.b, k - m) / _rising(law.a + law.b, k) if k else Fraction(1)
+        for weight, clock, suffix in (choices if on is not None and z[on] else ((1, None, ""),)):
+            # 知る対象 (決定 8): 時計とスイッチを当てた後の、時刻と状態ごとの率の関数。時計の形は正準な形で比べ、効かない時計
+            # (f = w) は時計の無い法則と同じ識別になる
+            shape = None if clock is None else _clock_law(clock)
+            table = _digest({"domain": "sui.fb.rate_table/1",
+                             "rates": [[s, _enc(r)] for s, r in sorted(zip(law.states, rates))],
+                             **({} if shape is None else {"clock": _enc(shape)})})
+            branches.append({"z": z, "label": "z=" + "".join(map(str, z)) + suffix,
+                             "prior": pz * weight, "rates": rates, "clock": clock, "table": table})
     out["branches"] = branches
     if law.family is not None:
         out["family"] = {"name": law.family, "a": law.a, "b": law.b, "parts": [[x.id, x.kind] for x in parts]}
+        if clocks:   # 時計の照会の材料 (K40 決定 15): 周期・区切りの数の宣言の候補と事前 (時計のオフの枝にも潜在として在る)
+            out["family"]["clock"] = material
     if k:   # (z, S) に展開: 枝ごとに宣言のモデルの写しを、事前 P(z) と率の表の識別で直和に並べる (状態を変えない核は I_z ⊗ K)
         try:
             out["document"] = direct_sum([{"id": x["label"], "document": document, "weight": x["prior"], "law": x["table"]}
@@ -944,6 +959,96 @@ def pairs_shape(pairs) -> bool:
     R2)。形の誤りは起動の δ の hold (`delta:correspondence`) が名指し、中身 (1 対 1) は候補の解決 (`_phi`) が名指す。"""
     return isinstance(pairs, list) and all(
         isinstance(x, list) and len(x) == 2 and all(isinstance(y, str) for y in x) for x in pairs)
+
+
+def _clock_choices(id, part):
+    """時計の部品の宣言 (`fb.SwitchPart` の clock = `fb.ClockPrior`) を確かめ、時計のオンの枝の (事前の重み π_T · π_m, 時計の形,
+    枝の名前の添え字) の列と、時計の照会の材料 (部品の名前・周期と区切りの数の候補と事前、K40 決定 15) に解く (K40 決定 1・2・4)。
+    周期の候補 × 区切りの数 m ごとに、ρ・w・f が全部点の事前なら点の形 {"period", "starts", "multipliers"}
+    (`_fb_clock.point_shape`)、どれかが連続の事前なら連続の形 {"period", "segments", "rotation" (None は一様),
+    "widths"・"width_concentration", "shares"・"share_concentration"} (θ は正本の積分で読む、決定 5・7)。値の誤りは invalid
+    (shape)、この本が読めない宣言 (状態を読む時計・因子の積の外の依存・知らない形の種類) は unsupported (missing_contract)。
+    名指しは候補と部品の名前。"""
+    from collections.abc import Mapping
+    from fractions import Fraction
+    from ._fb_clock import point_shape
+    prior, named, field = part.clock, (id, part.id), "/observation_model/law/parts"
+
+    def fail(reason, code="shape"):
+        raise Unresolved(reason, named, field, code)
+
+    def number(x, positive=True):
+        return type(x) is Fraction and (x > 0 if positive else x >= 0)
+
+    def candidates(pairs, admissible):   # ((値, 事前の重み), …): 値は異なり、重みは正で和 1
+        if type(pairs) is not tuple or not pairs or any(
+                type(p) is not tuple or len(p) != 2 or not admissible(p[0]) or not number(p[1]) for p in pairs) \
+                or len({p[0] for p in pairs}) != len(pairs) or sum(p[1] for p in pairs) != 1:
+            fail("clock_candidates")
+        return pairs
+
+    def declared(value, kinds):   # 形の宣言 {"kind", 欄}: 知らない種類は対応していない
+        if not isinstance(value, Mapping) or value.get("kind") not in kinds:
+            fail("clock_shape_kind", "missing_contract")
+        if set(value) != {"kind", *kinds[value["kind"]]}:
+            fail("clock_shape")
+        return value["kind"], next((value[k] for k in kinds[value["kind"]]), None)
+
+    def simplex(value, continuous):   # 点 → ({m: (値, …)}, None)、連続 → (None, 集中度)
+        kind, x = declared(value, {"point": ("values",), continuous: ("concentration",)})
+        if kind != "point":
+            if not number(x):
+                fail("clock_concentration")
+            return None, x
+        if type(x) is not tuple or any(type(p) is not tuple or len(p) != 2 or type(p[0]) is not int for p in x) \
+                or len(dict(x)) != len(x) or set(dict(x)) != set(counts) or any(
+                type(v) is not tuple or len(v) != m or not all(number(y) for y in v) or sum(v) != 1 for m, v in x):
+            fail("clock_point")
+        return dict(x), None
+    if part.multipliers:   # 時計の部品は状態 S を読まない (決定 1)
+        fail("clock_reads_state", "missing_contract")
+    if prior.couplings:    # 共同の事前は宣言した因子の積だけ (決定 4)
+        fail("clock_coupling", "missing_contract")
+    if type(prior.max_segments) is not int or prior.max_segments < 2:
+        fail("clock_segments")
+    periods = candidates(prior.periods, number)
+    segments = candidates(prior.segments, lambda m: type(m) is int and 2 <= m <= prior.max_segments)
+    counts = [m for m, _w in segments]
+    kind, rho = declared(prior.phase, {"uniform": (), "point": ("value",)})
+    if kind == "point" and not (number(rho, positive=False) and rho < 1):
+        fail("clock_phase")
+    widths, kw = simplex(prior.widths, "symmetric_dirichlet")
+    shares, kf = simplex(prior.fractions, "conditional_dirichlet")
+    choices = []
+    for t, (period, pt) in enumerate(periods):
+        for m, pm in segments:
+            w, f = (None if x is None else x[m] for x in (widths, shares))
+            shape = point_shape(period, rho, w, f) if rho is not None and w is not None and f is not None else {
+                "period": period, "segments": m, "rotation": rho, "widths": None if w is None else list(w),
+                "width_concentration": kw, "shares": None if f is None else list(f), "share_concentration": kf}
+            choices.append((pt * pm, shape, ";T=" + str(t) + ";m=" + str(m)))
+    return tuple(choices), {"part": part.id, "periods": [p for p, _w in periods],
+                            "period_weights": [w for _p, w in periods], "segments": counts,
+                            "segment_weights": [w for _m, w in segments]}
+
+
+def _clock_law(clock):
+    """時計の形の正準な形 (K40 決定 8): 区切りの番号・回転の取り方・同じ高さの隣の区切り・短い周期を長い周期で書いた別名で
+    変わらない、起点からの経過時間の関数の表し方。最小の周期 P と、[0, P) の中の高さの変わり目 (時刻, 倍率) の列。全部の区切りで
+    倍率 1 (f = w) なら None (時計の無い法則と同じ)。連続の事前の枝 (θ を積分する) は、周期・区切りの数・事前の宣言そのものを
+    識別にする (知る対象は θ の関数で、考える側への写像は決定 8・12。率の表の識別はこの枝の族を名指すだけ)。"""
+    from fractions import Fraction
+    if "segments" in clock:
+        return {"family": clock}
+    pairs = list(zip(clock["starts"], clock["multipliers"]))
+    changes = [p for i, p in enumerate(pairs) if p[1] != pairs[i - 1][1]]   # 円の上で前と同じ高さの始まりは境目でない
+    if not changes:   # 1 つの高さ: 平均が 1 なので倍率 1 (決定 3)
+        return None
+    n, period = len(changes), clock["period"]
+    k = max(k for k in range(1, n + 1)
+            if n % k == 0 and sorted(((s + Fraction(1, k)) % 1, r) for s, r in changes) == sorted(changes))
+    least = period / k
+    return {"period": least, "changes": sorted({((s * period) % least, r) for s, r in changes})}
 
 
 def _multiplier(parts, z, i):
@@ -1535,7 +1640,8 @@ def _timed_units(state, members, evidence):
             for a, name in enumerate(declaration.law.states):
                 j = member["offset"] + b * len(states) + phi[a]   # 展開の順: 枝ごとに宣言のモデルの状態の順 (`direct_sum`)
                 unit = {"index": j, "candidate": member["id"], "state": states[phi[a]]["id"], "prior": state.joint[j],
-                        "law": _fb_time.unit_law(declaration.law, name, None if branch is None else branch["rates"][a]),
+                        "law": _fb_time.unit_law(declaration.law, name, None if branch is None else branch["rates"][a],
+                                                 None if branch is None else branch["clock"]),
                         "failure": None if declaration.failure is None
                         else declaration.failure.unavailable_probability,
                         "disconnection": None if declaration.disconnection is None

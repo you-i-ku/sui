@@ -481,6 +481,28 @@ class _FiniteWork:
     def target(self, joint):
         return tuple(sum((p for p, s in zip(joint, self.data["states"]) if s["target"] == t), _Fraction(0)) for t in self.targets)
 
+    def information(self, joint, cells):
+        """一歩の観測 Y の情報量 I(Q; Y | h) (紙 F-b K40 決定 8)。cells は Y の類ごとの正規化しない共同の信念。評価器はこの 1 つ:
+        知る対象の分布が θ に依る信念 (時計の連続の事前) は `_fb_time.information` が H(Y | h) − E[H(Y | Q, h)] を直接作り、
+        そう言えない時 (None) は有限の重みの形 H(Q) − Σ_y P(y) H(Q | y) が同じ値 (特別な場合)。"""
+        from ._fb_time import information
+        value = information(tuple(s["target"] for s in self.data["states"]), cells)
+        if value is not None:
+            return value
+        projected = []
+        for joint_y in cells:
+            mass = sum(joint_y)
+            if mass:
+                projected.append(_mul(_r(mass), _entropy(self.target(tuple(q/mass for q in joint_y)))))
+        return _add(_entropy(self.target(joint)), _neg(_add(*projected)))
+
+    def finite_targets(self, joint):
+        """知る対象の周辺 (有限の重み) だけを持つ道 (路の表・尾の確かめ・吸収) の入口: 知る対象の分布が θ に依る信念は、その道では
+        I(Q; Y | h) を作れないので名指して止まる (評価は `information` の再帰の道で行う)。"""
+        from ._fb_time import lumped
+        if lumped(tuple(s["target"] for s in self.data["states"]), joint):
+            raise FSpecificationMissing("missing_contract", "clock_information_needs_recursive_evaluation")
+
     def state(self, candidate):
         operation = self.operation_for(candidate)
         p = self.world.operation_policies[operation.id]
@@ -654,21 +676,17 @@ class _FiniteWork:
         # Sum the unnormalized kernels in each evidence cell before conditioning.
         immediate = _r(0)
         if not (self.root.scope.name == "finite_horizon" and all(pos.elapsed_ns+o.elapsed_ns > self.root.scope.H_ns for o in kernel.outcomes)):
-            projected = []
             evidence_cells = {}
             for outcome in kernel.outcomes:
                 evidence_cells.setdefault(_dumps(outcome.evidence), []).append(outcome)
-            for outcomes in evidence_cells.values():
-                joint = tuple(sum(o.matrix[i][j]*state.joint[j] for o in outcomes for j in range(len(state.joint))) for i in range(len(state.joint)))
-                mass = sum(joint)
-                if mass:
-                    projected.append(_mul(_r(mass), _entropy(self.target(tuple(q/mass for q in joint)))))
-            immediate = _add(_entropy(self.target(state.joint)), _neg(_add(*projected)))
+            immediate = self.information(state.joint, [tuple(sum(o.matrix[i][j]*state.joint[j] for o in outcomes for j in range(len(state.joint))) for i in range(len(state.joint)))
+                                                       for outcomes in evidence_cells.values()])
         return _WalkValue(_add(*(_mul(_r(m), v.cost) for m, v in transitions)),
             _add(immediate, *(_mul(_r(m), v.information) for m, v in transitions)),
             tuple(_Leaf(_mul(_r(m), leaf.mass), leaf.state, leaf.kind) for m, v in transitions for leaf in v.leaves))
 
     def table(self, *, steps=None):
+        self.finite_targets(self.initial_joint)
         rows, frontier, residual, values = [], [], [], []
         for candidate in self.root.candidates.candidates:
             value = self.walk(self.state(candidate), candidate.id, steps=steps)
@@ -767,6 +785,7 @@ def _fixed_absorption(work, state, operation):
     """
     if work.root.preferences:
         raise FIncomplete("cost_certificate", "infinite total cost not proved")
+    work.finite_targets(state.joint)
     policy = work.policies[state.position.policy]
     node = next(n for n in policy.nodes if n.id == state.position.node)
     if isinstance(node, EndNode):

@@ -72,7 +72,7 @@ def test_impl39_unresolvable_boot_candidate_is_a_boot_shortfall_before_thinking(
     """K39-b R1・R4: 起動の宣言の候補が解けなければ、起動の計画の不足として示し、考える・更新・一歩へ進まない。"""
     rates = (Q(1), Q(2)) if case == "base_rate" else (Q(1), Q(1))
     parts = {"two_moods": (mood(), mood((Q(1), Q(3)), name="d")),
-             "unknown_kind": (fb.SwitchPart(id="clock", kind="clock", multipliers=(Q(1), Q(1))),)}.get(case, (mood(),))
+             "unknown_kind": (fb.SwitchPart(id="weather", kind="weather", multipliers=(Q(1), Q(1))),)}.get(case, (mood(),))
     role = {"no_role": None, "unknown_role": "weather"}.get(case, "mood")
     r = rig(script((1, 1, E)), rates=rates, parts=parts, role=role, thinking=True)
     if case == "pairs":

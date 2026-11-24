@@ -165,13 +165,26 @@ class Unavailable:
 class ExactReal:
     """F-a で検査する: op 別の厳密式、log の正の引数、非零分母。
     現状の全引数を採用。無関係な引数は None のみで JSON に出さない。
-    rational は Fraction を既約Rへ符号化。0 log 0 は式を作らず寄与0。"""
-    op: _Literal["rational", "log", "exp", "add", "mul", "neg", "div"]
+    rational は Fraction を既約Rへ符号化。0 log 0 は式を作らず寄与0。
+    integral は F-b K40 決定 12 の版つきの積分の式 (formula は正準な JSON の文字列: 版・法則・事前・全原記録の参照・条件・求める
+    量を値で名指す)。値は固定の読み手 (`_fb_time.enclose_integral`) が式から作り直して予算つきで上下界に包む。"""
+    op: _Literal["rational", "log", "exp", "add", "mul", "neg", "div", "integral"]
     value: _Fraction | None = None
     arg: ExactReal | None = None
     args: tuple[ExactReal, ...] | None = None
     numerator: ExactReal | None = None
     denominator: ExactReal | None = None
+    formula: str | None = None
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class ExactComparison:
+    """2 つの厳密式の比較 (F-b K40 決定 12 の 4 つの区別、`compare_exact`): structural = 構造から証明した 0・正負 / identity =
+    証明済みの恒等式 (同じ正準な式) / separated = 数値の上下界で分けた大小 / unproved = 予算の中で分けられない。order は
+    左 − 右 の符号 (−1・0・1、unproved は None)、proof は証明の控え (unproved は None)。"""
+    kind: _Literal["structural", "identity", "separated", "unproved"]
+    order: int | None
+    proof: ImmutableJSON | None
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -2710,11 +2723,12 @@ def _encode(value):
     if isinstance(value, ExactReal):
         fields = {"rational": ("value",), "log": ("arg",), "exp": ("arg",),
                   "neg": ("arg",), "add": ("args",), "mul": ("args",),
-                  "div": ("numerator", "denominator")}
+                  "div": ("numerator", "denominator"), "integral": ("formula",)}
         if value.op not in fields:
             raise FInputError("shape", "unknown ExactReal op")
         used = fields[value.op]
-        if any(getattr(value, k) is not None for k in ("value", "arg", "args", "numerator", "denominator") if k not in used):
+        if any(getattr(value, k) is not None for k in ("value", "arg", "args", "numerator", "denominator", "formula")
+               if k not in used):
             raise FInputError("shape", "extraneous ExactReal argument")
         return {"op": value.op, **{k: _encode(getattr(value, k)) for k in used}}
     if _is_dataclass(value):
@@ -2891,7 +2905,7 @@ def _decode(value, typ, field=""):
         if not isinstance(value, _Mapping) or "op" not in value:
             raise FInputError("shape", field=field)
         op = value["op"]
-        names = {"rational": ("value",), "log": ("arg",), "exp": ("arg",), "neg": ("arg",), "add": ("args",), "mul": ("args",), "div": ("numerator", "denominator")}
+        names = {"rational": ("value",), "log": ("arg",), "exp": ("arg",), "neg": ("arg",), "add": ("args",), "mul": ("args",), "div": ("numerator", "denominator"), "integral": ("formula",)}
         if op not in names:
             raise FInputError("shape", field=field)
         _keys(value, ("op",) + names[op], field)
@@ -3196,7 +3210,7 @@ def _builtin_dispatch(kind, ref):
                         work.walk(work.state(candidate), candidate.id)
                 evidence["preferences"] = _encode(root.preferences)
             else:
-                evidence["targets"] = work.targets
+                proved = _state_reading_bound(work, evidence)
             return _encode(ProofCheck(status="proved" if proved else "incomplete",
                 reason=None if proved else "certificate_incomplete",
                 evidence=(ContractValue(contract=ref, value=evidence),), missing=()))
@@ -3206,6 +3220,20 @@ def _builtin_dispatch(kind, ref):
             return _encode(certify_f_limit(problem,budget=context.budget))
         raise FIncomplete("certificate_incomplete", "checker unavailable: " + name)
     return invoke
+
+
+def _state_reading_bound(work, evidence):
+    """static_target_entropy_bound の証明 (紙 F-b K40-i): 評価する知る対象 Q (時計の θ を持つ連続の類でもよい、K40 決定 8) について、
+    一歩の結果の核が有限の状態 S の上の θ を持たない有理数の行列 (結果は S だけを読む、K38・K40 決定 9 の非干渉) なら
+    Y ⟂ Q | S で、データ処理の不等式から I(Q; Y | h) ≤ I(S; Y | h) ≤ H(S | h) ≤ log |S| (先の結果の列も S の推移を通るので同じ)。
+    確かめた前提 (S の有限の一覧と、S だけを読む核) を根拠に書き、前提が崩れていれば proved にしない。"""
+    states = tuple(s["id"] for s in work.data["states"])
+    n = len(states)
+    reads_state = len(work.initial_joint) == n and all(
+        len(o.matrix) == n and all(len(row) == n and all(isinstance(v, _Fraction) for v in row) for row in o.matrix)
+        for kernel in work.kernels.values() for o in kernel.outcomes)
+    evidence["states"], evidence["state_reading_kernels"] = states, tuple(sorted(work.kernels))
+    return reads_state
 
 
 def _builtin_predicate(name, args, snapshot, resources):
@@ -3465,6 +3493,7 @@ class _ExpressionWork:
         self.cache = {}
         self.cells = 0
         self.budget = budget
+        self.precision = precision
 
     def enclose(self, expr):
         from .rate import RateIncomplete, RateNumericalRange
@@ -3504,6 +3533,11 @@ class _ExpressionWork:
                 if b.lower <= 0 <= b.upper:
                     raise FIncomplete("certificate_incomplete", "denominator not separated from zero")
                 value = _imul(a, RationalInterval(1/b.upper, 1/b.lower))
+            elif expr.op == "integral":   # F-b K40 決定 12: 版つきの積分の式を作り直して包む
+                from ._fb_time import enclose_integral
+                lower, upper = enclose_integral(expr.formula, self.precision, self.budget,
+                                                getattr(self, "integral_regions", None))
+                value = RationalInterval(lower, upper)
             else:
                 raise FInputError("shape", "unknown expression")
         except RateIncomplete as exc:
@@ -3521,6 +3555,76 @@ def _iadd(a, b):
 def _imul(a, b):
     values = (a.lower*b.lower, a.lower*b.upper, a.upper*b.lower, a.upper*b.upper)
     return RationalInterval(min(values), max(values))
+
+
+def compare_exact(left: ExactReal, right: ExactReal, *, reader: FReader, registry: FRegistry,
+                  budget: RateBudget) -> ExactComparison:
+    """2 つの厳密式 (積分の式 integral を含んでよい) の大小 (F-b K40 決定 12): 同じ正準な式なら identity、左 − 右 の符号が構造
+    (有理数・exp の正・積の 0・同じ符号の和・積分の非負と内部の 1 点の形、`_structural_sign`) から決まれば structural、決まらなければ
+    精度を上げて上下界で分ける (separated)。精度 budget.tolerance の幅まで細かくしても重なる・予算 (箱・項・回数) が尽きた時は
+    unproved で、0 や偽の証明に変えない (指数多項式に固有の 0 の判定を一般の積分へ移さない)。積分の式は版・法則・全原記録
+    (値と Point) を持ち、それだけで作り直せる (reader・registry は保存した記録の読み手の口で、今の式の作り直しは読まない)。"""
+    if type(left) is not ExactReal or type(right) is not ExactReal or type(budget) is not RateBudget:
+        raise FInputError("shape", "compare_exact takes two ExactReal and a RateBudget")
+    if _dumps(_encode(left)) == _dumps(_encode(right)):
+        return ExactComparison(kind="identity", order=0, proof=_freeze({"identity": "canonical"}))
+    sign = _structural_sign(ExactReal(op="add", args=(left, ExactReal(op="neg", arg=right))))
+    if sign is not None:
+        return ExactComparison(kind="structural", order=sign, proof=_freeze({"structural": sign}))
+    unproved = ExactComparison(kind="unproved", order=None, proof=None)
+    from ._fb_time import _EVALUATION_REGIONS
+    precision, rounds = budget.tolerance, 0
+    while True:
+        try:
+            work = _ExpressionWork(budget, precision=precision)
+            work.integral_regions = _EVALUATION_REGIONS * 4 ** rounds
+            a, b = work.enclose(left), work.enclose(right)
+        except _EnclosureShort:
+            a = b = None
+        except FIncomplete:
+            return unproved
+        if a is not None:
+            if a.lower > b.upper or a.upper < b.lower:
+                order = 1 if a.lower > b.upper else -1
+                return ExactComparison(kind="separated", order=order, proof=_freeze(
+                    {"left": [_encode(a.lower), _encode(a.upper)], "right": [_encode(b.lower), _encode(b.upper)]}))
+            if max(a.upper - a.lower, b.upper - b.lower) <= budget.tolerance:
+                return unproved
+        rounds += 1
+        if budget.max_refinements is not None and rounds > budget.max_refinements:
+            return unproved
+        precision /= 16
+
+
+def _structural_sign(expr):
+    """厳密式の符号を構造だけから (数値の幅を使わずに) 決める。決まらなければ None。"""
+    op = expr.op
+    if op == "rational":
+        return (expr.value > 0) - (expr.value < 0)
+    if op == "exp":
+        return 1
+    if op == "neg":
+        s = _structural_sign(expr.arg)
+        return None if s is None else -s
+    if op == "log":
+        return (expr.arg.value > 1) - (expr.arg.value < 1) if expr.arg.op == "rational" else None
+    if op == "integral":
+        from ._fb_time import integral_sign
+        return integral_sign(expr.formula)
+    signs = [_structural_sign(x) for x in ((expr.numerator, expr.denominator) if op == "div" else expr.args)]
+    if op in ("mul", "div"):
+        if 0 in signs:
+            return 0 if op == "mul" or signs[0] == 0 and signs[1] else None
+        if None in signs:
+            return None
+        out = 1
+        for s in signs:
+            out *= s
+        return out
+    if None in signs:
+        return None
+    nonzero = {s for s in signs if s}
+    return 0 if not nonzero else nonzero.pop() if len(nonzero) == 1 else None
 
 
 def _quantity(expr, budget=None, *, work=None):

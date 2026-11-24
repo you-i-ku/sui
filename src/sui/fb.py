@@ -51,7 +51,7 @@ __all__ = [
     "EvaluationStatus", "ThinkingMaterialStatus",
     "BeliefCandidate", "CandidateAddition", "PoolMember", "PoolState", "BeliefPool", "CandidatePosterior",
     "PoolBelief", "CandidateInputError", "CandidatePoolError",
-    "SwitchPart", "SwitchQuantity", "BetaMixture", "BetaMixtureComponent",
+    "SwitchPart", "ClockPrior", "ClockQuantity", "SwitchQuantity", "BetaMixture", "BetaMixtureComponent",
     "ResolvedBeliefPool", "resolve_belief_candidates",
     "PoissonLaw", "FiniteCountLaw", "UniformAcquisitionTime", "FixedAcquisitionSchedule",
     "IndependentAcquisitionFailure", "IndependentSourceDisconnection", "TimedAcquisitionModel", "SourceCountReading", "TimedExecutionDeclaration",
@@ -1084,15 +1084,39 @@ def _distribution(states, prior, field) -> None:
         raise TimeBeliefError(kind="invalid", reason=f"{field} must sum to 1", field=field)
 
 
+# 時計の部品の値の宣言の形 (K40 決定 4): 欄の名前 → 種類の名前 (str)・有理数・区切りの数ごとの点 ((m, (値, …)), …)
+ClockValue: _TypeAlias = str | _Fraction | tuple[tuple[int, tuple[_Fraction, ...]], ...]
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
+class ClockPrior:
+    """時計の部品の最初の見込み (紙 F-b K40 決定 1・2・4)。共同の事前は宣言した因子の積だけ: 周期 T の有限の候補 periods
+    ((T, 事前の重み), …、T は正の有理数で法則の時間の単位)・区切りの数 m の候補 segments ((m, 事前の重み), …、2 ≤ m ≤
+    max_segments)・回転 phase ({"kind": "uniform"} = [0, 1) の一様 / {"kind": "point", "value": 有理数} = 最初の区切りの左の
+    境目)・幅 widths ({"kind": "symmetric_dirichlet", "concentration": κ_w} / {"kind": "point", "values": ((m, (w_1, …, w_m)), …)})・
+    配分 fractions ({"kind": "conditional_dirichlet", "concentration": κ_f} = w が与えられた時の Dirichlet(κ_f w) / 点)。点の
+    事前は宣言した区切りの数ごとに値を持つ。区切り j の上の倍率は f_j / w_j で、1 周の平均は 1。couplings は因子の積の外の依存の
+    宣言 ((欄, 欄), …) で、この本では対応していない。値の正しさは候補の解決が名指して確かめる (宣言の事実は先に残す、P1)。"""
+    periods: tuple[tuple[_Fraction, _Fraction], ...]
+    max_segments: int
+    segments: tuple[tuple[int, _Fraction], ...]
+    phase: _Mapping[str, ClockValue]
+    widths: _Mapping[str, ClockValue]
+    fractions: _Mapping[str, ClockValue]
+    couplings: tuple[tuple[str, str], ...] = ()
+
+
 @_dataclass(frozen=True, slots=True, kw_only=True)
 class SwitchPart:
-    """スイッチの族の部品 1 つ (紙 F-b K39 決定 1)。id は族の部品の辞書の名前。部品の種類 kind は倍率が何を読むかで決まる:
-    "mood" = 調子の部品 (multipliers は状態 S を読む倍率 r(S)、法則の states の順の非負の有理数)、"inert" = 何も読まない倍率 1 の
-    部品 (multipliers は None か全部 1)。ほかの kind は宣言として受け取り、この本では対応していない種類として候補の解決が名指して
+    """スイッチの族の部品 1 つ (紙 F-b K39 決定 1・K40 決定 1)。id は族の部品の辞書の名前。部品の種類 kind は倍率が何を読むかで
+    決まる: "mood" = 調子の部品 (multipliers は状態 S を読む倍率 r(S)、法則の states の順の非負の有理数)、"inert" = 何も読まない
+    倍率 1 の部品 (multipliers は None か全部 1)、"clock" = 時計の部品 (倍率は時計の位置を読む。clock は最初の見込み
+    `ClockPrior`、multipliers は空。状態を読む時計は候補の解決が対応していないと名指す)。ほかの kind は宣言として受け取り、この本では対応していない種類として候補の解決が名指して
     止まる (読み方の無い部品を無効果とみなさない、決定 2・11)。"""
     id: str
     kind: str
     multipliers: tuple[_Fraction, ...] | None = None
+    clock: ClockPrior | None = None
 
     def __post_init__(self) -> None:
         if type(self.id) is not str or not self.id:
@@ -1104,10 +1128,13 @@ class SwitchPart:
                 raise TimeBeliefError(kind="invalid", reason="multipliers must be a tuple", field="multipliers")
             for r in self.multipliers:
                 _exact(r, "multipliers")
-        if self.kind == "mood" and self.multipliers is None:
+        if self.kind == "mood" and not self.multipliers:
             raise TimeBeliefError(kind="invalid", reason="a mood part reads one multiplier per state", field="multipliers")
         if self.kind == "inert" and self.multipliers is not None and any(r != 1 for r in self.multipliers):
             raise TimeBeliefError(kind="invalid", reason="an inert part has multiplier 1", field="multipliers")
+        if (self.kind == "clock") != (type(self.clock) is ClockPrior):
+            raise TimeBeliefError(kind="invalid", reason="a clock part reads the clock through its clock prior only",
+                                  field="clock")
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -1117,8 +1144,9 @@ class PoissonLaw:
     既にある件数 initial_count・時間の単位 time_unit (ns あたりの換算の係数、正)。経過時間は (ns − origin_ns) × time_unit で、
     段に丸めない。family は族の名前 (p の共有の範囲。None は族を宣言しない = K38 の部品 0 個の族で、parts は空・a・b は None)、
     parts は部品の辞書、a・b はスイッチの入る割合 p の事前 Beta(a, b) (族があれば正の有理数)、state_role は状態の役 ("mood" =
-    S 全体が調子の役で、調子の遷移は無い)。スイッチの列 z の下の率は λ_0(S) · Π_{z_j = 1} r_j(S)、z の事前は
-    (a)_m (b)_{k−m} / (a+b)_k。率は後で学べる量へ広げられる (この本では宣言の値)。"""
+    S 全体が調子の役で、調子の遷移は無い)。スイッチの列 z の下の率は λ_0(S) · Π_{z_j = 1} r_j(S) で、時計の部品 (K40) が
+    オンなら、さらに時計の位置 φ(t) = (t mod T)/T の倍率 c(φ) を掛ける。z の事前は (a)_m (b)_{k−m} / (a+b)_k (時計の周期の候補・
+    区切りの数は k に足さない)。率は後で学べる量へ広げられる (この本では宣言の値)。"""
     run: Ref
     states: tuple[str, ...]
     prior: tuple[_Fraction, ...]
@@ -1158,7 +1186,7 @@ class PoissonLaw:
             raise TimeBeliefError(kind="invalid", reason="parts must be a tuple of switch parts", field="parts")
         if len({x.id for x in self.parts}) != len(self.parts):
             raise TimeBeliefError(kind="invalid", reason="part names must be distinct", field="parts")
-        if any(x.multipliers is not None and len(x.multipliers) != len(self.states) for x in self.parts):
+        if any(x.multipliers and len(x.multipliers) != len(self.states) for x in self.parts):   # 空の組は状態を読まない
             raise TimeBeliefError(kind="invalid", reason="multipliers need one value per state", field="multipliers")
         if self.state_role is not None and (type(self.state_role) is not str or not self.state_role):
             raise TimeBeliefError(kind="invalid", reason="state_role must be a name", field="state_role")
@@ -1331,7 +1359,8 @@ class SwitchQuantity:
     共同の確率は BeliefQuantity の candidate の照会と掛けて作る。1 つの照会で混ぜない)。on・off は部品の名前の組で、スイッチの列の
     部分的な条件 (on は 1、off は 0)。kind: switch = P(on・off | h, M) (1 つならオンの確率、複数なら同時の確率)、state =
     P(on・off, S=state | h, M)、mass = P(h | M)、p_mean = E[p | h, M]、p_moment = E[p^order | h, M] (order は非負の整数)。
-    p_cdf・p_quantile (点 point での p の累積確率・分位点) はこの本では対応していない (名指して断る)。"""
+    p_cdf・p_quantile (点 point での p の累積確率・分位点) はこの本では対応していない (名指して断る)。時計の照会は
+    `ClockQuantity`。"""
     kind: _Literal["switch", "state", "mass", "p_mean", "p_moment", "p_cdf", "p_quantile"]
     candidate: str
     family: str
@@ -1343,11 +1372,34 @@ class SwitchQuantity:
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
+class ClockQuantity:
+    """時計の照会する量 (紙 F-b K40 決定 15、K39 決定 6 の照会の決まりのまま): 候補 candidate・族 family・時計の部品 part を名指し、
+    値は候補 M に条件づけ、分母はいつも候補 M の証拠 Z_M。kind: parameters = P(T ∈ periods, m ∈ segments, on・off | h, M)
+    (periods・segments は宣言した候補の部分集合、None は全部、空の組は空の事象。on・off は分子の事象だけ。時計のオフの枝の T・m
+    は潜在で事前のまま) / allocation = E[∫_[lower, upper) c_θ(φ)^{z_時計} dφ | h, M] (端は [0, 1) の有理数、lower > upper は 1 周を
+    またぐ [lower, 1) ∪ [0, upper)。時計のオフの枝は区間の長さ)。回転・幅・配分の領域の確率 (kind phase・width・fraction、index は
+    区切りの番号) と分母を変える条件 (condition_on・condition_off) は、この本では対応していない (名指して断る)。"""
+    kind: _Literal["parameters", "allocation", "phase", "width", "fraction"]
+    candidate: str
+    family: str
+    part: str
+    periods: tuple[_Fraction, ...] | None = None
+    segments: tuple[int, ...] | None = None
+    index: int | None = None
+    lower: _Fraction | None = None
+    upper: _Fraction | None = None
+    on: tuple[str, ...] = ()
+    off: tuple[str, ...] = ()
+    condition_on: tuple[str, ...] = ()
+    condition_off: tuple[str, ...] = ()
+
+
+@_dataclass(frozen=True, slots=True, kw_only=True)
 class BeliefValue:
     """照会の答え (K38 決定 5・P10): 真の値を含む有理数の上下界。exact は正準な式が有理数の時のその値 (そうでなければ None)、
     proof は使った精度の控え (検査は根から作り直して行い、控えを信じない)。"""
     root: str
-    quantity: BeliefQuantity | SwitchQuantity
+    quantity: BeliefQuantity | SwitchQuantity | ClockQuantity
     lower: _Fraction
     upper: _Fraction
     exact: _Fraction | None
@@ -1384,7 +1436,10 @@ class ResolvedCandidate:
     """候補の解決 (K39 決定 8) が返す候補 1 つの正準な記述: 名前 id・展開した状態 states (スイッチの列 z × 宣言のモデルの状態。
     部品 0 個なら宣言のモデルの状態のまま)・候補の中の事前 prior (P(z) × 状態の事前、和 1)・状態ごとの率 rates (z を当てた後の
     率。Poisson の族でない法則は None)・物語の対応 correspondence・知る対象への写像 knowledge_targets (「解決した率の表の識別 /
-    元の知る対象」。部品 0 個なら元の知る対象)・要る参照 references。"""
+    元の知る対象」。部品 0 個なら元の知る対象)・要る参照 references・時計 clocks (K40: 展開した状態ごとに、時計のオフは None、
+    オンは (周期 T, ((区切りの始まりの位置 ∈ [0, 1), 倍率), …)) で、率はこの倍率を掛ける前の率。回転・幅・配分のどれかが連続の
+    事前の枝は (周期 T, ()) で、形は θ の積分で読む (時計の照会は `ClockQuantity`)。Poisson の族でない法則は
+    None)。"""
     id: str
     states: tuple[str, ...]
     prior: tuple[_Fraction, ...]
@@ -1392,6 +1447,7 @@ class ResolvedCandidate:
     correspondence: tuple[tuple[str, str], ...]
     knowledge_targets: tuple[str, ...]
     references: frozenset[Point]
+    clocks: tuple[tuple[_Fraction, tuple[tuple[_Fraction, _Fraction], ...]] | None, ...] | None = None
 
 
 @_dataclass(frozen=True, slots=True, kw_only=True)
@@ -1642,6 +1698,12 @@ class FThreadHost:
         """スイッチと p の照会 (K39 決定 6): 候補 M に条件づけた値を、精度 budget.tolerance 以下の有理数の上下界で返す。"""
         from . import _fb_time
         return _fb_time.query_switch(self._state, belief, quantity, budget)
+
+    def query_clock_belief(self, *, belief: BeliefExpression, quantity: ClockQuantity,
+                           budget: RateBudget) -> BeliefValue:
+        """時計の照会 (K40 決定 15): 候補 M に条件づけた値を、精度 budget.tolerance 以下の有理数の上下界で返す。"""
+        from . import _fb_time
+        return _fb_time.query_clock(self._state, belief, quantity, budget)
 
     def p_distribution(self, *, belief: BeliefExpression, candidate: str, family: str,
                        budget: RateBudget) -> BetaMixture:

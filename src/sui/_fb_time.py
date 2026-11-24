@@ -11,6 +11,10 @@ exp(−q) は異なる有理数 q で有理数の上で一次独立 (Lindemann�
 正本 (法則と列) から C を上げて作り直す。一様の判定時刻の取得区間の核は、区間に n 件届いた時に判定時刻の件数が
 {k..k+n} の一様になることから、K[j,k] = P(n = j−k) · #{m ∈ [k, j] : 判定が m で成り立つ} / (n + 1)。
 
+時計の部品 (紙 F-b K40): 時計のオンの枝の unit の法則は時計の形 (周期・区切りの始まり・倍率) を持ち、件数の発展は累積の率
+で、取得区間の核は区切りの境目で判定時刻の積分を分けて足す (`_poisson`・`_read`)。時計の形が点の事前なら、ここまで全部が
+有理数の係数と指数の指数多項式のまま厳密。
+
 スイッチの族 (紙 F-b K39): units は (候補, スイッチの列 z, 状態) ごとで、z を当てた後の率と P(z) を掛けた事前を持つ (枝と
 状態の対応は候補の解決 `f_update2.describe_candidate`)。z は取得ごとに引き直さない (同じ unit の率で列全体を読む)。
 スイッチと p の照会は候補 M に条件づける (`_conditional`、公開の口は `FThreadHost.query_switch_belief`・`p_distribution`・
@@ -18,6 +22,7 @@ exp(−q) は異なる有理数 q で有理数の上で一次独立 (Lindemann�
 """
 
 from fractions import Fraction as _Q
+from functools import lru_cache as _lru_cache
 
 from . import f as _f
 from . import fb as _fb
@@ -40,6 +45,8 @@ class Poly:
         return Poly({_Q(0): _Q(c)})
 
     def __add__(self, other):
+        if not isinstance(other, Poly):
+            return NotImplemented
         out = dict(self.terms)
         for q, c in other.terms.items():
             out[q] = out.get(q, 0) + c
@@ -204,9 +211,366 @@ class Ratio:
 
 
 def joint(spec):
-    """採用された信念の同時の確率 q_i = W_i / Z (Ratio の列、並びの状態の順)。考える側の出発点 (F-a の initial_joint)。"""
-    W, Z = weights(spec)
-    return tuple(Ratio(w, Z) for w in W)
+    """採用された信念の同時の確率 q_i = W_i / Z (並びの状態の順)。考える側の出発点 (F-a の initial_joint)。
+
+    時計の連続の事前の unit を含む正本では、q_i は積分を含む比 (`IntegralRatio`) で、連続の事前の unit の重みは、積分が
+    指数多項式に閉じる時 (回転だけ連続・尤度が θ によらない) も積分の項のまま持つ (K40 決定 12: θ を積分した有限の重みだけを
+    渡さない)。考える側は同じ項の上で、評価の仮の結果を条件に付けて I(Q; Y | h) を直接評価する (`information`)。F-a の厳密式へは
+    版つきの積分の式 (ExactReal の integral) として写る。連続の事前の unit が無ければ指数多項式の比 (`Ratio`)。"""
+    _C, vs = classes(spec)
+    space = _space(spec)
+    W = [(Form(Poly(), {(i, None): _Q(1)} if space.integral(i, None).positive() else {}, space) if continuous(u)
+          else sum(vs[i], Poly())).scale(u["prior"]) for i, u in enumerate(spec["units"])]
+    Z = sum(W, Poly())
+    if not any(isinstance(x, Form) for x in W):
+        return tuple(Ratio(w, Z) for w in W)
+    return tuple(IntegralRatio(w, Z) for w in W)
+
+
+class IntegralRatio:
+    """積分を含む比 num / den (Form、den は形で 0 でない)。時計の連続の事前の信念の確率を考える側へ渡す数 (K40 決定 12)。
+    F-a の評価が使う演算だけを持つ: 有理数との四則、同じ分母どうしの和・差・比 (仮の結果で条件づけた共同の信念は、同じ分母の
+    W_i の一次結合のまま)。それ以外の組み合わせは名指して止まる。0 の判定は形 (項の積分は正と証明済み)、比較の符号は決定 12 の
+    4 つの区別: 形で 0 / 形で正 (項の係数と指数多項式の係数が全部正) / 上下界で分けられた / 予算の中で分けられない
+    (`FIncomplete`)。F-a の厳密式へは `exact_real` (版つきの積分の式)。"""
+    __slots__ = ("num", "den")
+
+    def __init__(self, num, den):
+        num, den = _as_form(num), _as_form(den)
+        if den.zero:
+            raise ZeroDivisionError("structurally zero denominator")
+        self.num, self.den = num, den
+
+    @staticmethod
+    def of(value):
+        if isinstance(value, IntegralRatio):
+            return value
+        if isinstance(value, Ratio):
+            return IntegralRatio(value.num, value.den)
+        if isinstance(value, (int, _Q)) and not isinstance(value, bool):
+            return IntegralRatio(Poly.const(value), Poly.const(1))
+        return None
+
+    def _constant(self):
+        return _form_rational(self.num, self.den)
+
+    def _join(self, other, op):
+        o = IntegralRatio.of(other)
+        if o is None:
+            return NotImplemented
+        if self.den == o.den:
+            return IntegralRatio(op(self.num, o.num), self.den)
+        r = o._constant()
+        if r is not None:
+            return IntegralRatio(op(self.num, self.den.scale(r)), self.den)
+        r = self._constant()
+        if r is not None:
+            return IntegralRatio(op(o.den.scale(r), o.num), o.den)
+        return _unsupported()
+
+    def __add__(self, other):
+        return self._join(other, lambda a, b: a + b)
+
+    __radd__ = __add__
+
+    def __sub__(self, other):
+        return self._join(other, lambda a, b: a - b)
+
+    def __rsub__(self, other):
+        return (-self) + other
+
+    def __neg__(self):
+        return IntegralRatio(self.num.scale(-1), self.den)
+
+    def __mul__(self, other):
+        o = IntegralRatio.of(other)
+        if o is None:
+            return NotImplemented
+        r = o._constant()
+        if r is not None:
+            return IntegralRatio(self.num.scale(r), self.den)
+        r = self._constant()
+        if r is not None:
+            return IntegralRatio(o.num.scale(r), o.den)
+        return _unsupported()
+
+    __rmul__ = __mul__
+
+    def __truediv__(self, other):
+        o = IntegralRatio.of(other)
+        if o is None:
+            return NotImplemented
+        if self.den == o.den:
+            return IntegralRatio(self.num, o.num)
+        r = o._constant()
+        if r is not None:
+            return IntegralRatio(self.num.scale(1 / r), self.den)
+        return _unsupported()
+
+    def __rtruediv__(self, other):
+        o = IntegralRatio.of(other)
+        return NotImplemented if o is None else o / self
+
+    def __bool__(self):
+        return not self.num.zero
+
+    def __eq__(self, other):
+        """形で等しいか (同じ分母か有理数との比較だけを形で決める。決められない時は False = 等しいと証明していない)。"""
+        o = IntegralRatio.of(other)
+        if o is None:
+            return False
+        if self.den == o.den:
+            return self.num == o.num
+        r = o._constant()
+        return r is not None and self.num == self.den.scale(r)
+
+    __hash__ = None
+
+    def sign(self):
+        return _sign(self.num) * _sign(self.den)
+
+    def _cmp(self, other):
+        o = IntegralRatio.of(other)
+        return None if o is None else (self - o).sign()
+
+    def __lt__(self, other):
+        s = self._cmp(other)
+        return NotImplemented if s is None else s < 0
+
+    def __le__(self, other):
+        s = self._cmp(other)
+        return NotImplemented if s is None else s <= 0
+
+    def __gt__(self, other):
+        s = self._cmp(other)
+        return NotImplemented if s is None else s > 0
+
+    def __ge__(self, other):
+        s = self._cmp(other)
+        return NotImplemented if s is None else s >= 0
+
+    def exact_real(self):
+        from .f import _div, _r
+        r = self._constant()
+        if r is not None:
+            return _r(r)
+        return _div(_form_exact(self.num), _form_exact(self.den))
+
+    def __repr__(self):
+        return f"IntegralRatio({self.num.poly.terms!r} + {self.num.leaves!r} / {self.den.poly.terms!r} + {self.den.leaves!r})"
+
+
+def _unsupported():
+    from .f import FSpecificationMissing
+    raise FSpecificationMissing("missing_contract", "clock_integral_product")
+
+
+_SIGN_REGIONS = 1 << 14
+
+
+def _sign(form):
+    """Form の符号 (決定 12 の比較の区別)。形で 0 → 0、形で正・負 (積分の項は正と証明済みなので、全部の係数が同じ符号) → ±1、
+    そうでなければ上下界を細かくして分ける (箱を倍にする回ごとに数の精度も上げる、`_fb_clock.precision_bits`)。_SIGN_REGIONS の
+    箱で分けられなければ FIncomplete (未証明の比較)。"""
+    if form.zero:
+        return 0
+    signs = {c > 0 for c in form.leaves.values()} | {c > 0 for c in form.poly.terms.values()}
+    if len(signs) == 1 and (not form.poly.terms or form.leaves):
+        return 1 if signs.pop() else -1
+    integrals = _integrals(form)
+    regions, rounds = _first_level(), 0
+    while regions <= _SIGN_REGIONS:
+        lo, hi = _enclose_form(form, integrals, _num(None, rounds), regions)
+        if lo is not None and (lo > 0 or hi < 0):
+            return 1 if lo > 0 else -1
+        regions, rounds = regions * 2, rounds + 1
+    from .f import FIncomplete
+    raise FIncomplete("certificate_incomplete", "clock_integral_comparison_unproven")
+
+
+def _form_exact(form):
+    """Form を F-a の厳密式に: 指数多項式 + Σ c · (版つきの積分の式)。"""
+    from .f import ExactReal, _add, _mul, _r
+    form = _as_form(form)
+    terms = [form.poly.exact_real()] if not form.poly.zero else []
+    for (i, selector), c in sorted(form.leaves.items(), key=lambda x: _f._dumps(x[0])):
+        terms.append(_mul(_r(c), ExactReal(op="integral", formula=form.space.formula(i, selector))))
+    return _add(*terms) if terms else _r(0)
+
+
+INTEGRAL_FORMULA = {"name": "sui.fb.clock_integral", "version": "1"}   # 積分の式の版 (契約の名前と版の形)
+
+
+INFORMATION_FORMULA = {"name": "sui.fb.clock_information", "version": "1"}   # 情報量の積分の式の版
+
+
+def information(labels, cells):
+    """一歩の情報量 I(Q; Y | h) = H(Y | h) − E[H(Y | Q, h)] の厳密式 (紙 F-b K40 決定 8・K40-g)、または None。cells は一歩の結果の
+    類 y ごとの正規化しない共同の信念 (並びの状態の順の列)、labels は状態の知る対象。知る対象 Q は、θ を持たない状態では状態の
+    知る対象、時計の連続の事前の unit では (θ, 知る対象) (解決した法則が θ ごとに違う。θ の別名は同じ尤度・同じ状態の比を
+    持つので、P(Y | Q, h) は θ 1 点の値で読める)。同じ Q の状態を θ ごとにまとめた P(Y | Q, h) が θ によらないと構造から言える
+    類しか無い時は None で、呼ぶ側の有限の重みの形 H(Q) − Σ_y P(y) H(Q | y) がそのまま同じ値 (評価器の特別な場合)。そうでなければ
+    類ごとの E[H(Y | Q, h)] を足し、θ に依る類は情報量の積分 (`_fb_clock.Information`、版つきの式) の項にする。"""
+    split = _split(labels, cells)
+    if split is None or all(entry["finite"] for entry in split[2].values()):
+        return None
+    from .f import ExactReal, _add, _div, _neg, _r
+    den, space, classes = split
+    n = len(cells)
+    terms = []
+    for entry in classes.values():
+        atoms, groups = entry["atoms"], entry["groups"]
+        if entry["finite"]:
+            terms.append(_phi_exact([IntegralRatio(Form(atoms[y], {k: col[y] for g in groups.values() for k, col in g.items()},
+                                                        space), den) for y in range(n)]))
+            continue
+        if any(not a.zero for a in atoms):   # θ を持たない状態 (別の法則): θ の類とは別の Q
+            terms.append(_phi_exact([IntegralRatio(a, den) for a in atoms]))
+        for group in groups.values():
+            keys = sorted(group)
+            if _flat(space, group):
+                terms.append(_phi_exact([IntegralRatio(Form(Poly(), {k: group[k][y] for k in keys}, space), den)
+                                         for y in range(n)]))
+            else:
+                matrix = [[group[k][y] for k in keys] for y in range(n)]
+                integral = ExactReal(op="integral", formula=_information_formula(space, keys, matrix))
+                terms.append(_div(integral, _form_exact(den)))
+    masses = [sum(cell) for cell in cells]
+    total = sum(masses)
+    value = _add(_phi_exact(masses), _neg(_add(*terms)))
+    return value if total == 1 else _div(value, _r(total))
+
+
+def lumped(labels, joint) -> bool:
+    """θ ごとにまとめた知る対象の分布が θ に依る類があるか (結果が状態を名指す一歩でも `information` が有限の形に落ちないか)。
+    知る対象の周辺 (有限の重み) だけを持つ道 (路の表・尾の確かめ・吸収) が、そう言えない信念を受け取らないための判定。"""
+    cells = [tuple(x if j == k else _Q(0) for j, x in enumerate(joint)) for k in range(len(joint))]
+    split = _split(labels, cells)
+    return split is not None and not all(entry["finite"] for entry in split[2].values())
+
+
+def _split(labels, cells):
+    """結果の類ごとの共同の信念を、知る対象の類ごとに、θ を持たない部分 (atoms: 類 y ごとの指数多項式) と、θ の空間ごとの積分の
+    項の係数 (groups: 空間 → {項: 類 y ごとの係数}) に分ける。積分の項が無ければ None。finite は、その類の P(Y | Q, h) が θ に
+    よらないと構造から言えるか (θ の空間が 1 つで θ を持たない部分が無く、`_flat`)。"""
+    den = space = None
+    classes = {}
+    for y, cell in enumerate(cells):
+        for i, x in enumerate(cell):
+            if not isinstance(x, IntegralRatio):
+                if x:
+                    return None   # 有限の数 (Ratio・有理数) の信念
+                continue
+            if x.num.zero:
+                continue
+            if den is None:
+                den = x.den
+            elif not x.den == den:
+                _unsupported()
+            entry = classes.setdefault(labels[i], {"atoms": [Poly() for _ in cells], "groups": {}})
+            entry["atoms"][y] = entry["atoms"][y] + x.num.poly
+            for key, c in x.num.leaves.items():
+                space = space or x.num.space
+                law = space.spec["units"][key[0]]["law"]
+                theta = _f._digest({k: _f._encode(law[k]) for k in ("clock", "origin_ns", "time_unit")})
+                entry["groups"].setdefault(theta, {}).setdefault(key, [_Q(0)] * len(cells))[y] += c
+    if space is None:
+        return None
+    for entry in classes.values():
+        groups = entry["groups"]
+        entry["finite"] = not groups or (len(groups) == 1 and all(a.zero for a in entry["atoms"])
+                                         and _flat(space, next(iter(groups.values()))))
+    return den, space, classes
+
+
+def _flat(space, group):
+    """θ の空間 1 つの項の組で、類 y ごとの量 c_y(θ) = Σ_k a_yk L_k(θ) が θ によらない比を持つと構造から言えるか: 全部の項の
+    尤度が θ によらない (`Integral.blind`)、または係数の列 a_·k が全部比例 (c(θ) = (Σ_k λ_k L_k(θ)) · v)。"""
+    if all(space.integral(*key).blind for key in group):
+        return True
+    columns = list(group.values())
+    y0 = next(y for y, a in enumerate(columns[0]) if a)
+    return all(col == [columns[0][y] * (col[y0] / columns[0][y0]) for y in range(len(col))] for col in columns)
+
+
+def _phi_exact(cs):
+    """Σ_y c_y log(Σc / c_y) (正規化しない条件つきのエントロピー) の厳密式。"""
+    from .f import _add, _log, _mul, _r
+    cs = [c for c in cs if c]
+    s = sum(cs)
+    return _add(*(_mul(_r(c), _log(s / c)) for c in cs))
+
+
+def _information_formula(space, keys, matrix):
+    """情報量の積分の版つきの式 (正準な JSON の文字列): θ の空間を共有する unit (法則・故障の核。事前は係数の側)・全原記録の
+    参照・端の時刻・結果の類ごとの係数 (全部 0 の類は省く)。固定の読み手 (`_formula_integral`) がこれだけで作り直す。"""
+    units = [{**space.spec["units"][k], "prior": _Q(1)} for k, _selector in keys]
+    encoded = encode_spec({"units": units, "entries": space.spec["entries"], "terminal_ns": space.spec["terminal_ns"]})
+    return _f._dumps({**INFORMATION_FORMULA,
+                      "units": [{k: u[k] for k in ("index", "law", "failure", "disconnection")} for u in encoded["units"]],
+                      "entries": encoded["entries"], "terminal_ns": space.spec["terminal_ns"],
+                      "cells": [[_f._encode(a) for a in row] for row in matrix if any(row)]}).decode("utf-8")
+
+
+def enclose_integral(formula, precision, budget, regions_cap=None):
+    """F-a の厳密式 integral の値の上下界 (K40 決定 12): 版つきの式 (法則・事前・全原記録の参照・端の時刻・量) から積分を作り直し、
+    箱を倍にして幅を precision 以下にする (None は 2^−20)。予算の箱の数 (max_cells、None は 2^16) で届かなければ、その時の
+    上下界を返す (幅の不足は呼ぶ側の精度の確かめが incomplete にする)。数の精度は precision から決める (`_fb_clock.precision_bits`、
+    正の量の下界が 0 から分けられなければ `_EnclosureShort` で、呼ぶ側が precision を細かくする)。上下界は (式, 精度, 予算) だけで
+    決まる (`_fb_clock._Table.at` の段、F-a の評価を作り直すと同じ数になる)。F-a の評価の精度 (10^−24 から) は箱の数の上限で
+    止まる。"""
+    integral = _formula_integral(formula)
+    target = _Q(1, 1 << 20) if precision is None else _Q(precision)
+    cap = budget.max_cells if budget is not None and budget.max_cells is not None         else regions_cap or _EVALUATION_REGIONS
+    from ._fb_clock import Num, precision_bits
+    table = integral.table(Num(precision_bits(target)))   # この呼び出しだけの計算表 (段をまたいで使い直す)
+    regions = _first_level()
+    while True:
+        lo, hi = table.at(regions)
+        if hi - lo <= target or regions * 2 > cap:
+            return lo, hi
+        regions *= 2
+
+
+def integral_sign(formula):
+    """F-a の厳密式 integral の構造の符号 (K40 決定 12 の比較の「構造から証明した 0・正」): 被積分の量は非負で、内部の 1 点で
+    形が 0 なら積分は 0、そうでなければ正 (`Integral.positive`、K38 決定 6)。"""
+    return int(_formula_integral(formula).positive())
+
+
+def _formula_integral(formula):
+    """版つきの積分の式 (尤度の積分 `_Space.formula`、情報量の積分 `_information_formula`) から積分を作り直す。読めない式は
+    F-a の入力の不正。情報量の積分は式の識別で控える (段ごとの上下界を F-a の評価の作り直しで使い直す)。"""
+    import json
+    from .f import FInputError
+    try:
+        value = json.loads(formula)
+        if {k: value[k] for k in INFORMATION_FORMULA} == INFORMATION_FORMULA:
+            key = _f._digest({"information": formula})
+            found = _INTEGRALS.get(key)
+            if found is None:
+                from ._fb_clock import Information
+                units = [{**u, "prior": [1, 1]} for u in value["units"]]
+                space = _Space(decode_spec({"units": units, "entries": value["entries"],
+                                            "terminal_ns": value["terminal_ns"]}))
+                cells = [[_f._decode(a, _Q) for a in row] for row in value["cells"]]
+                if len(_INTEGRALS) > 256:
+                    _INTEGRALS.clear()
+                found = _INTEGRALS[key] = Information([space.integral(k, None) for k in range(len(units))], cells)
+            return found
+        if {k: value[k] for k in INTEGRAL_FORMULA} != INTEGRAL_FORMULA:
+            raise KeyError("version")
+        unit = {**value["unit"], "prior": [1, 1]}
+        spec = decode_spec({"units": [unit], "entries": value["entries"], "terminal_ns": value["terminal_ns"]})
+        selector = value["selector"]
+        if selector is not None:
+            selector = (selector[0], *(x if type(x) is int else _f._decode(x, _Q) for x in selector[1:]))
+        return _Space(spec).integral(0, selector)
+    except (KeyError, TypeError, ValueError, IndexError):
+        raise FInputError("shape", "unreadable clock integral formula") from None
+
+
+_EVALUATION_REGIONS = 1 << 12   # F-a の評価の中の積分の箱の数の上限 (予算の max_cells が無い時)
 
 
 def _outward(lo, hi, bits):
@@ -214,8 +578,10 @@ def _outward(lo, hi, bits):
     return _Q((lo.numerator * scale) // lo.denominator, scale), _Q(-((-hi.numerator * scale) // hi.denominator), scale)
 
 
+@_lru_cache(maxsize=1 << 14)
 def _exp_neg(q, bits):
-    """exp(−q) (q ≥ 0 の有理数) を含む有理数の区間。幅はおよそ 2^−bits 以下 (外向きの丸め)。"""
+    """exp(−q) (q ≥ 0 の有理数) を含む有理数の区間。幅はおよそ 2^−bits 以下 (外向きの丸め)。同じ引数の値は控える (情報量の
+    積分は格子の点の値を隣の区間・段で読み直す)。"""
     if not q:
         return _Q(1), _Q(1)
     if q < 0:   # exp(|q|) = 1 / exp(−|q|)
@@ -304,22 +670,74 @@ def _source_factor(unit, symbol):
 
 
 def _poisson(unit, entries, terminal_ns, C):
+    """固定の Poisson 源 (K38 決定 4) と、時計の倍率を持つ非一様の率 (K40 決定 6)。件数の発展は累積の率 x(t) = 率 × ∫c だけで
+    決まり、取得区間の核は率が一定の小区間に分けて足す (`_read`)。時計が無ければ x(t) = 率 × t で、区間は分かれない。"""
     law = unit["law"]
-    rate, origin, scale = law["rate"], law["origin_ns"], law["time_unit"]
+    rate, origin, scale, clock = law["rate"], law["origin_ns"], law["time_unit"], law.get("clock")
+
+    def x(s):
+        return rate * _clock_integral(clock, s)
     v = [Poly() for _ in range(C + 1)]
     v[min(law["initial_count"], C)] = Poly.const(1)
     t = _Q(0)
     for e in entries:
         if e["kind"] == "step":
-            v = [x.scale(e["factors"][unit["index"]]) for x in v]
+            v = [y.scale(e["factors"][unit["index"]]) for y in v]
             continue
         b, a = (e["before_ns"] - origin) * scale, (e["after_ns"] - origin) * scale
-        v = _apply(_poisson_matrix(rate * (b - t), C), v)
+        v = _evolve(v, x(b) - x(t), C)
         # 源の件数を読まない取得は件数を after まで進めるだけ、読む取得は一様の判定時刻の核。どちらも状態に依らない因子を掛ける
-        kernel = None if e["symbol"] in _UNREAD else (e["cursor"], e["symbol"] == "taken")
-        v = [x.scale(_source_factor(unit, e["symbol"])) for x in _apply(_poisson_matrix(rate * (a - b), C, kernel), v)]
+        if e["symbol"] in _UNREAD:
+            v = _evolve(v, x(a) - x(b), C)
+        else:
+            v = _read(v, x, _clock_cuts(clock, b, a), C, (e["cursor"], e["symbol"] == "taken"))
+        v = [y.scale(_source_factor(unit, e["symbol"])) for y in v]
         t = a
-    return _apply(_poisson_matrix(rate * ((terminal_ns - origin) * scale - t), C), v)
+    return _evolve(v, x((terminal_ns - origin) * scale) - x(t), C)
+
+
+def _evolve(v, x, C):
+    """時間の発展 (累積の率 x の Poisson の到着)。x = 0 は恒等。"""
+    return _apply(_poisson_matrix(x, C), v) if x else v
+
+
+def _read(v, x, cuts, C, kernel):
+    """一様の判定時刻の取得区間 [b, a] の核 (K38 決定 3・4、K40 決定 6)。cuts = (b, 境目…, a) は率が一定の小区間の端で、判定
+    時刻 U がその小区間にある確率 (長さの比) × (小区間の前の発展 → 小区間の一様の核 → 後の発展) を足す (判定は 1 回。区切り
+    ごとに観測を数えて掛けない)。幅 0 の区間は点の判定。"""
+    b, a = cuts[0], cuts[-1]
+    if a == b:
+        return _apply(_poisson_matrix(_Q(0), C, kernel), v)
+    out = [Poly() for _ in v]
+    for left, right in zip(cuts, cuts[1:]):
+        w = _evolve(_apply(_poisson_matrix(x(right) - x(left), C, kernel), _evolve(v, x(left) - x(b), C)),
+                    x(a) - x(right), C)
+        out = [o + y.scale((right - left) / (a - b)) for o, y in zip(out, w)]
+    return out
+
+
+def _clock_integral(clock, t):
+    """∫_0^t c(φ(s)) ds (t は起点からの経過時間、K40 決定 1・2)。c は区切り j の上で倍率 f_j / w_j の区分一定で、1 周の
+    平均は 1 なので、n 周で n·T。時計が無ければ t。"""
+    if clock is None:
+        return t
+    period = clock["period"]
+    turns = t // period
+    phase = t / period - turns
+    starts, rates = clock["starts"], clock["multipliers"]
+    edges = [_Q(0), *starts, _Q(1)]
+    heights = [rates[-1], *rates]   # [0, 最初の始まり) は最後の区切りの続き (円)
+    inside = sum((h * (min(phase, r) - l) for l, r, h in zip(edges, edges[1:], heights) if phase > l), _Q(0))
+    return period * (turns + inside)
+
+
+def _clock_cuts(clock, b, a):
+    """区間 [b, a] の中の時計の区切りの境目 (経過時間、昇順) を両端と並べた列。時計が無ければ (b, a)。"""
+    if clock is None or a == b:
+        return (b, a)
+    period = clock["period"]
+    inner = {period * (n + s) for n in range(int(b // period), int(a // period) + 1) for s in clock["starts"]}
+    return (b, *sorted(c for c in inner if b < c < a), a)
 
 
 def _finite(unit, entries, terminal_ns, C):
@@ -354,29 +772,144 @@ def _finite(unit, entries, terminal_ns, C):
 
 
 def classes(spec, need=0):
-    """正本 spec ({units, entries, terminal_ns}) から、状態ごとの件数の分け方 0..C の重み (事前を掛ける前) と C。"""
+    """正本 spec ({units, entries, terminal_ns}) から、状態ごとの件数の分け方 0..C の重み (事前を掛ける前) と C。時計の連続の
+    事前の unit (θ を積分する、K40 決定 7) は None (`unit_mass` が積分の項にする)。"""
     cursors = [e["cursor"] for e in spec["entries"] if e["kind"] == "acquisition"]
     C = max([*(c + 1 for c in cursors), need + 1, 1])
     run = {"poisson": _poisson, "finite": _finite}
-    return C, [run[u["law"]["kind"]](u, spec["entries"], spec["terminal_ns"], C) for u in spec["units"]]
+    return C, [None if continuous(u) else run[u["law"]["kind"]](u, spec["entries"], spec["terminal_ns"], C)
+               for u in spec["units"]]
+
+
+def continuous(unit) -> bool:
+    """時計の連続の事前の unit か (法則の時計の形が θ の事前を持つ、K40 決定 4・5)。"""
+    clock = unit["law"].get("clock")
+    return clock is not None and "segments" in clock
+
+
+def unit_mass(spec, vs, i, selector=None):
+    """unit i の事前を掛ける前の量 (selector は `_fb_clock.Integral` と同じ: None = 全件数、("eq", k)・("ge", k) = 件数の類、
+    ("share", lo, hi) = 1 周の割合との積)。有限の unit は Poly、連続の事前の unit は積分の項 (Form)。"""
+    if continuous(spec["units"][i]):
+        return _space(spec).form(i, selector)
+    v = vs[i]
+    if selector is None:
+        return sum(v, Poly())
+    return v[selector[1]] if selector[0] == "eq" else sum(v[selector[1]:], Poly())
 
 
 def weights(spec):
-    """状態ごとの正規化する前の重み W_i = 事前_i × L_i と、証拠の質量 Z。"""
+    """状態ごとの正規化する前の重み W_i = 事前_i × L_i と、証拠の質量 Z。連続の事前の unit の W_i は積分の項 (Form)。"""
     _C, vs = classes(spec)
-    W = [sum(v, Poly()).scale(u["prior"]) for u, v in zip(spec["units"], vs)]
+    W = [unit_mass(spec, vs, i).scale(u["prior"]) for i, u in enumerate(spec["units"])]
     return W, sum(W, Poly())
+
+
+# --- 積分を含む量 (K40 決定 7・12) ---
+
+class Form:
+    """指数多項式と、時計の連続の事前の積分の項の有理数の係数の一次結合 poly + Σ c_l · I_l (I_l は `_fb_clock.Integral` の量)。
+    積分の項は正と証明したものだけを持つ (形で 0 の積分は項にしない、`_Space.form`)。値の上下界は予算つき (`_enclose_forms`)。
+    形で 0 (項が無く poly が 0) の時だけ値 0 と言う。項の係数が全部正の時、値は正。"""
+    __slots__ = ("poly", "leaves", "space")
+
+    def __init__(self, poly, leaves, space):
+        self.poly, self.space = poly, space
+        self.leaves = {k: c for k, c in leaves.items() if c}
+
+    def __add__(self, other):
+        if isinstance(other, Poly):
+            return Form(self.poly + other, self.leaves, self.space)
+        if not isinstance(other, Form):
+            return NotImplemented
+        out = dict(self.leaves)
+        for k, c in other.leaves.items():
+            out[k] = out.get(k, 0) + c
+        return Form(self.poly + other.poly, out, self.space or other.space)
+
+    __radd__ = __add__
+
+    def __sub__(self, other):
+        return self + other.scale(-1)
+
+    def __rsub__(self, other):
+        return other + self.scale(-1)
+
+    def scale(self, r):
+        return Form(self.poly.scale(r), {k: c * r for k, c in self.leaves.items()}, self.space)
+
+    def __eq__(self, other):
+        if isinstance(other, Poly):
+            return not self.leaves and self.poly == other
+        return isinstance(other, Form) and self.poly == other.poly and self.leaves == other.leaves
+
+    __hash__ = None
+
+    @property
+    def zero(self) -> bool:
+        return self.poly.zero and not self.leaves
+
+    def encode(self):
+        return {"poly": self.poly.encode(), "integrals": [[i, _f._encode(sel), _f._encode(c)] for (i, sel), c
+                                                          in sorted(self.leaves.items(), key=lambda x: _f._dumps(x[0]))]}
+
+
+def _space(spec):
+    return _Space(spec)   # 正本の dict は変えない (積分は識別で `_INTEGRALS` に共有する)
+
+
+_INTEGRALS = {}   # 積分 (変わらない記述と、(精度, 段) の完成した上下界) の置き場: 法則・原記録・量の識別ごと
+
+
+class _Space:
+    """1 つの正本の積分の項の置き場。積分は (unit の法則・故障の核・原記録の列・端の時刻・量) の識別で共有する (同じ根から作り
+    直した正本・照会と検査の間で、完成した段の上下界を使い直す。値の意味は変えない。箱の列は照会ごと、`_fb_clock._Table`)。"""
+
+    def __init__(self, spec):
+        self.spec = spec
+
+    def integral(self, i, selector):
+        from ._fb_clock import Integral
+        unit = self.spec["units"][i]
+        key = _f._digest({"unit": {k: unit[k] for k in ("law", "failure", "disconnection", "index")},
+                          "entries": encode_spec({"units": [], "entries": self.spec["entries"],
+                                                  "terminal_ns": self.spec["terminal_ns"]})["entries"],
+                          "terminal_ns": self.spec["terminal_ns"], "selector": selector})
+        found = _INTEGRALS.get(key)
+        if found is None:
+            if len(_INTEGRALS) > 256:
+                _INTEGRALS.clear()
+            found = _INTEGRALS[key] = Integral(unit, self.spec["entries"], self.spec["terminal_ns"], selector)
+        return found
+
+    def formula(self, i, selector):
+        """unit i の積分の版つきの式 (正準な JSON の文字列、K40 決定 12)。"""
+        unit = self.spec["units"][i]
+        encoded = encode_spec({"units": [{**unit, "prior": _Q(1)}], "entries": self.spec["entries"],
+                               "terminal_ns": self.spec["terminal_ns"]})
+        u = encoded["units"][0]
+        return _f._dumps({**INTEGRAL_FORMULA,
+                          "unit": {k: u[k] for k in ("index", "law", "failure", "disconnection")},
+                          "entries": encoded["entries"], "terminal_ns": self.spec["terminal_ns"],
+                          "selector": None if selector is None else _f._encode(selector)}).decode("utf-8")
+
+    def form(self, i, selector):
+        integral = self.integral(i, selector)
+        if integral.exact is not None:
+            return integral.exact
+        return Form(Poly(), {(i, selector): _Q(1)} if integral.positive() else {}, self)
 
 
 # --- 正本を作る (入口 U が使う) ---
 
-def unit_law(law, state, rate=None):
-    """法則の状態 state の件数の法則を正本の形 (dict) にする。rate はスイッチを当てた後の率 (K39、None は宣言の率)。対応して
-    いない法則は None。"""
+def unit_law(law, state, rate=None, clock=None):
+    """法則の状態 state の件数の法則を正本の形 (dict) にする。rate はスイッチを当てた後の率 (K39、None は宣言の率)、clock は
+    時計のオンの枝の時計の形 (K40、`f_update2._clock_choices`。オフは None で、欄を持たない)。対応していない法則は None。"""
     i = law.states.index(state)
     if isinstance(law, _fb.PoissonLaw):
         out = {"kind": "poisson", "rate": law.rates[i] if rate is None else rate, "origin_ns": law.origin_ns,
-               "time_unit": law.time_unit, "initial_count": law.initial_count}
+               "time_unit": law.time_unit, "initial_count": law.initial_count,
+               **({} if clock is None else {"clock": clock})}
     elif isinstance(law, _fb.FiniteCountLaw):
         out = {"kind": "finite", "origin_ns": law.origin_ns, "initial_count": law.initial_count,
                "positions_ns": law.positions_ns, "paths": law.paths, "weights": law.weights_by_state[i]}
@@ -391,8 +924,8 @@ def encode_spec(spec):
                "prior": _f._encode(u["prior"]), "failure": None if u["failure"] is None else _f._encode(u["failure"]),
                "disconnection": None if u["disconnection"] is None else _f._encode(u["disconnection"]),
                "law": {k: _f._encode(v) for k, v in u["law"].items()}}
-        if "family" in u:   # スイッチの族 (K39 決定 5: 部品の辞書・p の共有範囲・a, b。枝は branch)
-            out["family"] = {**u["family"], "a": _f._encode(u["family"]["a"]), "b": _f._encode(u["family"]["b"])}
+        if "family" in u:   # スイッチの族 (K39 決定 5: 部品の辞書・p の共有範囲・a, b。枝は branch。時計の候補と事前、K40)
+            out["family"] = {k: _f._encode(v) for k, v in u["family"].items()}
         return out
 
     def entry(e):
@@ -410,12 +943,23 @@ def decode_spec(value):
         for key in ("rate", "time_unit"):
             if key in out:
                 out[key] = q(out[key])
+        if "clock" in out:   # 時計の形 (K40): 点の形か、連続の事前の形 (区切りの数 segments を持つ)
+            clock = out["clock"]
+            if "segments" in clock:
+                out["clock"] = {k: v if k == "segments" or v is None else [q(x) for x in v] if isinstance(v[0], list)
+                                else q(v) for k, v in clock.items()}
+            else:
+                out["clock"] = {"period": q(clock["period"]), "starts": [q(x) for x in clock["starts"]],
+                                "multipliers": [q(x) for x in clock["multipliers"]]}
         if "weights" in out:
             out["weights"] = tuple(q(x) for x in out["weights"])
             out["paths"] = tuple(tuple(p) for p in out["paths"])
         return out
     def family(raw):
-        return {**raw, "a": q(raw["a"]), "b": q(raw["b"])}
+        out = {**raw, "a": q(raw["a"]), "b": q(raw["b"])}
+        if "clock" in raw:   # 部品の名前 part・区切りの数 segments はそのまま、周期と事前の重みは有理数
+            out["clock"] = {k: v if k in ("part", "segments") else [q(x) for x in v] for k, v in raw["clock"].items()}
+        return out
     units = [{**u, "prior": q(u["prior"]), "failure": None if u["failure"] is None else q(u["failure"]),
               "disconnection": None if u["disconnection"] is None else q(u["disconnection"]),
               "law": law(u["law"]), **({"family": family(u["family"])} if "family" in u else {})}
@@ -448,7 +992,7 @@ def _c():
 def _quantity(spec, quantity):
     """照会する量の (分子, 分母) の Poly。分母は証拠の質量 Z (mass は分母 1)。スイッチと p の照会 (SwitchQuantity) は候補に
     条件づける (`_conditional`、K39 決定 6)。"""
-    if isinstance(quantity, _fb.SwitchQuantity):
+    if isinstance(quantity, (_fb.SwitchQuantity, _fb.ClockQuantity)):
         return _conditional(spec, quantity)
     kind = quantity.kind
     units = spec["units"]
@@ -460,10 +1004,9 @@ def _quantity(spec, quantity):
         C, vs = classes(spec, quantity.count + 1)
         keep = [i for i, u in enumerate(units) if (quantity.state is None or u["state"] == quantity.state)
                 and (quantity.candidate is None or u["candidate"] == quantity.candidate)]
-        k = quantity.count
-        n = sum(((sum(vs[i][k:], Poly()) if quantity.at_least else vs[i][k]).scale(units[i]["prior"])
-                 for i in keep), Poly())
-        Z = sum((sum(v, Poly()).scale(u["prior"]) for u, v in zip(units, vs)), Poly())
+        selector = ("ge" if quantity.at_least else "eq", quantity.count)
+        n = sum((unit_mass(spec, vs, i, selector).scale(units[i]["prior"]) for i in keep), Poly())
+        Z = sum((unit_mass(spec, vs, i).scale(u["prior"]) for i, u in enumerate(units)), Poly())
         return n, Z
     if kind == "state" and quantity.candidate is not None:
         # state は周辺 P(S | h) (K39-b R3)。候補に条件づけた値は SwitchQuantity、共同の値は candidate の照会と掛けて作る
@@ -504,9 +1047,14 @@ def _evidence(spec, mine, candidate):
 
 def _conditional(spec, quantity):
     """候補 M に条件づけた値の (分子, 分母) (K39 決定 6)。分母は Z_M = Σ_{z,S ∈ M} W_{z,S}。on・off は部品の名前で、スイッチの
-    列の部分的な条件。p の成分は枝 z ごとに Beta(a + |z|, b + k − |z|) で、取得の回数を足さない (決定 4)。"""
+    列の部分的な条件。p の成分は枝 z ごとに Beta(a + |z|, b + k − |z|) で、取得の回数を足さない (決定 4)。時計の照会
+    (`fb.ClockQuantity`、K40 決定 15) も同じ決まりで、on・off は分子の事象だけ。"""
     kind = quantity.kind
-    if kind in ("p_cdf", "p_quantile"):   # p の累積確率・分位点の保証つきの照会は後の本 (K39 (2))
+    clock = isinstance(quantity, _fb.ClockQuantity)
+    # この本が対応していない照会 (名指して断る): p の累積確率・分位点 (K39 (2))、時計の回転・幅・配分の領域の確率と分母を変える
+    # 条件 (K40 決定 15。考える側は決定 8 の I(Q; Y | h) を使う)
+    if kind in ("p_cdf", "p_quantile") or clock and (kind in ("phase", "width", "fraction")
+                                                     or quantity.condition_on or quantity.condition_off):
         raise _fb.TimeBeliefError(kind="unsupported", reason=kind + "_not_supported", field="kind",
                                   targets=(quantity.candidate, quantity.family))
     units = spec["units"]
@@ -518,8 +1066,9 @@ def _conditional(spec, quantity):
             or any(x not in names for x in (*on, *off)) or len(set(on)) != len(on) or len(set(off)) != len(off):
         raise _fb.TimeBeliefError(kind="invalid", reason="on and off must name distinct parts of the family",
                                   field="on", targets=(quantity.candidate, quantity.family))
-    if (on or off) and kind not in ("switch", "state"):
-        raise _fb.TimeBeliefError(kind="invalid", reason="on and off condition only switch and state", field="on")
+    if (on or off) and kind not in ("switch", "state", "parameters"):
+        raise _fb.TimeBeliefError(kind="invalid", reason="on and off condition only switch, state and parameters",
+                                  field="on", targets=(quantity.candidate, quantity.family))
     W, Z = _evidence(spec, mine, quantity.candidate)
 
     def picked(i):   # 名指したスイッチの値に合う枝か (名指しが無ければ全部)
@@ -531,6 +1080,8 @@ def _conditional(spec, quantity):
 
     def ones(i):
         return sum(units[i]["branch"])
+    if clock:
+        return _clock_quantity(spec, quantity, mine, family, W, picked), Z
     if kind == "switch":
         return total(lambda i: int(picked(i))), Z
     if kind == "state":
@@ -549,6 +1100,57 @@ def _conditional(spec, quantity):
     raise _fb.TimeBeliefError(kind="invalid", reason="unknown quantity", field="kind")
 
 
+def _clock_quantity(spec, quantity, mine, family, W, picked):
+    """時計の照会の分子 (K40 決定 15、分母は候補 M の証拠 Z_M のまま)。parameters = P(T ∈ periods, m ∈ segments, on・off の事象 |
+    h, M) (periods・segments は宣言した候補の部分集合、None は全部。時計のオフの枝の T・m は潜在で事前のまま) / allocation =
+    E[∫_[lower, upper) c_θ(φ)^{z_時計} dφ | h, M] (端は [0, 1) の有理数、lower > upper は 1 周をまたぐ。時計のオフの枝は区間の長さ)。"""
+    from ._fb_clock import share_of
+    units, clock = spec["units"], family.get("clock")
+    named = (quantity.candidate, quantity.family)
+    if clock is None or quantity.part != clock["part"]:
+        raise _fb.TimeBeliefError(kind="invalid", reason="part must name the clock part of the family", field="part",
+                                  targets=(*named, quantity.part))
+    if quantity.kind == "parameters":
+        def subset(value, declared, field):
+            if value is None:
+                return list(declared)
+            if type(value) is not tuple or len(set(value)) != len(value) or any(type(x) is bool for x in value)                     or any(x not in declared for x in value):
+                raise _fb.TimeBeliefError(kind="invalid", reason=field + " must name declared candidates", field=field,
+                                          targets=named)
+            return list(value)
+        A = subset(quantity.periods, clock["periods"], "periods")
+        B = subset(quantity.segments, clock["segments"], "segments")
+        latent = sum((w for t, w in zip(clock["periods"], clock["period_weights"]) if t in A), _Q(0))             * sum((w for m, w in zip(clock["segments"], clock["segment_weights"]) if m in B), _Q(0))
+
+        def factor(i):
+            shape = units[i]["law"].get("clock")
+            if not picked(i):
+                return _Q(0)
+            if shape is None:
+                return latent
+            m = shape["segments"] if "segments" in shape else len(shape["starts"])
+            return _Q(int(shape["period"] in A and m in B))
+        return sum((W[i].scale(factor(i)) for i in mine), Poly())
+    if quantity.kind != "allocation":
+        raise _fb.TimeBeliefError(kind="invalid", reason="unknown quantity", field="kind", targets=named)
+    lo, hi = quantity.lower, quantity.upper
+    if quantity.on or quantity.off or not all(type(x) is _Q and 0 <= x < 1 for x in (lo, hi)):
+        raise _fb.TimeBeliefError(kind="invalid", reason="allocation ends must be two rationals in [0, 1)",
+                                  field="lower", targets=named)
+    length = hi - lo if lo <= hi else 1 - lo + hi
+    _C, vs = classes(spec)
+    out = Poly()
+    for i in mine:
+        shape = units[i]["law"].get("clock")
+        if shape is None:
+            out = out + W[i].scale(length)
+        elif "segments" in shape:
+            out = out + unit_mass(spec, vs, i, ("share", lo, hi)).scale(units[i]["prior"])
+        else:
+            out = out + W[i].scale(share_of(shape, lo, hi))
+    return out
+
+
 def _rising(x, n):
     from .f_update2 import _rising as rising
     return _Q(rising(x, n))
@@ -561,6 +1163,8 @@ def query(spec, root, quantity, budget):
     n, d = _quantity(spec, quantity)
     if d.zero:
         raise _fb.TimeBeliefError(kind="model_falsified", reason="the evidence mass is structurally zero")
+    if isinstance(n, Form) or isinstance(d, Form):
+        return _query_forms(n, d, root, quantity, budget)
     exact = _ratio_rational(n, d)
     if exact is not None:
         return _fb.BeliefValue(root=root, quantity=quantity, lower=exact, upper=exact, exact=exact,
@@ -578,6 +1182,116 @@ def query(spec, root, quantity, budget):
         bits *= 2
 
 
+def _as_form(x):
+    return x if isinstance(x, Form) else Form(x, {}, None)
+
+
+def _form_rational(n, d):
+    """n / d が有理数なら、その値 (n = r·d が形で成り立つ時だけ)。"""
+    n, d = _as_form(n), _as_form(d)
+    if n.zero:
+        return _Q(0)
+    if d.leaves:
+        key = next(iter(d.leaves))
+        r = n.leaves.get(key, 0) / d.leaves[key]
+    else:
+        r = _ratio_rational(n.poly, d.poly) if not n.leaves else None
+        if r is None:
+            return None
+    return r if n == d.scale(r) else None
+
+
+def _integrals(*forms):
+    out = {}
+    for x in forms:
+        x = _as_form(x)
+        for key in x.leaves:
+            out[key] = x.space.integral(*key)
+    return out
+
+
+def _num(tolerance, rounds):
+    """照会の精度 tolerance と精度を上げた回 rounds の数の精度 (`_fb_clock.Num`、紙 F-b K40-i)。"""
+    from ._fb_clock import Num, precision_bits
+    return Num(precision_bits(tolerance, rounds))
+
+
+def _enclose_form(x, integrals, num, level):
+    """積分を含む x の上下界 (数の精度 num・箱の数 level)。精度が足りず正の量の下界を 0 から分けられなければ (None, None)。"""
+    x = _as_form(x)
+    lo, hi = x.poly.enclose(num.bits)
+    try:
+        for key, c in x.leaves.items():
+            a, b = integrals[key].table(num).at(level)
+            lo, hi = (lo + c * a, hi + c * b) if c > 0 else (lo + c * b, hi + c * a)
+    except _f._EnclosureShort:
+        return None, None
+    return lo, hi
+
+
+def _ratio_forms(n, d, integrals, level, num):
+    """積分を含む n / d の上下界。照会の量はどれも確率か [0, 1] の量の期待値なので [0, 1] に切る。分母が 0 から分けられなければ
+    None (精度の不足)。"""
+    nl, nh = _enclose_form(n, integrals, num, level)
+    dl, dh = _enclose_form(d, integrals, num, level)
+    if nl is None or dl is None or dl <= 0:
+        return None, None
+    values = (nl / dl, nl / dh, nh / dl, nh / dh)
+    lo, hi = _outward(min(values), max(values), num.bits + 8)
+    return max(lo, _Q(0)), min(hi, _Q(1))
+
+
+def _first_level():
+    from ._fb_clock import FIRST_LEVEL
+    return FIRST_LEVEL
+
+
+def _query_forms(n, d, root, quantity, budget):
+    """積分を含む照会 (K40 決定 7): 積分の箱を倍にし、数の精度を上げていき (`_fb_clock.precision_bits`、K40-i)、幅が
+    budget.tolerance 以下になった所で返す。max_refinements の回数か max_cells の箱の数で届かなければ incomplete (下界がまだ 0 の
+    枝も消さない、P8)。"""
+    exact = _form_rational(n, d)
+    if exact is not None:
+        return _fb.BeliefValue(root=root, quantity=quantity, lower=exact, upper=exact, exact=exact,
+                               proof=_f._freeze({"exact": True}))
+    integrals = _integrals(n, d)
+    regions, rounds = _first_level(), 0
+    while True:
+        if budget.max_cells is not None and regions * len(integrals) > budget.max_cells:
+            raise _fb.TimeBeliefError(kind="incomplete", reason="integration regions exceed the budget")
+        num = _num(budget.tolerance, rounds)
+        lo, hi = _ratio_forms(n, d, integrals, regions, num)
+        if lo is not None and hi - lo <= budget.tolerance:
+            return _fb.BeliefValue(root=root, quantity=quantity, lower=lo, upper=hi, exact=None,
+                                   proof=_f._freeze({"integration_regions": regions, "precision_bits": num.bits}))
+        rounds += 1
+        if budget.max_refinements is not None and rounds > budget.max_refinements:
+            raise _fb.TimeBeliefError(kind="incomplete", reason="precision not reached within the budget")
+        regions *= 2
+
+
+_CHECK_REGIONS = 1 << 16
+
+
+def _contains_forms(n, d, lower, upper):
+    """[lower, upper] が積分を含む真の値を含むか。箱を倍にしていき、囲みが内側に入れば True・外に出れば False。_CHECK_REGIONS
+    の箱で決まらなければ False (確かめられなかった)。"""
+    exact = _form_rational(n, d)
+    if exact is not None:
+        return lower <= exact <= upper
+    integrals = _integrals(n, d)
+    regions, rounds = _first_level(), 0
+    while regions <= _CHECK_REGIONS:
+        lo, hi = _ratio_forms(n, d, integrals, regions, _num(None, rounds))
+        if lo is not None:
+            if lower <= lo and hi <= upper:
+                return True
+            if hi < lower or upper < lo:
+                return False
+        regions, rounds = regions * 2, rounds + 1
+    return False
+
+
 def _enclose_ratio(n, d, bits):
     nl, nh = n.enclose(bits)
     dl, dh = d.enclose(bits)
@@ -592,6 +1306,8 @@ def contains(spec, quantity, lower, upper) -> bool:
     n, d = _quantity(spec, quantity)
     if d.zero or lower > upper:
         return False
+    if isinstance(n, Form) or isinstance(d, Form):
+        return _contains_forms(n, d, lower, upper)
     exact = _ratio_rational(n, d)
     if exact is not None:
         return lower <= exact <= upper
@@ -740,8 +1456,16 @@ def verify_belief_value(state, belief, value) -> bool:
 
 
 def query_switch(state, belief, quantity, budget):
-    if not isinstance(quantity, _fb.SwitchQuantity):
-        raise _fb.TimeBeliefError(kind="invalid", reason="SwitchQuantity required", field="quantity")
+    return _query_typed(state, belief, quantity, budget, _fb.SwitchQuantity)
+
+
+def query_clock(state, belief, quantity, budget):
+    return _query_typed(state, belief, quantity, budget, _fb.ClockQuantity)
+
+
+def _query_typed(state, belief, quantity, budget, typ):
+    if not isinstance(quantity, typ):
+        raise _fb.TimeBeliefError(kind="invalid", reason=typ.__name__ + " required", field="quantity")
     with state.lock:
         spec = _spec(state, belief)
     return query(spec, belief.root, quantity, budget)
@@ -843,17 +1567,20 @@ def _resolved(member):
     from .f import _Fraction, _decode
     document = member["document"]
     states = document["states"]
-    rates = None
+    rates = clocks = None
     if member["computation"] == "poisson":
         law_state = {j: a for a, j in enumerate(member["phi"])}   # 宣言のモデルの状態の番号 → 法則の状態の番号
-        rates = tuple(branch["rates"][law_state[j]] for branch in member["branches"]
-                      for j in range(len(member["base"]["states"])))
+        size = len(member["base"]["states"])
+        rates = tuple(branch["rates"][law_state[j]] for branch in member["branches"] for j in range(size))
+        clocks = tuple(None if branch["clock"] is None else (branch["clock"]["period"], () if "segments" in branch["clock"]
+                       else tuple(zip(branch["clock"]["starts"], branch["clock"]["multipliers"])))
+                       for branch in member["branches"] for _j in range(size))
     pairs = member["pairs"] if member["phi"] is not None else []
     return _fb.ResolvedCandidate(
         id=member["id"], states=tuple(s["id"] for s in states),
         prior=_decode(document["initial"], tuple[_Fraction, ...]), rates=rates,
         correspondence=tuple(tuple(x) for x in pairs), knowledge_targets=tuple(s["target"] for s in states),
-        references=frozenset(member["references"]))
+        references=frozenset(member["references"]), clocks=clocks)
 
 
 def same_belief(state, left, right) -> bool:
@@ -897,7 +1624,9 @@ def _enclose_expression(quantity, budget):
     precision, rounds = budget.tolerance / 4, 0
     while True:
         try:
-            bounds = _f._ExpressionWork(budget, precision=precision).enclose(quantity.exact)
+            work = _f._ExpressionWork(budget, precision=precision)
+            work.integral_regions = _EVALUATION_REGIONS * 4 ** rounds   # 積分の箱も回ごとに増やす (K40 決定 12)
+            bounds = work.enclose(quantity.exact)
         except _f._EnclosureShort:   # 端点を分けられない囲みは精度の不足 (下で精度を上げる)
             bounds = None
         except _f.FIncomplete as exc:

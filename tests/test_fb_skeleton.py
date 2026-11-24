@@ -910,7 +910,7 @@ def test_public_export_names_are_exact():
         "PoissonLaw", "FiniteCountLaw", "UniformAcquisitionTime", "FixedAcquisitionSchedule",
         "IndependentAcquisitionFailure", "IndependentSourceDisconnection", "TimedAcquisitionModel", "SourceCountReading", "TimedExecutionDeclaration",
         "BeliefExpression", "BeliefQuantity", "BeliefValue", "SelectionValues", "TimedBeliefUpdater", "TimeBeliefError",
-        "SwitchPart", "SwitchQuantity", "BetaMixture", "BetaMixtureComponent",
+        "SwitchPart", "SwitchQuantity", "BetaMixture", "BetaMixtureComponent", "ClockPrior", "ClockQuantity",
         "ResolvedBeliefPool", "resolve_belief_candidates"}
     missing = expected - set(fb.__all__)
     assert not missing, "public export names missing: " + ", ".join(sorted(missing))

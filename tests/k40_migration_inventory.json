@@ -1,0 +1,651 @@
+{
+  "issue": "K40",
+  "request": 130,
+  "date": "2026-11-24",
+  "state": "replay_test_corrected_request130",
+  "entries": [
+    {
+      "path": "tests/test_fb_clock_belief.py",
+      "action": "新規。ClockPrior/ClockQuantityとSwitchPart.clockの公開の名前を先に決めて使用。",
+      "state": "written",
+      "line": 1
+    },
+    {
+      "path": "tests/test_fb_skeleton.py",
+      "line": 901,
+      "test": "test_public_export_names_are_exact",
+      "action": "expected exportにClockPriorとClockQuantityを追加。実装の公開名に合わせる修正を実施。",
+      "state": "written_K40_export_names_missing",
+      "cases": {
+        "passed": 0,
+        "failed": 1
+      }
+    },
+    {
+      "path": "tests/test_fb_switch_belief.py",
+      "line": 4,
+      "action": "宣言の説明にSwitchPart.clock=Noneを足す。旧mood/inertの意味・同じa,bの数値・PoissonLawの13欄はそのまま。unknown-kindはundeclared-clock-partであり実際のclockとは別の未宣言の種類として残せる。",
+      "state": "unchanged_existing_answers"
+    },
+    {
+      "path": "tests/test_fb_switch_belief.py",
+      "line": 325,
+      "action": "有限の率の表についてのknowledge_targetsの対照はそのまま。時計の法則の関数の同値類については新しい4つの別名の対照を別に追加。",
+      "state": "unchanged_plus_new_clock_contrasts"
+    },
+    {
+      "path": "tests/test_fb_impl39_switch.py",
+      "line": 75,
+      "action": "unknown_kindが実際のkind=clockを使う旧負例。K40後は未宣言の種類を試すなら別の未定義名へ移す。clockに事前が無い負例を残す場合は、未宣言の種類とは区別して名指しを検査する。",
+      "state": "migration_proposed_not_edited",
+      "read_scope": "該当行の検索結果のみ。実装の係の試験本文を定規として読んでいない。"
+    },
+    {
+      "path": "tests/test_fb_time_belief.py",
+      "line": 374,
+      "action": "family=Noneの固定Poisson・FiniteCountLaw/CE1・BeliefQuantity(state/count/mass)はそのまま。時計が効かない時と点の時計オンを混同しない。",
+      "state": "unchanged"
+    },
+    {
+      "path": "tests/test_fb_pool.py",
+      "line": 1,
+      "action": "同じ宣言の候補の解決と再生の意味はそのまま。時計の候補の同じ法則の追加と実際のUのreaderでの再生は新しい試験に追加。",
+      "state": "unchanged"
+    },
+    {
+      "path": "tests/test_fb_correspondence.py",
+      "line": 327,
+      "action": "K39-dの対応・文字列名・1対1の規則はそのまま。",
+      "state": "unchanged"
+    },
+    {
+      "path": "tests/test_fb_clock_belief.py",
+      "request": 126,
+      "action": "ClockQuantityをparameters/allocationに移す。旧領域の正例は実効の割合・全域の尤度へ移し、未対応の領域と分母の条件の負例を追加。ExactRealのJSON復元・比較、非整数Beta、thetaを保つI(Q;Y)を追加。",
+      "state": "written"
+    },
+    {
+      "path": "tests/test_fb_clock_belief.py",
+      "request": 128,
+      "action": "試験の削除・除外・書き換えは0件。長い記録の合格を要求する試験は無い。短い記録の照会予算と次の更新をK40側に保持。対応表のD11との結び付けだけを外し、F-cへ (Z67) と記載。",
+      "state": "unchanged_source"
+    },
+    {
+      "path": "tests/test_fb_clock_belief.py",
+      "request": 129,
+      "action": "区間の公開型、整数周の点取得、明示解放の源、6ケースの有限予算/保証またはincomplete、比較依存の説明を修正。7ケースの情報量の期待は保持。",
+      "state": "written"
+    },
+    {
+      "path": "tests/test_fb_clock_belief.py",
+      "line": 1122,
+      "test": "test_clock1_v6_integral_exact_expression_is_versioned_json_and_replays_from_a_fixed_reader",
+      "action": "復号DTOを発行物とせず、固定された完全なFReaderで保存済み数学artifactを再読してから保存。独立の積分定規の細分上限を増やし、式と値の期待は保持。",
+      "state": "passed_request130_impl40e"
+    }
+  ],
+  "new_test": {
+    "path": "tests/test_fb_clock_belief.py",
+    "name": "test_clock1_native_cycle_uses_one_adopted_clock_belief_for_evaluation_step_and_next_update",
+    "line": 654,
+    "state": "written_K40_API_missing",
+    "cases": {
+      "passed": 0,
+      "failed": 1
+    }
+  },
+  "public_spelling": {
+    "declarations": {
+      "SwitchPart": "id/kind/multipliersにclock=Noneを追加。kind=clockならmultipliers=()。",
+      "ClockPrior": [
+        "periods",
+        "max_segments",
+        "segments",
+        "phase",
+        "widths",
+        "fractions",
+        "couplings"
+      ]
+    },
+    "values": {
+      "ClockQuantity": [
+        "kind",
+        "candidate",
+        "family",
+        "part",
+        "periods",
+        "segments",
+        "index",
+        "lower",
+        "upper",
+        "on",
+        "off",
+        "condition_on",
+        "condition_off"
+      ],
+      "ExactComparison": [
+        "kind",
+        "order",
+        "proof"
+      ]
+    },
+    "methods": [
+      "FThreadHost.query_clock_belief(*,belief,quantity,budget)->BeliefValue",
+      "f.compare_exact(left,right,*,reader,registry,budget)->f.ExactComparison"
+    ],
+    "query_contract": {
+      "parameters": "P(T in periods,m in segments,on/off event | h,M)。periods/segmentsは宣言した候補のtuple。None=全部、()=空集合。分母はZ_M。",
+      "allocation": "E[integral_[lower,upper) c(phi)**clock_bit dphi | h,M]。lower>upperは1周をまたぐ。オフの枝は区間長。",
+      "unsupported": "phase/width/fractionの領域の確率、condition_on/offによる分母の条件づけ。indexは未対応の領域要求を表すためだけに残す。",
+      "invalid": "宣言に無いT/m、[0,1)の有理数の端点の外。"
+    },
+    "comparison_contract": "kind=structural/identity/separated/unproved。order=-1/0/1、unprovedだけNone。proofは未証明だけNone。低い予算でも正しく証明できた結果は受け入れ、未知を0や大小に変える結果は拒否。",
+    "exact_expression": "積分を含むExactRealの新しいopは、name/versionと保存した記録への参照を持つ。public math JSONの往復と固定のreaderでの復元で確かめる。",
+    "location": "tests/test_fb_clock_belief.py:1",
+    "comparison_dependency_scope": "reader/registryは現在選んだ呼び出しの形。解決済みの自己完結した式の比較で毎回読む義務は課さない。固定readerからの式の解決・再生は別の公開試験で保持。"
+  },
+  "verification": {
+    "state": "passed",
+    "scope": "依頼130の対象と、変更した共有helperを使う対照の計8件をwork40/testsからimpl40e/srcに向けて直列実行。全95件/501件の再実行ではない。",
+    "import_probe": {
+      "actual": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src/sui",
+      "expected": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src/sui",
+      "result": "equal; exit 0"
+    },
+    "math": {
+      "command": "$env:PYTHONPATH = 'C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src'\n$env:PYTHONDONTWRITEBYTECODE = '1'\n& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_clock_belief.py -k 'v6_integral_exact_expression or v6_integral_comparison or v6_continuous_information' -n 0 -q --tb=no -o pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/math_final --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/math_final/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/math_final/cache",
+      "result": "7 passed, 88 deselected in 126.54s; exit 0",
+      "tests": 7,
+      "passed": 7,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/math_final/results.xml"
+    },
+    "native": {
+      "command": "$env:PYTHONPATH = 'C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src'\n$env:PYTHONDONTWRITEBYTECODE = '1'\n& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_clock_belief.py::test_clock1_native_cycle_uses_one_adopted_clock_belief_for_evaluation_step_and_next_update -n 0 -q --tb=no -o pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/native --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/native/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/native/cache",
+      "result": "1 passed in 372.16s; exit 0",
+      "tests": 1,
+      "passed": 1,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/native/results.xml",
+      "precision_changed": false,
+      "per_case_300_seconds_limit": false
+    },
+    "initial_failures": {
+      "replay": "record-only readerではFReader ports required。完全なsnapshotの5口へ修正。",
+      "math": "再読/正準保存は通るが、独立定規n<=256の幅が足りない。n=512/1024を追加し解消。",
+      "records": [
+        {
+          "command": "$env:PYTHONPATH = 'C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src'\n$env:PYTHONDONTWRITEBYTECODE = '1'\n& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_clock_belief.py::test_clock1_v6_integral_exact_expression_is_versioned_json_and_replays_from_a_fixed_reader -n 0 -q --tb=no -o pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/replay --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/replay/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/replay/cache",
+          "result": "1 failed in 17.60s; exit 1",
+          "stage": "発行物の修正直後。U専用record-only readerではFReader ports required。足場を修正。"
+        },
+        {
+          "command": "$env:PYTHONPATH = 'C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src'\n$env:PYTHONDONTWRITEBYTECODE = '1'\n& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_clock_belief.py -k 'v6_integral_exact_expression or v6_integral_comparison' -n 0 -q --tb=no -o pythonpath=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/math --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/math/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests130/math/cache",
+          "result": "1 failed, 5 passed, 89 deselected in 98.74s; exit 1",
+          "stage": "完全なsnapshot readerへの修正後。再読/保存は通り、独立定規n<=256の幅不足が露出。細分上限を増やして修正。"
+        }
+      ]
+    },
+    "not_run": [
+      "全95件/501件の再実行",
+      "work40/srcでの今回の再実行",
+      "誤実装の表",
+      "Vault反映とheat.py"
+    ],
+    "processes": "使用したprobe、診断、pytestの全exec sessionの終了コードを受領。nativeを含むfixtureのteardownにエラーなし。自分で起こした未終了コマンドなし。他担当のPythonには触れない。",
+    "static_audit": {
+      "state": "passed",
+      "syntax": true,
+      "test_functions": 39,
+      "test_cases": 95,
+      "references_checked": 126,
+      "bad_references": [],
+      "xml_under_tests": [],
+      "pyproject_modified": false,
+      "pythonpath_override": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/impl40e/src",
+      "production_source_bodies_read": false,
+      "production_source_modified": false
+    }
+  },
+  "open_CG": [],
+  "verification_history": [
+    {
+      "request": 125,
+      "verification": {
+        "state": "partial",
+        "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_clock_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests125/final2 --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests125/final2/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests125/final2/cache",
+        "scope": "新しいtest_fb_clock_belief.pyのみ。pyproject.toml:11のpythonpath=[src]とwork40の作業場所を確認。",
+        "tests": 55,
+        "passed": 2,
+        "failed": 53,
+        "errors": 0,
+        "skipped": 0,
+        "failure_reason": "全てK40 public shape missing: ClockPrior, ClockQuantity, SwitchPart.clock, FThreadHost.query_clock_belief",
+        "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests125/final2/results.xml",
+        "not_run": [
+          "K40のAPI検査より後の意味のassertの実行",
+          "長さ/メモリの測り",
+          "誤実装の表",
+          "既存ファイルの全体回帰"
+        ],
+        "limits": "53件のAPI不足より後の挙動は実装が入るまで実行確認できない。独立の数学と既存CE1の足場は通過。",
+        "result": "53 failed, 2 passed in 17.79s; exit 1. All 53 failures are the same K40 API absence.",
+        "processes": "各pytest実行のexec sessionは終了コードを受領済み。終了後Get-Processで、この実行に使ったsui/.venvまたはPython312のPythonプロセスは残数0。背景コマンドなし。",
+        "static_audit": {
+          "state": "passed",
+          "syntax": true,
+          "unbound_global_names": [],
+          "coverage_references_checked": 71,
+          "bad_references": [],
+          "xml_under_tests": [],
+          "pyproject_pythonpath_line": 11
+        }
+      }
+    },
+    {
+      "request": 126,
+      "verification": {
+        "state": "partial",
+        "controls": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_clock_belief.py -k 'ruler_controls or existing_native_footing or independent_integral' -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests126/controls --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests126/controls/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests126/controls/cache",
+          "tests": 3,
+          "passed": 3,
+          "failed": 0,
+          "result": "3 passed in 13.93s; exit 0",
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests126/controls/results.xml"
+        },
+        "full": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_clock_belief.py -n 2 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests126/full --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests126/full/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests126/full/cache",
+          "tests": 95,
+          "passed": 3,
+          "failed": 92,
+          "errors": 0,
+          "skipped": 0,
+          "result": "92 failed, 3 passed in 13.84s; exit 1",
+          "seconds_xml": "13.649",
+          "failure_message": "K40 public shape missing: ClockPrior, ClockQuantity, SwitchPart.clock, FThreadHost.query_clock_belief",
+          "same_API_failure_count": 92,
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests126/full/results.xml"
+        },
+        "not_run": [
+          "API検査より後のK40の意味のassertの実行",
+          "誤実装の表",
+          "長さ・メモリの測り",
+          "他ファイルの全体回帰"
+        ],
+        "scope": "pyproject.toml:11のpythonpath=[src]をwork40で使用。元のmasterのsrcにはK40のAPIが無い。",
+        "processes": "pytestのexec session 25864/73108は終了コードを受領済み。終了後Get-Processでsui/.venvまたは使用したPython312に該当するPythonの残数0。背景コマンドなし。",
+        "static_audit": {
+          "state": "passed",
+          "syntax": true,
+          "unbound_globals": [],
+          "reference_count": 95,
+          "bad_references": [],
+          "decisions": 15,
+          "rulers": 9,
+          "xml_in_tests": [],
+          "pythonpath": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/work40/src",
+          "pyproject_line": 11
+        }
+      }
+    },
+    {
+      "request": 128,
+      "verification": {
+        "state": "partial",
+        "scope": "メタデータの範囲変更のみ。収集と静的点検は実施、動作試験は未実行。",
+        "collection": {
+          "state": "passed",
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_clock_belief.py --collect-only -n 0 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests128/collect -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests128/collect/cache",
+          "result": "95 tests collected in 1.33s; exit 0",
+          "collected": 95,
+          "excluded": 0
+        },
+        "behavioral_tests": {
+          "state": "not_run",
+          "reason": "Python試験ファイルは未変更。今回の対象は合格条件の対応付けのみ。前回の3 passed/92 failedを今回の実行結果としては扱わない。"
+        },
+        "previous_request": 126,
+        "static_validation": {
+          "state": "passed",
+          "source_unchanged": true,
+          "source_sha256": "86e0b929c4bffd44b5a57795ed6b68762e992aa388d1687198ebca545aeacdc0",
+          "metadata_json_valid": true,
+          "references_checked": 97,
+          "bad_references": [],
+          "D11_acceptance_tests": 0,
+          "short_tests_retained_under_D7_D9": true,
+          "xml_under_tests": []
+        },
+        "processes": "収集と静的点検のコマンドは終了コードを受領済み。Get-Processで使用したsui/.venv/Python312に該当するPython残数0。背景コマンドなし。"
+      }
+    },
+    {
+      "request": 129,
+      "verification": {
+        "state": "partial",
+        "scope": "work40/src (masterのまま)で実行。impl40cのソースも本文も読まず、impl40cでの実行は今回行っていない。",
+        "controls": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_clock_belief.py -k 'ruler_controls or existing_native_footing or independent_integral' -n 0 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests129/controls --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests129/controls/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests129/controls/cache",
+          "result": "3 passed, 92 deselected in 14.07s; exit 0",
+          "passed": 3,
+          "failed": 0,
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests129/controls/results.xml"
+        },
+        "full": {
+          "command": "& ..\\..\\..\\.venv\\Scripts\\python.exe -B -m pytest tests/test_fb_clock_belief.py tests/test_fb_skeleton.py -n 0 -q --tb=no --basetemp=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests129/full --junitxml=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests129/full/results.xml -o cache_dir=C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests129/full/cache",
+          "tests": 275,
+          "passed": 182,
+          "failed": 93,
+          "errors": 0,
+          "skipped": 0,
+          "result": "93 failed, 182 passed in 14.70s; exit 1",
+          "files": {
+            "tests.test_fb_clock_belief": {
+              "passed": 3,
+              "failed": 92
+            },
+            "tests.test_fb_skeleton": {
+              "passed": 179,
+              "failed": 1
+            }
+          },
+          "failure_reasons": [
+            {
+              "cases": 92,
+              "message": "K40 public shape missing: ClockPrior, ClockQuantity, SwitchPart.clock, FThreadHost.query_clock_belief"
+            },
+            {
+              "cases": 1,
+              "message": "public export names missing: ClockPrior, ClockQuantity"
+            }
+          ],
+          "unexpected_other_failures": 0,
+          "xml": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/bt_tests129/full/results.xml"
+        },
+        "not_run": [
+          "impl40cでの修正後の実走",
+          "K40 API検査より後の意味のassert",
+          "6件の有限予算によるincomplete/完了の実走",
+          "7件のI(Q;Y)の直しの確認",
+          "誤実装の表"
+        ],
+        "processes": "署名のprobe、対照と全体pytestは全て終了コードを受領済み。Get-Processで使用したPython実行系に該当する残数0。背景コマンドなし。",
+        "static_audit": {
+          "state": "passed",
+          "syntax": true,
+          "unbound_global_names": [],
+          "selection_projection_exact_reads": 0,
+          "references_checked": 122,
+          "bad_references": [],
+          "xml_under_tests": [],
+          "pyproject_pythonpath_line": 11,
+          "pythonpath": "C:/Users/you11/Desktop/iku/sui/scratchpad/sui0648/work40/src"
+        }
+      }
+    }
+  ],
+  "changes_request126": [
+    {
+      "before": "ClockQuantity.period/segmentsの単独値とphase/width/fractionの正の領域照会",
+      "after": "parametersのT/mの部分集合とallocationの実効倍率の割合。on/offはZ_M分母のまま分子の事象。"
+    },
+    {
+      "before": "phase/widthの領域に小さい正の確率を要求",
+      "after": "領域はunsupportedの負例。境界の質量は全域尤度の独立の積分と非整数Betaの対照で確かめる。"
+    },
+    {
+      "before": "theta積分済みの枝の重みだけでも合った旧連続Gの対照",
+      "after": "同じ元の対象・S別の率・連続rhoの例で、I(Q;Y)とI(z;Y)が厳密に異なる定規を追加。旧対照も保持。"
+    },
+    {
+      "before": "比較の種類に公開の試験なし",
+      "after": "f.compare_exact/ExactComparisonの名前を選び、構造の0/正・恒等式・真の大小・予算付き未証明を確かめる。"
+    }
+  ],
+  "comparison_names": "f.ExactComparisonとf.compare_exact。F-aの既存exact export試験があるなら実装の公開一覧と同時に追加する。",
+  "scope_change_request128": {
+    "source_lines": [
+      3843,
+      5344,
+      5373,
+      5398
+    ],
+    "removed_test_count": 0,
+    "removed_acceptance_link": "D11と短い記録の2試験の関連付けを外した。D11をF-cへ移管。",
+    "retained_short_record_tests": [
+      {
+        "path": "tests/test_fb_clock_belief.py",
+        "name": "test_clock1_incomplete_query_keeps_root_and_more_budget_refines_the_same_belief",
+        "line": 811,
+        "state": "written_K40_API_missing",
+        "cases": {
+          "passed": 0,
+          "failed": 1
+        },
+        "scope": "retained_K40_short_record_correctness"
+      },
+      {
+        "path": "tests/test_fb_clock_belief.py",
+        "name": "test_clock1_native_cycle_uses_one_adopted_clock_belief_for_evaluation_step_and_next_update",
+        "line": 654,
+        "state": "written_K40_API_missing",
+        "cases": {
+          "passed": 0,
+          "failed": 1
+        },
+        "scope": "retained_K40_short_record_correctness"
+      }
+    ],
+    "retention_reasons": [
+      "記録1件の同じ根を照会予算の違いで包む試験。長い記録で採用が進み続ける条件ではない。D7で保持。",
+      "取得2件と一歩1件について、採用・評価・次の更新の正しさを確かめる有限の一周。D9で保持。"
+    ],
+    "source_file_modified": false,
+    "markers_added": false,
+    "pyproject_modified": false,
+    "other_tests_changed": false
+  },
+  "review_request129": [
+    {
+      "item": 1,
+      "judgment": "試験を直す",
+      "reason": "SelectionValuesのinformation/G/probabilitiesはRationalIntervalでexact欄が無い。0または1/2の包含と要求の幅を見る。FQuantity.exactとは区別。",
+      "evidence": [
+        "tests/test_fb_time_belief.py:41-42",
+        "実行時の公開signature/fields"
+      ],
+      "tests": [
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_declared_target_quotient_is_not_full_latent_state_information",
+          "line": 670,
+          "state": "written_K40_API_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 1
+          }
+        },
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_v6_continuous_information_keeps_theta_and_does_not_count_integration_boxes_as_states",
+          "line": 1078,
+          "state": "written_K40_API_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 1
+          }
+        }
+      ]
+    },
+    {
+      "item": 2,
+      "judgment": "試験を直す",
+      "reason": "整数周の点での帰着を試す意図に対し(2,4)は一様の区間取得。2回目を(4,4)へ直す。式exp(-4)は新しい点取得で保持。e^-2*(1-e^-2)/2はR=1で時計オフの区間取得の式で、時計を含む全体の参照値にはしない。",
+      "spec_line": 5249,
+      "tests": [
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_integer_period_endpoints_keep_period_and_effective_allocation_prior",
+          "line": 724,
+          "state": "written_K40_API_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 1
+          }
+        }
+      ]
+    },
+    {
+      "item": 3,
+      "judgment": "試験の足場を直す",
+      "reason": "TimeSource.readの20秒の待ちが、試験が意図して保留した次の取得を計算時間により失敗に変える。ClockRigの源だけを明示のEvent解放まで待つ形にし、closeが全gateを解放・joinする。待ち時間を延ばす変更はしない。",
+      "evidence": [
+        "tests/test_fb_time_belief.py:257-266",
+        "tests/test_fb_cycle.py:757-767"
+      ],
+      "limit": "報告されたimpl40cの63秒の実走自体は未再現。修正した源は実際の有限CE1の2取得の対照で実行し、後始末まで通過。",
+      "tests": [
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_existing_native_footing_and_CE1_control",
+          "line": 403,
+          "state": "passed",
+          "cases": {
+            "passed": 1,
+            "failed": 0
+          }
+        },
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_native_cycle_uses_one_adopted_clock_belief_for_evaluation_step_and_next_update",
+          "line": 654,
+          "state": "written_K40_API_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 1
+          }
+        }
+      ]
+    },
+    {
+      "item": 4,
+      "judgment": "試験を直す",
+      "reason": "Z67/v7では予算内で保証計算できる範囲がK40。6ケースの数値照会にmax_cells=16,max_terms=512,max_refinements=2と精度1/64または1/256を渡す。完了なら独立の定規と証明を検査し、届かなければ理由つきincomplete・同じ根・model_falsifiedでないことを見る。",
+      "spec_line": 3843,
+      "cases": 6,
+      "tests": [
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_width_prior_integrates_the_whole_simplex_with_certified_reference",
+          "line": 486,
+          "state": "written_K40_API_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 1
+          }
+        },
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_whole_period_cannot_learn_shape_or_create_extra_switches",
+          "line": 512,
+          "state": "written_K40_API_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 2
+          }
+        },
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_continuous_boundary_mass_is_kept_without_region_queries",
+          "line": 560,
+          "state": "written_K40_API_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 1
+          }
+        },
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_v6_Dirichlet_normalization_has_m_minus_one_Beta_factors_and_keeps_boundary_mass",
+          "line": 973,
+          "state": "written_K40_API_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 3
+          }
+        }
+      ]
+    },
+    {
+      "item": 5,
+      "judgment": "試験を直す",
+      "reason": "fbのexact export期待にClockPrior/ClockQuantityを追加。",
+      "tests": [
+        {
+          "path": "tests/test_fb_skeleton.py",
+          "name": "test_public_export_names_are_exact",
+          "line": 901,
+          "state": "written_K40_export_names_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 1
+          }
+        }
+      ]
+    },
+    {
+      "item": 6,
+      "judgment": "比較でreader/registryを毎回使わないことだけでは実装の誤りではない",
+      "reason": "決定12の固定の読み手は式の構築・宣言と原記録の解決・再生の条件。compare_exactが毎回reader/registryを消費するという規則は紙に無い。これらは選んだ呼出しの形で、試験は使用回数を見ていない。説明を明確化し、版・原記録の参照と固定readerからの数学の復元の試験は保持。",
+      "spec_line": 5375,
+      "limit": "実装の値が参照・版・全記録を保持し、固定readerから再生できるかは未確認。値だけで比較することと、出典の再生を省くことを同一視しない。",
+      "tests": [
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_v6_integral_exact_expression_is_versioned_json_and_replays_from_a_fixed_reader",
+          "line": 1122,
+          "state": "written_K40_API_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 1
+          }
+        },
+        {
+          "path": "tests/test_fb_clock_belief.py",
+          "name": "test_clock1_v6_integral_comparison_distinguishes_proofs_from_budgeted_unproved",
+          "line": 1156,
+          "state": "written_K40_API_missing",
+          "cases": {
+            "passed": 0,
+            "failed": 5
+          }
+        }
+      ]
+    }
+  ],
+  "review_request130": {
+    "judgment": "試験を直す",
+    "reason": "f_from_jsonで戻した数学値は構文DTOであり、f_math_jsonへ発行済みとして渡せない。保存された完全な数学artifactを公開restoreで再発行し、発行済みartifactだけをf_math_jsonに渡す。",
+    "spec_evidence": [
+      "specs/関所F_今の約束.md:32",
+      "specs/関所F_今の約束.md:356",
+      "specs/関所F_今の約束.md:357",
+      "specs/関所F_今の約束.md:392",
+      "specs/関所F_Fb_今の約束.md:5375"
+    ],
+    "public_reader": "FReaderの公開signatureの5口: entry/entries/record/ancestors/sealed_content。U専用のrecordだけの読み手から、台帳項目・本文・来歴を全て固定した試験のsnapshotへ。",
+    "oracle": "状態をまとめたI(Q;Y)の独立のSimpson定規は変更しない。保存値が定規の以前の最細幅より狭かったためn=512/1024まで追加し、単なる重なりでは合格させない。",
+    "test": {
+      "path": "tests/test_fb_clock_belief.py",
+      "name": "test_clock1_v6_integral_exact_expression_is_versioned_json_and_replays_from_a_fixed_reader",
+      "line": 1122
+    },
+    "open_CG": [],
+    "result": "修正後の再読1・連続情報量1・比較5が緑。新しいop/name/version/原記録参照、正準bytes、式の往復、独立I(Q;Y)の包含は保持。"
+  }
+}
