@@ -367,8 +367,11 @@ class AcquireRig(LoopRig):
         return key
 
     def wait_returns(self, count=1):
+        # Stop early only on an error raised while waiting; an earlier work's expected
+        # error must not end the wait before this call is recorded.
+        seen = len(self.errors())
         with self.changed:
-            assert self.changed.wait_for(lambda: len(self.calls) >= count or bool(self.errors()), timeout=30)
+            assert self.changed.wait_for(lambda: len(self.calls) >= count or len(self.errors()) > seen, timeout=30)
         assert len(self.calls) >= count, self.errors()
 
     def receipts(self):

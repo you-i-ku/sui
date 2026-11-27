@@ -252,7 +252,10 @@ class ToySource:
     def read(self, cursor):
         i = len(self.calls); self.calls.append(cursor)
         gate = self.gates[i]; gate.entered.set()
-        assert gate.release.wait(WATCHDOG), "passive source not released"
+        # The world waits until the test releases it or close() does; a wall-clock
+        # expiry here would turn a slow run into a failed read (a different scenario).
+        # Hang detection belongs to the test's until().
+        gate.release.wait()
         if self.rig.closing: raise SystemExit("test teardown")
         self.rig.advance(10)
         symbol = self.symbols[i]
@@ -271,7 +274,7 @@ class ToyActor:
         i = len(self.calls); self.calls.append(execution)
         self.entered_ns.append(self.rig.clock.mono_ns())
         self.gates[i].entered.set()
-        assert self.gates[i].release.wait(WATCHDOG), "toy actor not released"
+        self.gates[i].release.wait()  # same as ToySource.read: released by the test or close()
         if self.rig.closing: raise SystemExit("test teardown")
         self.rig.advance(10)
         self.returned_ns.append(self.rig.clock.mono_ns())
