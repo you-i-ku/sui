@@ -11,3 +11,6 @@ fast = ["gmpy2==2.3.2"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+markers = [
+    "fc: F-c の合格の試験 (関門 -m \"not fc\" から外す。紙 F-b の開発フロー ⑥、K41 では Z70 の細かい精度の試験)",
+]

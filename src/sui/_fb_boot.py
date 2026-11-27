@@ -183,6 +183,10 @@ def plan_boot(state, declaration, d) -> BootPlan:
                                                  or dict(value.continuation.args) != {}):
             # 継続の方法は reuse_candidates/3 だけ (旧 /2 を黙って別の意味で読まない、P1・K36-c-b (エ))
             plan.missing.append("initial:continuation")
+        elif (step_time := _step_time_fault(state, d, declaration)) is not None:
+            # 遷移のある調子の最初の並びで、比べる世界の一歩か宣言した一歩の読みが時刻つきに読めなければ、考える側を起こさない
+            # (比べる前に名指す。一歩は選ばれないと外へ出ないので、止めるのはここ 1 か所。K41 決定 6・K41-i)
+            plan.missing.append("execution:step_time:" + step_time)
         elif sensing:
             state.allocations[_fb.BootSlot(declaration=d, slot=value.allocation.slot)] = value.allocation.value.amount
             # 最初の活動の入口 (K36-c-a ②): 容量を確かめて入場させ、その活動の中で Wg を 1 回起動する。この時はほかの
@@ -269,6 +273,23 @@ _EXECUTIONS = {_c.EXECUTION_DECLARATION: _fb.ExecutionDeclaration,
                _c.TIMED_EXECUTION_DECLARATION: _fb.TimedExecutionDeclaration}
 
 
+def _step_time_fault(state, d, declaration):
+    """起動の最初の並び (最初の候補) で、比べる世界の一歩か宣言した一歩の読みが時刻つきに読めない時の "<核>:<理由の語>"
+    (`f_update2.pool_time_fault`)。最初の候補を解けなければ None (感じる側の不足として名指す)。"""
+    from ._fb_pool import boot_shortfall
+    from .f_update2 import pool_time_fault
+    if declaration.perception is None:
+        return None
+    try:
+        state.ledger.entry(declaration.perception.value.model)
+    except KeyError:
+        return None
+    member, _missing = boot_shortfall(state.ledger, d)
+    # 行う一歩の宣言が無くても比べる世界はある (`pool_time_fault` の ②は時刻を読む宣言だけを見る)
+    return None if member is None else pool_time_fault([member], member["document"],
+                                                       getattr(declaration.execution, "value", None))
+
+
 def execution_reading_fault(declaration):
     """行う一歩の宣言と感じる側の読み方の組み合わせの不足 (K38 決定 9)。時刻を読む感じる側が一歩の結果も読むなら、宣言は
     源の件数の読みつき (timed_execution_declaration) で、読みの全部が E_y(s) ⊗ I_N の形と確かめられること。返すのは
@@ -282,8 +303,10 @@ def execution_reading_fault(declaration):
     if isinstance(value, _fb.TimedExecutionDeclaration):
         # 行える一歩 (相手を宣言した核) と、読みを宣言した核の全部を、実行の前と同じ判定で照らす
         for kid in sorted({*value.actors, *value.source_readings}):
-            if step_reading_fault(value, kid) is not None:
-                return "source_reading", "/declaration/execution/value/source_readings/" + kid
+            fault = step_reading_fault(value, kid)
+            if fault is not None:   # 足りない欄があればその欄まで名指す
+                return "source_reading", "/declaration/execution/value/source_readings/" + kid + (
+                    "" if fault == "source_reading_missing" else "/" + fault)
         return None
     return ("source_reading", "/declaration/execution/contract") if timed_reading else None
 

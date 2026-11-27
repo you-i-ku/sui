@@ -555,6 +555,15 @@ class Integral:
             return sum(v, ft.Poly())
         return v[s[1]] if s[0] == "eq" else sum(v[s[1]:], ft.Poly())
 
+    def _point_bounds(self, theta, num):
+        """θ 1 点の尤度の上下界 (指数多項式を精度 num.bits で包む)。`Information` が部分ごとに読む口 (遷移のある群は
+        `_fb_chain.ChainIntegral` が同じ口で鎖の上下界を返す)。"""
+        return self._point_value(theta).enclose(num.bits)
+
+    def _num_for(self, num, slack):
+        """箱の中の差の包み slack に見合う精度 (指数多項式は精度によらず安いので、呼ぶ側の精度のまま)。"""
+        return num
+
     def _interior_point(self):
         m = self.m
         w = self.w0 if self.w0 is not None else tuple(_Q(1, m) for _ in range(m))
@@ -823,8 +832,10 @@ class Information(Integral):
             setattr(self, name, getattr(first, name))
         self.parts, self.cells = parts, [tuple(row) for row in cells]
         self.selector, self.exact, self.levels = None, None, {}
-        self.dims = ([("rho",)] if self.rho0 is None else []) + list(first.dims)
-        self.rotation = self.rho0 is None and not first.dims
+        self.dims = ([("rho",)] if self.rho0 is None and getattr(first, "analytic_rotation", True) else []) + list(first.dims)
+        # 回転だけ連続の解析的な道は、θ ごとの尤度が指数多項式の部分だけ (遷移のある群は箱の座標、`_fb_chain.ChainIntegral`)
+        analytic = getattr(first, "analytic_rotation", True)
+        self.rotation = self.rho0 is None and not first.dims and analytic
         if not self.rotation:
             return
         self.pieces = []
@@ -841,10 +852,7 @@ class Information(Integral):
     def positive(self):
         """積分が正か: 内部の θ では尤度の支持が θ によらない (モジュールの説明) ので、内部の 1 点で正の類が 2 つ以上なら φ は
         内部の全体で正、そうでなければ 0。"""
-        from ._fb_time import Poly
-        theta = self.parts[0]._interior_point()
-        values = [p._point_value(theta) for p in self.parts]
-        return sum(1 for row in self.cells if not sum((v.scale(a) for v, a in zip(values, row)), Poly()).zero) >= 2
+        return sum(1 for row in self.cells if any(a and p.positive() for a, p in zip(row, self.parts))) >= 2
 
     def _steps(self, level):
         return (level,) if self.rotation else super()._steps(level)
@@ -896,8 +904,9 @@ class Information(Integral):
             if outside:   # 代表点が単体の外 (箱が単体の境目で切れる): 尤度は [0, F]
                 bounds.append((_Q(0), p.F))
                 continue
-            V = (p.exact if p.blind else p._point_value(theta)).enclose(num.bits)
             delta = 0 if p.blind else min(_Q(1), p.rate * p.period * p.turns * A)
+            V = (p.exact.enclose(num.bits) if p.blind and p.exact is not None
+                 else p._point_bounds(theta, p._num_for(num, p.F * delta)))
             bounds.append((max(_Q(0), V[0] - p.F * delta), min(p.F, V[1] + p.F * delta)))
         c_lo = [sum((a * v[0] for a, v in zip(row, bounds)), _Q(0)) for row in self.cells]
         c_hi = [sum((a * v[1] for a, v in zip(row, bounds)), _Q(0)) for row in self.cells]

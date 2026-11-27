@@ -122,6 +122,13 @@ ACQUISITION_RESULT_PROJECTION = _ContractRef("sui.fb.acquisition_result_projecti
 ACQUISITION_CONTROL_TABLE = _ContractRef("sui.fb.acquisition_control_table", "1")          # 記録された履歴 → 制御 u の候補
 STATE_INDEPENDENT_CONTROL_SELECTION = _ContractRef("sui.fb.state_independent_control_selection", "1")  # 選び方が状態に依存しない根拠
 
+# 観測の間にも変わる調子 (§6-10 K41)。調子の役の状態の上の固定の生成行列 (行 = 出る状態、列 = 入る状態、非対角は非負の有理数、
+# 対角は出る率の和の負)、一歩が調子を読む時刻 (入場の時点の S を読む所要 0 の観測)、記録の時刻を条件にしてよい根拠 (K26 と同じ 2 つ)
+FIXED_STATE_GENERATOR = _ContractRef("sui.fb.fixed_state_generator", "1")
+INSTANTANEOUS_ENTRY_OBSERVATION = _ContractRef("sui.fb.instantaneous_entry_observation", "1")
+RECORDED_TIMING_INPUTS = _ContractRef("sui.fb.recorded_timing_inputs", "1")
+INDEPENDENT_TIMING_SOURCE = _ContractRef("sui.fb.independent_timing_source", "1")
+
 # 見立てへ通す本 (§6-10 K28・K28-a)。家の人が acquire で残した取りに行きの列を、1 回ずつの核で順に予想へ
 SAVED_ACQUISITION_UPDATE = _ContractRef("sui.fb.saved_acquisition_update", "1")   # δ: 取りに行きの Frame の B ごとに義務 1 つ
 STATE_CORRESPONDENCE = _ContractRef("sui.fb.state_correspondence", "1")           # 物語の対応の記録 (Prediction / MODEL)

@@ -1159,8 +1159,11 @@ class PoissonLaw:
     a: _Fraction | None = None
     b: _Fraction | None = None
     state_role: str | None = None
+    state_process: MethodCall | None = None
 
     def __post_init__(self) -> None:
+        if self.state_process is not None and type(self.state_process) is not MethodCall:
+            raise TimeBeliefError(kind="invalid", reason="state_process must be a method call", field="state_process")
         if type(self.rates) is not tuple:
             raise TimeBeliefError(kind="invalid", reason="rates must be a tuple", field="rates")
         for rate in self.rates:
@@ -1308,11 +1311,21 @@ class TimedAcquisitionModel:
 class SourceCountReading:
     """一歩が源の件数とどう関わるかの宣言 (K38 決定 9・K38-c ③)。independent_of_count は「結果が S を条件に源の件数と
     独立」の宣言、count_shift は一歩が件数を動かす量。行列の値は持たない (結果の確率の出どころはモデルの核の 1 か所)。
-    independent_of_count が真で count_shift = 0 の時だけ E_y(s) ⊗ I_N の形と宣言されている。"""
+    independent_of_count が真で count_shift = 0 の時だけ E_y(s) ⊗ I_N の形と宣言されている。
+    measurement は一歩が調子を読む時刻の宣言 (K41 決定 6: `sui.fb.instantaneous_entry_observation/1` = 入場の時点の S を読む
+    所要 0 の観測)、time_basis は記録の時刻 (entered・finished) を条件にしてよい根拠 (K26 と同じ 2 つ:
+    `sui.fb.recorded_timing_inputs/1` = 時刻を決めた材料が全部記録されている / `sui.fb.independent_timing_source/1` = 隠れた過程と
+    結果の乱れから独立と認証された時刻の出どころ)。None は宣言しない (遷移の無い法則・遷移で結果が変わらない一歩は要らない)。
+    """
     independent_of_count: bool
     count_shift: int
+    measurement: MethodCall | None = None
+    time_basis: MethodCall | None = None
 
     def __post_init__(self) -> None:
+        for name in ("measurement", "time_basis"):
+            if getattr(self, name) is not None and type(getattr(self, name)) is not MethodCall:
+                raise TimeBeliefError(kind="invalid", reason=f"{name} must be a method call", field=name)
         if type(self.independent_of_count) is not bool:
             raise TimeBeliefError(kind="invalid", reason="independent_of_count must be a bool",
                                   field="independent_of_count")
@@ -1436,7 +1449,7 @@ class ResolvedCandidate:
     """候補の解決 (K39 決定 8) が返す候補 1 つの正準な記述: 名前 id・展開した状態 states (スイッチの列 z × 宣言のモデルの状態。
     部品 0 個なら宣言のモデルの状態のまま)・候補の中の事前 prior (P(z) × 状態の事前、和 1)・状態ごとの率 rates (z を当てた後の
     率。Poisson の族でない法則は None)・物語の対応 correspondence・知る対象への写像 knowledge_targets (「解決した率の表の識別 /
-    元の知る対象」。部品 0 個なら元の知る対象)・要る参照 references・時計 clocks (K40: 展開した状態ごとに、時計のオフは None、
+    元の知る対象」。部品 0 個で遷移も無ければ元の知る対象、K41)・要る参照 references・時計 clocks (K40: 展開した状態ごとに、時計のオフは None、
     オンは (周期 T, ((区切りの始まりの位置 ∈ [0, 1), 倍率), …)) で、率はこの倍率を掛ける前の率。回転・幅・配分のどれかが連続の
     事前の枝は (周期 T, ()) で、形は θ の積分で読む (時計の照会は `ClockQuantity`)。Poisson の族でない法則は
     None)。"""

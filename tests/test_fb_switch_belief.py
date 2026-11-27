@@ -771,14 +771,15 @@ def test_switch1_invalid_rational_declarations_are_rejected(switches,field,value
 
 def test_switch1_review_R2_one_law_type_has_the_fixed_and_family_forms():
     switch_api()
-    assert {f.name for f in fields(fb.PoissonLaw)}=={
-        'run','states','prior','rates','origin_ns','initial_count','time_unit',
-        'family','parts','a','b','state_role'}
     assert not hasattr(fb,'SwitchPoissonLaw')
     r=TimeRig(script((1,1,E)))
     try:
         law=r.law()
         assert (law.family,law.parts,law.a,law.b,law.state_role)==(None,(),None,None,None)
+        assert {f.name for f in fields(fb.PoissonLaw)} == {
+            'run', 'states', 'prior', 'rates', 'origin_ns', 'initial_count', 'time_unit',
+            'family', 'parts', 'a', 'b', 'state_role', 'state_process'}
+        assert law.state_process is None
     finally:r.close()
 
 

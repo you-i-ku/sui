@@ -985,7 +985,6 @@ def test_time1_step_reading_has_no_matrix_values_and_uses_only_the_model_kernel(
     # them against another set at runtime. The old conflicting declaration
     # (T=E=I/2) cannot bind to the public constructor anymore.
     time_api()
-    assert {field.name for field in fields(fb.SourceCountReading)} == {"independent_of_count", "count_shift"}
     half = tuple(tuple(Q(1, 2)*x for x in row) for row in I)
     with pytest.raises(TypeError):
         signature(fb.SourceCountReading).bind(independent_of_count=True, count_shift=0,
@@ -1004,6 +1003,8 @@ def test_time1_step_reading_has_no_matrix_values_and_uses_only_the_model_kernel(
     assert r.query("state", state="A").exact == p
     assert p != Q(1, 2)  # The removed T=I/2 declaration would give this wrong answer.
     assert len(r.actor.calls) == 1
+    assert {field.name for field in fields(fb.SourceCountReading)} == {
+        "independent_of_count", "count_shift", "measurement", "time_basis"}
 
 
 def test_time1_K37_addition_replays_timed_evidence_and_changes_actual_evaluation(times_rig):

@@ -287,6 +287,10 @@ def add(state, boot, candidate, alpha, boundary):
             raise _fb.CandidateInputError(reason="pool:" + str(exc), field="/candidate") from None
         except (_f.FInputError, _f.FSpecificationMissing):
             raise _fb.CandidateInputError(reason="pool:model", field="/candidate") from None
+        # 新しい並びでも、比べる世界の一歩と宣言した一歩の読みが時刻つきに読めること (K41 決定 6、起動の確かめと同じ判定)
+        fault = _u.pool_time_fault(members, model_document, getattr(plan.declaration.execution, "value", None))
+        if fault is not None:
+            raise _fb.CandidateInputError(reason="step_time:" + fault, field="/candidate")
         ledger = state.ledger
         parents = _front(ledger, seen_boundary | {plan.d})
 

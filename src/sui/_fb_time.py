@@ -210,17 +210,24 @@ class Ratio:
         return f"Ratio({self.num.terms!r} / {self.den.terms!r})"
 
 
-def joint(spec):
+def joint(spec, at_ns=None):
     """採用された信念の同時の確率 q_i = W_i / Z (並びの状態の順)。考える側の出発点 (F-a の initial_joint)。
 
     時計の連続の事前の unit を含む正本では、q_i は積分を含む比 (`IntegralRatio`) で、連続の事前の unit の重みは、積分が
     指数多項式に閉じる時 (回転だけ連続・尤度が θ によらない) も積分の項のまま持つ (K40 決定 12: θ を積分した有限の重みだけを
     渡さない)。考える側は同じ項の上で、評価の仮の結果を条件に付けて I(Q; Y | h) を直接評価する (`information`)。F-a の厳密式へは
     版つきの積分の式 (ExactReal の integral) として写る。連続の事前の unit が無ければ指数多項式の比 (`Ratio`)。"""
+    if at_ns is not None and spec["terminal_ns"] is not None and at_ns > spec["terminal_ns"]:
+        # 考える側の評価の根 j (K41 決定 6): 採用済みの終端から j まで無観測で進める (静的な unit の質量は変わらない)
+        spec = {**spec, "terminal_ns": at_ns}
     _C, vs = classes(spec)
     space = _space(spec)
-    W = [(Form(Poly(), {(i, None): _Q(1)} if space.integral(i, None).positive() else {}, space) if continuous(u)
-          else sum(vs[i], Poly())).scale(u["prior"]) for i, u in enumerate(spec["units"])]
+
+    def mass(i, u):   # 積分・鎖の unit は積分の項のまま (畳まない、K40 決定 12)
+        if continuous(u) or chained(u):
+            return Form(Poly(), {(i, None): _Q(1)} if space.integral(i, None).positive() else {}, space)
+        return sum(vs[i], Poly())
+    W = [_weighted(u, mass(i, u)) for i, u in enumerate(spec["units"])]
     Z = sum(W, Poly())
     if not any(isinstance(x, Form) for x in W):
         return tuple(Ratio(w, Z) for w in W)
@@ -401,6 +408,10 @@ def _form_exact(form):
 INTEGRAL_FORMULA = {"name": "sui.fb.clock_integral", "version": "1"}   # 積分の式の版 (契約の名前と版の形)
 
 
+CHAIN_FORMULA = {"name": "sui.fb.state_chain_mass", "version": "1"}
+CHAIN_INFORMATION_FORMULA = {"name": "sui.fb.state_chain_information", "version": "1"}   # 遷移のある群の情報量の積分の式の版   # 遷移のある群の unit の質量の式の版 (K41 決定 4)
+
+
 INFORMATION_FORMULA = {"name": "sui.fb.clock_information", "version": "1"}   # 情報量の積分の式の版
 
 
@@ -472,7 +483,8 @@ def _split(labels, cells):
             for key, c in x.num.leaves.items():
                 space = space or x.num.space
                 law = space.spec["units"][key[0]]["law"]
-                theta = _f._digest({k: _f._encode(law[k]) for k in ("clock", "origin_ns", "time_unit")})
+                # θ の空間の識別 (時計の無い遷移の群の項は時計の欄を持たない、K41。θ に依らない項は `_flat` で有限の形へ)
+                theta = _f._digest({k: _f._encode(law.get(k)) for k in ("clock", "origin_ns", "time_unit")})
                 entry["groups"].setdefault(theta, {}).setdefault(key, [_Q(0)] * len(cells))[y] += c
     if space is None:
         return None
@@ -504,6 +516,14 @@ def _phi_exact(cs):
 def _information_formula(space, keys, matrix):
     """情報量の積分の版つきの式 (正準な JSON の文字列): θ の空間を共有する unit (法則・故障の核。事前は係数の側)・全原記録の
     参照・端の時刻・結果の類ごとの係数 (全部 0 の類は省く)。固定の読み手 (`_formula_integral`) がこれだけで作り直す。"""
+    if any(chained(space.spec["units"][k]) for k, _selector in keys):
+        # 遷移のある群の項 (K41 決定 8): 項は群の初期の事前を含むので、群の unit を事前つきで全部持ち、項は番号で名指す
+        group = sorted({j for k, _selector in keys for j in space.spec["units"][k]["law"]["transitions"]["units"]})
+        encoded = encode_spec({"units": [space.spec["units"][j] for j in group], "entries": space.spec["entries"],
+                               "terminal_ns": space.spec["terminal_ns"]})
+        return _f._dumps({**CHAIN_INFORMATION_FORMULA, "units": encoded["units"], "keys": [k for k, _s in keys],
+                          "entries": encoded["entries"], "terminal_ns": space.spec["terminal_ns"],
+                          "cells": [[_f._encode(a) for a in row] for row in matrix if any(row)]}).decode("utf-8")
     units = [{**space.spec["units"][k], "prior": _Q(1)} for k, _selector in keys]
     encoded = encode_spec({"units": units, "entries": space.spec["entries"], "terminal_ns": space.spec["terminal_ns"]})
     return _f._dumps({**INFORMATION_FORMULA,
@@ -558,6 +578,20 @@ def _formula_integral(formula):
                     _INTEGRALS.clear()
                 found = _INTEGRALS[key] = Information([space.integral(k, None) for k in range(len(units))], cells)
             return found
+        if {k: value.get(k) for k in CHAIN_INFORMATION_FORMULA} == CHAIN_INFORMATION_FORMULA:
+            key = _f._digest({"information": formula})
+            found = _INTEGRALS.get(key)
+            if found is None:
+                from ._fb_clock import Information
+                space = _Space(_placed(value))
+                cells = [[_f._decode(a, _Q) for a in row] for row in value["cells"]]
+                if len(_INTEGRALS) > 256:
+                    _INTEGRALS.clear()
+                found = _INTEGRALS[key] = Information([space.integral(k, None) for k in value["keys"]], cells)
+            return found
+        if {k: value.get(k) for k in CHAIN_FORMULA} == CHAIN_FORMULA:
+            selector = value["selector"]
+            return _Space(_placed(value)).integral(value["unit"], None if selector is None else tuple(selector))
         if {k: value[k] for k in INTEGRAL_FORMULA} != INTEGRAL_FORMULA:
             raise KeyError("version")
         unit = {**value["unit"], "prior": [1, 1]}
@@ -568,6 +602,16 @@ def _formula_integral(formula):
         return _Space(spec).integral(0, selector)
     except (KeyError, TypeError, ValueError, IndexError):
         raise FInputError("shape", "unreadable clock integral formula") from None
+
+
+def _placed(value):
+    """鎖の式 (群の unit だけを持つ) から正本を作り直す: 各 unit を自分の番号 index の位置に置く (群の unit の番号・一歩の因子の
+    列は並び全体の番号のまま、K41)。群の外の位置は使わない。"""
+    spec = decode_spec({"units": value["units"], "entries": value["entries"], "terminal_ns": value["terminal_ns"]})
+    units = [None] * (max(u["index"] for u in spec["units"]) + 1)
+    for u in spec["units"]:
+        units[u["index"]] = u
+    return {**spec, "units": units}
 
 
 _EVALUATION_REGIONS = 1 << 12   # F-a の評価の中の積分の箱の数の上限 (予算の max_cells が無い時)
@@ -777,8 +821,14 @@ def classes(spec, need=0):
     cursors = [e["cursor"] for e in spec["entries"] if e["kind"] == "acquisition"]
     C = max([*(c + 1 for c in cursors), need + 1, 1])
     run = {"poisson": _poisson, "finite": _finite}
-    return C, [None if continuous(u) else run[u["law"]["kind"]](u, spec["entries"], spec["terminal_ns"], C)
+    return C, [None if continuous(u) or chained(u) else run[u["law"]["kind"]](u, spec["entries"], spec["terminal_ns"], C)
                for u in spec["units"]]
+
+
+def chained(unit) -> bool:
+    """遷移のある調子の群の unit か (K41 決定 1。R = 0 は候補の解決で外してあり、既存の道を通る)。"""
+    from ._fb_chain import chained as is_chained
+    return is_chained(unit)
 
 
 def continuous(unit) -> bool:
@@ -798,10 +848,23 @@ def unit_mass(spec, vs, i, selector=None):
     return v[selector[1]] if selector[0] == "eq" else sum(v[selector[1]:], Poly())
 
 
+def unit_weight(spec, vs, i, selector=None):
+    """unit i の正規化する前の重み (事前を掛けた量、`_weighted`)。"""
+    return _weighted(spec["units"][i], unit_mass(spec, vs, i, selector) if not chained(spec["units"][i])
+                     else _space(spec).form(i, selector))
+
+
+def _weighted(unit, mass):
+    """unit の量 mass に事前を掛けた重み。静的な unit は事前_i × L_i。遷移のある群の unit の量は群の初期の事前を含む
+    Σ_{s0} 事前(s0) · L(s0 → i) なので、そのまま (K41 決定 3。事前は状態 i の外の初期の状態にもかかるので、unit の事前だけを
+    外に出せない)。照会の重み (`unit_weight`) と考える側の出発点 (`joint`) が同じこの判断を使う (レビュー R8)。"""
+    return mass if chained(unit) else mass.scale(unit["prior"])
+
+
 def weights(spec):
-    """状態ごとの正規化する前の重み W_i = 事前_i × L_i と、証拠の質量 Z。連続の事前の unit の W_i は積分の項 (Form)。"""
+    """状態ごとの正規化する前の重み W_i (`unit_weight`) と、証拠の質量 Z。連続の事前・遷移のある群の unit の W_i は積分の項 (Form)。"""
     _C, vs = classes(spec)
-    W = [unit_mass(spec, vs, i).scale(u["prior"]) for i, u in enumerate(spec["units"])]
+    W = [unit_weight(spec, vs, i) for i in range(len(spec["units"]))]
     return W, sum(W, Poly())
 
 
@@ -871,6 +934,8 @@ class _Space:
     def integral(self, i, selector):
         from ._fb_clock import Integral
         unit = self.spec["units"][i]
+        if chained(unit):
+            return self._chain(i, selector)
         key = _f._digest({"unit": {k: unit[k] for k in ("law", "failure", "disconnection", "index")},
                           "entries": encode_spec({"units": [], "entries": self.spec["entries"],
                                                   "terminal_ns": self.spec["terminal_ns"]})["entries"],
@@ -882,9 +947,36 @@ class _Space:
             found = _INTEGRALS[key] = Integral(unit, self.spec["entries"], self.spec["terminal_ns"], selector)
         return found
 
+    def _chain(self, i, selector):
+        from ._fb_chain import Chain, group_of
+        tr = self.spec["units"][i]["law"]["transitions"]
+        group = [self.spec["units"][j] for j in tr["units"]]
+        key = _f._digest({"chain": encode_spec({"units": group, "entries": self.spec["entries"],
+                                                "terminal_ns": self.spec["terminal_ns"]}),
+                          "unit": i, "selector": selector})
+        found = _INTEGRALS.get(key)
+        if found is None:
+            if len(_INTEGRALS) > 256:
+                _INTEGRALS.clear()
+            if continuous(self.spec["units"][i]):   # 連続の時計の事前 × 遷移 (K41 決定 8)
+                from ._fb_chain import ChainIntegral
+                found = _INTEGRALS[key] = ChainIntegral(self.spec, i, selector)
+            else:
+                need = selector[1] + 1 if selector is not None else 0
+                found = _INTEGRALS[key] = Chain(*group_of(self.spec, i, need), selector)
+        return found
+
     def formula(self, i, selector):
-        """unit i の積分の版つきの式 (正準な JSON の文字列、K40 決定 12)。"""
+        """unit i の積分の版つきの式 (正準な JSON の文字列、K40 決定 12)。遷移のある群の unit は、群の全部の unit (事前つき) と
+        群の中の位置を持つ鎖の式 (K41 決定 4)。"""
         unit = self.spec["units"][i]
+        if chained(unit):
+            tr = unit["law"]["transitions"]
+            group = [self.spec["units"][j] for j in tr["units"]]
+            encoded = encode_spec({"units": group, "entries": self.spec["entries"], "terminal_ns": self.spec["terminal_ns"]})
+            return _f._dumps({**CHAIN_FORMULA, "units": encoded["units"], "entries": encoded["entries"],
+                              "terminal_ns": self.spec["terminal_ns"], "unit": i,
+                              "selector": None if selector is None else _f._encode(selector)}).decode("utf-8")
         encoded = encode_spec({"units": [{**unit, "prior": _Q(1)}], "entries": self.spec["entries"],
                                "terminal_ns": self.spec["terminal_ns"]})
         u = encoded["units"][0]
@@ -902,14 +994,15 @@ class _Space:
 
 # --- 正本を作る (入口 U が使う) ---
 
-def unit_law(law, state, rate=None, clock=None):
+def unit_law(law, state, rate=None, clock=None, transitions=None):
     """法則の状態 state の件数の法則を正本の形 (dict) にする。rate はスイッチを当てた後の率 (K39、None は宣言の率)、clock は
     時計のオンの枝の時計の形 (K40、`f_update2._clock_choices`。オフは None で、欄を持たない)。対応していない法則は None。"""
     i = law.states.index(state)
     if isinstance(law, _fb.PoissonLaw):
         out = {"kind": "poisson", "rate": law.rates[i] if rate is None else rate, "origin_ns": law.origin_ns,
                "time_unit": law.time_unit, "initial_count": law.initial_count,
-               **({} if clock is None else {"clock": clock})}
+               **({} if clock is None else {"clock": clock}),
+               **({} if transitions is None else {"transitions": transitions})}
     elif isinstance(law, _fb.FiniteCountLaw):
         out = {"kind": "finite", "origin_ns": law.origin_ns, "initial_count": law.initial_count,
                "positions_ns": law.positions_ns, "paths": law.paths, "weights": law.weights_by_state[i]}
@@ -951,6 +1044,10 @@ def decode_spec(value):
             else:
                 out["clock"] = {"period": q(clock["period"]), "starts": [q(x) for x in clock["starts"]],
                                 "multipliers": [q(x) for x in clock["multipliers"]]}
+        if "transitions" in out:   # 遷移のある群 (K41): 群の状態ごとの率・生成行列の非対角・群の unit の番号
+            tr = out["transitions"]
+            out["transitions"] = {"rates": [q(x) for x in tr["rates"]], "R": [[q(x) for x in row] for row in tr["R"]],
+                                  "units": list(tr["units"])}
         if "weights" in out:
             out["weights"] = tuple(q(x) for x in out["weights"])
             out["paths"] = tuple(tuple(p) for p in out["paths"])
@@ -1005,8 +1102,8 @@ def _quantity(spec, quantity):
         keep = [i for i, u in enumerate(units) if (quantity.state is None or u["state"] == quantity.state)
                 and (quantity.candidate is None or u["candidate"] == quantity.candidate)]
         selector = ("ge" if quantity.at_least else "eq", quantity.count)
-        n = sum((unit_mass(spec, vs, i, selector).scale(units[i]["prior"]) for i in keep), Poly())
-        Z = sum((unit_mass(spec, vs, i).scale(u["prior"]) for i, u in enumerate(units)), Poly())
+        n = sum((unit_weight(spec, vs, i, selector) for i in keep), Poly())
+        Z = sum((unit_weight(spec, vs, i) for i in range(len(units))), Poly())
         return n, Z
     if kind == "state" and quantity.candidate is not None:
         # state は周辺 P(S | h) (K39-b R3)。候補に条件づけた値は SwitchQuantity、共同の値は candidate の照会と掛けて作る
@@ -1145,7 +1242,7 @@ def _clock_quantity(spec, quantity, mine, family, W, picked):
         if shape is None:
             out = out + W[i].scale(length)
         elif "segments" in shape:
-            out = out + unit_mass(spec, vs, i, ("share", lo, hi)).scale(units[i]["prior"])
+            out = out + unit_weight(spec, vs, i, ("share", lo, hi))
         else:
             out = out + W[i].scale(share_of(shape, lo, hi))
     return out
@@ -1332,7 +1429,9 @@ def step_reading_fault(declaration, kid):
     reading = declaration.source_readings.get(kid)
     if not isinstance(reading, _fb.SourceCountReading):
         return "source_reading_missing"
-    return None if noninterfering(reading) else "source_reading_interferes"
+    if reading.independent_of_count is not True:   # 名指しは足りない宣言の欄 (K41 決定 6 の「足りない測定の条件を名指す」)
+        return "independent_of_count"
+    return None if reading.count_shift == 0 else "count_shift"
 
 
 def noninterfering(reading) -> bool:

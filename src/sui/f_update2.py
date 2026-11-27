@@ -402,7 +402,7 @@ def adopted_belief(compiler):
         if value["origin"] == compiler.origin_point:
             adoptions[entry.cid] = value
     if not adoptions:
-        return None
+        return _prior_belief(compiler)
     heads = set(adoptions) - {a["previous"] for a in adoptions.values()}
     if len(heads) != 1:
         raise FIncomplete("certificate_incomplete", "competing F-b adoptions", "/adoption")
@@ -420,8 +420,44 @@ def adopted_belief(compiler):
         raise FInputError("result_mismatch", "the adopted result differs from its recomputation", "/adoption/result")
     if state.mode == "timed":   # 時刻を読む信念は、正本から作った厳密な確率の比をそのまま渡す (K38)
         from . import _fb_time
-        return compiler.point(head["result"]).id, _fb_time.joint(state.timed)
+        # 評価の根は判断の時刻 j (文脈の judgment_reading、K41 決定 6): 遷移のある調子は採用済みの終端から j まで無観測で
+        # 進める。遷移の無い信念は j でも同じ値
+        context = getattr(compiler, "context", None)
+        return compiler.point(head["result"]).id, _fb_time.joint(state.timed, None if context is None else context.now_ns)
     return compiler.point(head["result"]).id, state.joint
+
+
+def _prior_belief(compiler):
+    """最初の採用より前の、考える側の出発点 (紙 F-b K41 決定 6、レビュー R3)。起動の候補を入口 U と同じ読み方 (候補の解決
+    `initial_candidate`・観測の読み方 `member_reading`・観測の時刻の窓 `_timed_window`) で読み、遷移のある候補なら、その事前を
+    法則の起点から判断の時刻 j まで無観測で進めた信念を返す (採用の根は無いので根は None)。遷移の無い候補は None (今の道 =
+    モデルの事前のまま。静的な調子は j でも同じ値)。U の読み方で読めない宣言は、U と同じ理由で名指して止まる (レビュー R3-P)。
+    起動の宣言は knowledge origin の親 (`_fb_boot._origin_step`)。"""
+    from types import SimpleNamespace
+    from . import _fb_time
+    from .f import FInputError, _Fraction, _decode
+    context, origin = getattr(compiler, "context", None), getattr(compiler, "origin_point", None)
+    boots = [] if context is None or origin is None else [
+        p for p in compiler.image.entry(origin).parents
+        if compiler.image.record(p).body.contract == _c().BOOT_DECLARATION]   # 探すだけの読みは像から
+    if len(boots) != 1:
+        return None
+    boot = boots[0]
+    try:
+        member = initial_candidate(_CompilerReader(compiler), boot)
+        if member.get("transitions") is None:
+            return None
+        member["phi"] = member_reading(member, route=member["observation"].route_slot, evidence_model=(boot,),
+                                       evidence_pairs=(boot,))[1]
+        _timed_window([member], _enc(context.run), context.now_ns, boot)
+    except Unresolved:
+        return None   # 解決できない起動は起動の計画が止めている (評価の道へは来ない)
+    except _Issue as issue:
+        raise FInputError(issue.code, issue.message, issue.fields[0] if issue.fields else "/declaration") from None
+    start = SimpleNamespace(joint=_decode(member["document"]["initial"], tuple[_Fraction, ...]))
+    spec = {"units": _timed_units(start, [member], [(boot,)]), "entries": [],
+            "terminal_ns": member["observation"].law.origin_ns}
+    return None, _fb_time.joint(spec, context.now_ns)
 
 
 class _CompilerReader:
@@ -864,7 +900,7 @@ def describe_candidate(*, id, model, document, observation, pairs, weight) -> di
     states = document.get("states") if hasattr(document, "get") else None
     out = {"id": id, "model": model, "base": document, "document": document, "observation": observation,
            "pairs": pairs, "phi": None, "weight": weight, "law": candidate_law(document, observation, pairs),
-           "computation": None, "measurement": None, "family": None, "branches": None,
+           "computation": None, "measurement": None, "family": None, "branches": None, "transitions": None,
            "size": len(states) if isinstance(states, list) else 0, "references": frozenset({model})}
     if observation is None:   # 観測の見込みを読まない候補 (区間の札の δ。取りに行きの δ の形の不足は更新の計画が名指す)
         return out
@@ -874,6 +910,14 @@ def describe_candidate(*, id, model, document, observation, pairs, weight) -> di
         raise Unresolved("observation_unsupported", (id,), "/observation_model", "missing_contract")
     elif isinstance(observation.law, (PoissonLaw, FiniteCountLaw)):
         out["computation"] = "poisson" if isinstance(observation.law, PoissonLaw) else "finite_count"
+        if out["computation"] == "poisson":
+            # 調子の過程 (K41 決定 1): R = 0 は宣言の無い静的な法則と同じに解く (識別・測定の条件・計算の道も同じ)
+            R = _state_process(id, observation.law)
+            if R is None and observation.law.state_process is not None:
+                from dataclasses import replace
+                observation = replace(observation, law=replace(observation.law, state_process=None))
+                out["observation"], out["law"] = observation, candidate_law(document, observation, pairs)
+            out["transitions"] = R
         out["measurement"] = _json(_enc((observation.decision_time, observation.conditioning)))
         observed = observation.law.states
     else:
@@ -896,7 +940,7 @@ def describe_candidate(*, id, model, document, observation, pairs, weight) -> di
     if moods and role is None:
         raise Unresolved("mood_role", (id, *moods), "/observation_model/law/state_role", "missing_contract")
     if moods and len(set(law.rates)) > 1:
-        raise Unresolved("mood_base_rate", (id, *moods), "/observation_model/law/rates", "missing_contract")
+        raise Unresolved("mood_base_rate", (id, *moods, "rates"), "/observation_model/law/rates", "missing_contract")
     # 時計の部品 (K40 決定 1): 族に高々 1 つ。S を読まない。オンの枝は周期の候補ごとに分かれる (区切りの数・周期の候補は
     # k や |z| に足さない、決定 5)
     clocks = tuple(x for x in parts if x.kind == "clock")
@@ -916,9 +960,14 @@ def describe_candidate(*, id, model, document, observation, pairs, weight) -> di
             # 知る対象 (決定 8): 時計とスイッチを当てた後の、時刻と状態ごとの率の関数。時計の形は正準な形で比べ、効かない時計
             # (f = w) は時計の無い法則と同じ識別になる
             shape = None if clock is None else _clock_law(clock)
+            # 遷移のある調子は R も識別に入れる (状態の名前で、正の率の辺だけ。K41 決定 7)
+            R = out["transitions"]
+            moves = None if R is None else sorted([law.states[i], law.states[j], _enc(r)]
+                                                  for i, row in enumerate(R) for j, r in enumerate(row) if r)
             table = _digest({"domain": "sui.fb.rate_table/1",
                              "rates": [[s, _enc(r)] for s, r in sorted(zip(law.states, rates))],
-                             **({} if shape is None else {"clock": _enc(shape)})})
+                             **({} if shape is None else {"clock": _enc(shape)}),
+                             **({} if moves is None else {"transitions": moves})})
             branches.append({"z": z, "label": "z=" + "".join(map(str, z)) + suffix,
                              "prior": pz * weight, "rates": rates, "clock": clock, "table": table})
     out["branches"] = branches
@@ -926,7 +975,9 @@ def describe_candidate(*, id, model, document, observation, pairs, weight) -> di
         out["family"] = {"name": law.family, "a": law.a, "b": law.b, "parts": [[x.id, x.kind] for x in parts]}
         if clocks:   # 時計の照会の材料 (K40 決定 15): 周期・区切りの数の宣言の候補と事前 (時計のオフの枝にも潜在として在る)
             out["family"]["clock"] = material
-    if k:   # (z, S) に展開: 枝ごとに宣言のモデルの写しを、事前 P(z) と率の表の識別で直和に並べる (状態を変えない核は I_z ⊗ K)
+    # (z, S) に展開: 枝ごとに宣言のモデルの写しを、事前 P(z) と率の表の識別で直和に並べる (状態を変えない核は I_z ⊗ K)。
+    # 遷移のある調子は部品 0 個でも展開し、知る対象を「解決した法則 (R を含む) の識別 / 元の知る対象」にする (K41 決定 7)
+    if k or out["transitions"] is not None:
         try:
             out["document"] = direct_sum([{"id": x["label"], "document": document, "weight": x["prior"], "law": x["table"]}
                                           for x in branches])
@@ -934,6 +985,155 @@ def describe_candidate(*, id, model, document, observation, pairs, weight) -> di
             raise Unresolved("model_shape", (id,), "/args/model", "shape") from None
         out["size"] = len(out["document"]["states"])
     return out
+
+
+def step_time_reading(members, document, kid, cells, reading):
+    """核 kid の一歩を、並び (members = 候補の記述の列、並びの順。document はその並びのモデル) の下で時刻つきに読めない理由の
+    語、読めれば None (紙 F-b K41 決定 6)。遷移のある候補が無ければ None。ある時は、候補ごとに入口 U と同じ読み方
+    (`step_kernel` を候補の document と同じセルで、K37 決定 6) で、入場の時点を読む所要 0 の状態を変えない観測の一歩でなければ
+    `measurement_unsupported` (合わない性質まで名指す)、そうなら記録の時刻の根拠と読む時刻の宣言を `step_time_fault` で
+    確かめる。読む時刻を省けるかは、比べる世界 (F-a) と U のどちらが区別する観測でも変わらないこと = いちばん細かい観測の
+    類 (`instant_classes`、U のセルはその和) で確かめる (レビュー 6 通目)。並びができる時の確かめ (`pool_time_fault`) と入口 U が
+    同じこの判定を使う (レビュー R4・R4-C・R4-E)。cells はセルの JSON の列。"""
+    if not any(m.get("transitions") is not None for m in members):
+        return None
+    try:
+        for m in members:
+            step_kernel(m["document"], kid, cells, evidence=())
+    except _Issue as issue:   # 合わない性質まで名指す (所要・観測・行列・セル)
+        return "measurement_unsupported" + "".join(":" + f.rsplit("/", 1)[-1] for f in issue.fields)
+    return step_time_fault(members, reading, instant_classes(document, kid)[1])
+
+
+def pool_time_fault(members, document, execution):
+    """遷移のある並び (members = 候補の記述の列、並びの順。document はその並びのモデル) で、時刻つきに読めない一歩
+    "<核>:<理由の語>"、読めれば None (紙 F-b K41 決定 6・K41-i・K41-j)。見る核は、比べる世界の核 (並びのモデルの操作から
+    届く核 = 操作の予測の核と、操作の方策の execute の節の核。F-a が比べる世界を組む時に解く核。外へ出せない核も比べる世界には
+    入る) と、宣言した一歩の読みの全部 (宣言した無作用の核は除く。前の並びで選んだ一歩も、宣言した核ならこの並びで外へ出る)。
+    宣言した読みは入口 U と同じ読み方 (`step_time_reading`)、比べるだけの核は判断の時刻 j に直ちに読めるか
+    (`compared_time_reading`) で見る。並びが変わるのは起動の最初の候補と候補を足す時だけなので、その 2 か所が呼ぶ。"""
+    from itertools import accumulate
+    from .fb import TimedExecutionDeclaration
+    if not any(m.get("transitions") is not None for m in members):
+        return None
+    timed = execution if isinstance(execution, TimedExecutionDeclaration) else None
+    declared = set() if timed is None else {*timed.actors, *timed.source_readings} - set(timed.no_effect)
+    policies = {p["id"]: p for p in document["policies"]}
+    compared = {op["prediction"]["args"]["id"] for op in document["operations"]} | {
+        node["kernel"] for op in document["operations"] for node in policies[op["policy"]["args"]["id"]]["nodes"]
+        if node["kind"] == "execute"}
+    # 並びの中の位置は並びの順と大きさだけで決まる (入口 U が並びの記録を読む `pool_candidates` と同じ)
+    members = [{**m, "offset": o} for m, o in zip(members, accumulate((m["size"] for m in members), initial=0))]
+    for kid in sorted(compared | declared):
+        fault = step_time_reading(members, document, kid, [_json(_enc(c)) for c in timed.cells.get(kid, ())],
+                                  timed.source_readings.get(kid)) if kid in declared             else compared_time_reading(members, document, kid)
+        if fault is not None:
+            return kid + ":" + fault
+    return None
+
+
+def compared_time_reading(members, document, kid):
+    """比べるだけの核 kid (読む時刻の宣言が無い) を、遷移のある並びの評価が判断の時刻 j に直ちに読めない理由の語、読めれば
+    None (紙 F-b K41 決定 6 の「読む時刻の宣言が無い一歩は、許された遷移で E_y が変わらないと証明できる範囲だけ読む」)。
+    所要 0 の状態を変えない観測でなければ名指し (`instant_classes`)、そうなら観測の類の核が遷移で変わらないこと
+    (`read_instant_fault`)。"""
+    fault, diagonals = instant_classes(document, kid)
+    return fault or read_instant_fault(members, None, diagonals)
+
+
+def instant_classes(document, kid):
+    """並びのモデル document の核 kid を F-a と同じ復号 (`FiniteKernel`、有理数の対の 0 を正と取り違えない) で読み、
+    (不足の語, 観測の類ごとの対角)。観測の類は F-a と同じく観測 (evidence) の等しい正の質量の結果の和 (いちばん細かい類。U の
+    セルは同じ観測値の類の和なので、この類で変わらなければセルでも変わらない)。読む時刻を省いて判断の時刻・入場の時刻に直ちに
+    読めるのは、所要 0 の状態を変えない (対角の) 観測だけ: 正の質量の結果に所要があれば `measurement_unsupported:elapsed_ns`、
+    非対角の成分があれば `measurement_unsupported:matrix` (所要・状態を変える一歩の共同のモデルは ⑦ と S6)。"""
+    from .f import FiniteKernel, _decode, _dumps
+    kernel = _decode(next(k for k in document["kernels"] if k["id"] == kid), FiniteKernel)
+    n = len(document["states"])
+    positive = [o for o in kernel.outcomes if any(q for row in o.matrix for q in row)]
+    classes = {}
+    for o in positive:
+        classes.setdefault(_dumps(_enc(o.evidence)), []).append(o)
+    diagonals = [[sum(o.matrix[i][i] for o in group) for i in range(n)] for group in classes.values()]
+    if any(o.elapsed_ns != 0 for o in positive):
+        return "measurement_unsupported:elapsed_ns", diagonals
+    if any(o.matrix[i][j] for o in positive for i in range(n) for j in range(n) if i != j):
+        return "measurement_unsupported:matrix", diagonals
+    return None, diagonals
+
+
+def step_time_fault(members, reading, diagonals):
+    """一歩の時刻の読みの不足の理由の語 (紙 F-b K41 決定 6)、または None。members は解いた並びの候補 (offset・phi・branches・
+    transitions)、reading は一歩の源の件数の読み (`fb.SourceCountReading`)、diagonals は観測の類 (観測 (evidence) の等しい
+    結果の和 = `instant_classes`。U のセルはその和) ごとの、並びの展開した状態の上の結果の核の対角。遷移のある候補が無ければ不足は無い (静的な調子は時刻を条件にしない)。ある時は、記録の時刻を
+    条件にしてよい根拠 (`time_basis`: 時刻を決めた材料が全部記録されている / 時刻の出どころが独立と認証されている、K26 の形) が
+    要り、読む時刻の宣言 (`measurement`: 入場の時点の S を読む所要 0 の観測) は、どの候補・枝でも正の率の遷移の両端で結果の核が
+    同じ (遷移で結果が変わらない) 時だけ省ける (`read_instant_fault`)。宣言した一歩の読み (`step_time_reading`) が使う。"""
+    c = _c()
+    chained = [m for m in members if m.get("transitions") is not None]
+    if not chained:
+        return None
+    basis = getattr(reading, "time_basis", None)
+    if basis is None or basis.contract not in (c.RECORDED_TIMING_INPUTS, c.INDEPENDENT_TIMING_SOURCE):
+        return "time_basis_missing"
+    return read_instant_fault(members, getattr(reading, "measurement", None), diagonals)
+
+
+def read_instant_fault(members, measurement, diagonals):
+    """読む時刻の不足の理由の語、または None (紙 F-b K41 決定 6)。読む時刻の宣言 measurement は「入場の時点の S を読む」
+    (`sui.fb.instantaneous_entry_observation/1`) だけを通す。宣言が無ければ、どの候補・枝でも正の率の遷移の両端で観測の類の
+    核の対角 (diagonals、並びの展開した状態の上) が同じ時だけ通す。宣言した一歩 (`step_time_fault`) と比べるだけの核
+    (`compared_time_reading`) が同じこの判定を使う。"""
+    c = _c()
+    if measurement is not None:
+        return None if measurement.contract == c.INSTANTANEOUS_ENTRY_OBSERVATION else "measurement_unsupported"
+    for m in members:
+        if m.get("transitions") is None:
+            continue
+        n, phi, R = len(m["base"]["states"]), m["phi"], m["transitions"]
+        for b in range(len(m["branches"] or (None,))):
+            at = [m["offset"] + b * n + phi[a] for a in range(len(R))]
+            if any(r and d[at[a]] != d[at[a2]] for d in diagonals for a, row in enumerate(R) for a2, r in enumerate(row)):
+                return "measurement_missing"
+    return None
+
+
+def _state_process(id, law):
+    """調子の過程の宣言 (K41 決定 1) を、宣言の状態の順の生成行列の非対角 R (R[i][j] は i → j の率) に解く。R がすべて 0・宣言が
+    無ければ None (静的な法則)。読めるのは調子の役を宣言した法則の固定の生成行列 (`sui.fb.fixed_state_generator/1`、行 = 出る
+    状態、非対角は非負の有理数、対角は出る率の和の負) だけ。役の無い法則・知らない過程・有理数の対でない数 (K38 決定 1) は対応
+    していない (missing_contract)、行列の形・符号・対角の誤りは shape。名指しは候補と欄の名前。"""
+    from fractions import Fraction
+    process = law.state_process
+    if process is None:
+        return None
+    if law.state_role != "mood":   # 遷移の宣言は調子の役の状態のもの (R = 0 の明示も、役の宣言の不足。レビュー R7)
+        raise Unresolved("state_process_role", (id, "state_role"), "/observation_model/law/state_role", "missing_contract")
+    named, field = (id, "state_process"), "/observation_model/law/state_process"
+    if process.contract != _c().FIXED_STATE_GENERATOR:
+        raise Unresolved("state_process", named, field, "missing_contract")
+    n = len(law.states)
+
+    def entry(x):   # 有理数の対 [分子, 分母] (分母は正)。数そのもの (小数など) は別の表し方 → None
+        if isinstance(x, (int, float)) and not isinstance(x, bool):
+            return None
+        if not isinstance(x, (list, tuple)) or len(x) != 2 or any(type(y) is not int for y in x) or x[1] <= 0:
+            raise ValueError
+        return Fraction(x[0], x[1])
+    try:
+        rows = process.args["matrix"]
+        if set(process.args.keys()) != {"matrix"} or len(rows) != n or any(len(row) != n for row in rows):
+            raise ValueError
+        M = [[entry(x) for x in row] for row in rows]
+    except (KeyError, TypeError, ValueError, AttributeError):
+        raise Unresolved("state_process", named, field, "shape") from None
+    if any(x is None for row in M for x in row):
+        raise Unresolved("state_process_number", named, field, "missing_contract")
+    off = [(i, j) for i in range(n) for j in range(n) if i != j]
+    if any(M[i][j] < 0 for i, j in off) or any(M[i][i] != -sum(M[i][j] for j in range(n) if j != i) for i in range(n)):
+        raise Unresolved("state_process", named, field, "shape")
+    R = tuple(tuple(M[i][j] if i != j else Fraction(0) for j in range(n)) for i in range(n))
+    return R if any(any(row) for row in R) else None
 
 
 def _phi(name, pairs, observed, states):
@@ -1323,13 +1523,19 @@ def step_kernel(document, kid, cells, *, evidence):
     def matrix(o):
         return [[Fraction(*x) if isinstance(x, list) else Fraction(x) for x in row] for row in o["matrix"]]
     outcomes = {o["id"]: o for o in kernel["outcomes"]}
-    if any(o["elapsed_ns"] != 0 or o["evidence"] is None or _json(o["evidence"]["value"]) not in _LEGAL.values()
-           or any(matrix(o)[i][j] for i in range(n) for j in range(n) if i != j) for o in outcomes.values()) \
-            or sorted(x for cell in cells for x in cell["outcomes"]) != sorted(outcomes) \
-            or any(_json(outcomes[x]["evidence"]["value"]) != _json(cell["observation"]["value"])
-                   for cell in cells for x in cell["outcomes"]):
-        raise _Issue("rejected", "missing_contract", "the step is not a state-preserving observation step",
-                     evidence=evidence)
+    # 合わない最初の性質を名指す (欄 = 核の中のその性質。前の性質が後の読みを守る順に確かめる)
+    checks = (("elapsed_ns", lambda: any(o["elapsed_ns"] != 0 for o in outcomes.values())),
+              ("evidence", lambda: any(o["evidence"] is None or _json(o["evidence"]["value"]) not in _LEGAL.values()
+                                       for o in outcomes.values())),
+              ("matrix", lambda: any(matrix(o)[i][j] for o in outcomes.values() for i in range(n) for j in range(n)
+                                     if i != j)),
+              ("cells", lambda: sorted(x for cell in cells for x in cell["outcomes"]) != sorted(outcomes)
+               or any(_json(outcomes[x]["evidence"]["value"]) != _json(cell["observation"]["value"])
+                      for cell in cells for x in cell["outcomes"])))
+    for name, bad in checks:
+        if bad():
+            raise _Issue("rejected", "missing_contract", "the step is not a state-preserving observation step",
+                         fields=("/kernels/" + kid + "/" + name,), evidence=evidence)
     return kernel, {name: matrix(o) for name, o in outcomes.items()}
 
 
@@ -1636,12 +1842,18 @@ def _timed_units(state, members, evidence):
                          fields=("/observation_model/law",), evidence=ev)
         declaration = member["observation"]
         phi, states = member["phi"], member["base"]["states"]
+        R = member.get("transitions")
         for b, branch in enumerate(member["branches"] or (None,)):
+            group = [member["offset"] + b * len(states) + phi[a] for a in range(len(declaration.law.states))]
+            # 遷移のある調子 (K41 決定 3): 同じ候補・枝の状態の unit は 1 つの群 (宣言の状態の順の率・R・unit の番号)
+            transitions = None if R is None else {
+                "rates": list(branch["rates"] if branch is not None else declaration.law.rates),
+                "R": [list(row) for row in R], "units": group}
             for a, name in enumerate(declaration.law.states):
-                j = member["offset"] + b * len(states) + phi[a]   # 展開の順: 枝ごとに宣言のモデルの状態の順 (`direct_sum`)
+                j = group[a]   # 展開の順: 枝ごとに宣言のモデルの状態の順 (`direct_sum`)
                 unit = {"index": j, "candidate": member["id"], "state": states[phi[a]]["id"], "prior": state.joint[j],
                         "law": _fb_time.unit_law(declaration.law, name, None if branch is None else branch["rates"][a],
-                                                 None if branch is None else branch["clock"]),
+                                                 None if branch is None else branch["clock"], transitions),
                         "failure": None if declaration.failure is None
                         else declaration.failure.unavailable_probability,
                         "disconnection": None if declaration.disconnection is None
@@ -1841,6 +2053,11 @@ def _apply_execution(reader, state, model, binding, reading, plan, desc, pools) 
         raise _Issue("rejected", "missing_contract", "no observation cell reads this result", evidence=(binding,))
     m = _diag([cell_sum(matrices, found[0]["outcomes"], len(document["states"]))
                for (document, _ev), (_kernel, matrices) in zip(members, kernels)])
+    if timed:   # 遷移のある調子では一歩の時刻の読みも要る (K41 決定 6)
+        fault = step_time_reading(step_members[0], _model_document(reader, model, evidence=(model,)), kid, cells, source)
+        if fault is not None:
+            raise _Issue("rejected", "missing_contract", f"the step {kid} reading time: {fault}",
+                         fields=("/source_readings/" + kid,), evidence=(binding, pargs["execution_declaration"]))
     n = len(m)
     if pool is None:
         meaning = {"projection": _enc(c.EXECUTION_STEP_PROJECTION), "kernel": _json(kernels[0][0]), "cells": cells,
